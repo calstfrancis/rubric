@@ -77,7 +77,16 @@ Service files use the `.liturgy` extension (JSON). They store the service title,
 
 ---
 
-## Project structure
+## Running tests
+
+```bash
+# From the rubric directory:
+python3 -m unittest test_rcl_data test_bible_api -v
+
+# Or individually:
+python3 -m unittest test_rcl_data -v   # RCL date calculations
+python3 -m unittest test_bible_api -v  # Bible reference cleaning
+```
 
 ```
 rubric.py              Main application
@@ -87,9 +96,12 @@ hymn_suggestions.py    Season and Proper-specific hymn suggestions
 bible_api.py           World English Bible passage fetcher
 snippets.py            Default liturgical text snippets
 install.sh             Installation script
+test_rcl_data.py       Tests for RCL date calculations
+test_bible_api.py      Tests for Bible reference cleaning
 HELP.md                User guide
 FAQ.md                 Frequently asked questions
 CHANGELOG.md           Version history
+docs/texlive.md        TeX Live installation guide
 ```
 
 ---
