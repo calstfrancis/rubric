@@ -1,0 +1,446 @@
+"""
+hymn_suggestions.py — Curated hymn suggestions for VU, MV, and LUS
+by RCL season and major Sundays.
+
+Data is indexed by the 'season' key from rcl_data.get_liturgical_info()
+and by specific 'week' strings for major Sundays.
+
+Each entry: (prefix, number, theme_note)
+"""
+
+# ── Season-level suggestions ──────────────────────────────────────────────────
+# Keyed by info["season"] from rcl_data
+
+SEASON_HYMNS: dict[str, list[tuple[str, int, str]]] = {
+
+    "Advent": [
+        ("VU",  1, "Come, thou long-expected Jesus"),
+        ("VU",  2, "Come, thou long-expected Jesus (alt.)"),
+        ("VU",  4, "Lo, he comes with clouds descending"),
+        ("VU",  5, "O come, O come, Emmanuel"),
+        ("VU",  7, "The King of glory comes"),
+        ("VU",  8, "Hills of the north, rejoice"),
+        ("VU",  9, "Come now, O Prince of Peace"),
+        ("VU", 10, "Hail to the Lord's Anointed"),
+        ("VU", 11, "Prepare the way"),
+        ("VU", 12, "Comfort, comfort now my people"),
+        ("VU", 13, "There's a voice in the wilderness"),
+        ("VU", 14, "On Jordan's bank the Baptist's cry"),
+        ("VU", 22, "It came upon the midnight clear"),
+        ("MV",  1, "Come, O Holy Spirit, come"),
+        ("MV",  2, "Come, O Holy Spirit / Wa Wa Wa Emimimo"),
+        ("MV", 78, "My soul cries out"),
+        ("MV", 90, "Hope shines as the solitary star"),
+        ("MV", 122, "Come, Lord Jesus"),
+    ],
+
+    "Christmas": [
+        ("VU", 28, "Hark! The herald angels sing"),
+        ("VU", 29, "While shepherds watched their flocks"),
+        ("VU", 36, "O come, all ye faithful"),
+        ("VU", 37, "The first Nowell"),
+        ("VU", 38, "Angels we have heard on high"),
+        ("VU", 44, "Silent night"),
+        ("VU", 45, "Away in a manger"),
+        ("VU", 46, "Still, still, still"),
+        ("VU", 48, "Joy to the world"),
+        ("VU", 55, "Good Christian friends, rejoice"),
+        ("VU", 56, "Go, tell it on the mountain"),
+        ("VU", 59, "What child is this?"),
+        ("VU", 60, "Once in royal David's city"),
+        ("VU", 62, "In the bleak midwinter"),
+        ("MV", 77, "Infant holy, infant lowly"),
+        ("MV", 79, "Star-child"),
+    ],
+
+    "Epiphany": [
+        ("VU", 72, "As with gladness men of old"),
+        ("VU", 74, "Arise, your light is come"),
+        ("VU", 75, "Songs of thankfulness and praise"),
+        ("VU", 79, "When Jesus comes to be baptized"),
+        ("VU", 80, "When Christ's appearing was made known"),
+        ("VU", 81, "Hail to the Lord who comes"),
+        ("VU", 87, "The Church is wherever God's people"),
+        ("MV", 23, "Draw the circle wide"),
+        ("MV", 29, "All are welcome"),
+        ("MV", 34, "When hands reach out"),
+        ("MV", 161, "We are not our own"),
+    ],
+
+    "Baptism": [
+        ("VU", 79, "When Jesus comes to be baptized"),
+        ("VU", 442, "Baptized in water"),
+        ("VU", 449, "I've just come from the fountain"),
+        ("VU", 453, "We know that Christ is raised"),
+        ("MV", 34, "When hands reach out and fingers trace"),
+        ("MV", 161, "We are not our own"),
+    ],
+
+    "Transfiguration": [
+        ("VU", 82, "Jesus on the mountain peak"),
+        ("VU", 83, "O wondrous sight, O vision fair"),
+        ("VU", 174, "Transform us"),
+        ("VU", 315, "Immortal, invisible, God only wise"),
+        ("VU", 316, "Holy, holy, holy"),
+        ("MV", 80, "Transfigure us, O Lord"),
+    ],
+
+    "Lent": [
+        ("VU", 97,  "Lord, who throughout these forty days"),
+        ("VU", 98,  "The glory of these forty days"),
+        ("VU", 100, "Forty days and forty nights"),
+        ("VU", 101, "O Lord, throughout these forty days"),
+        ("VU", 102, "Jesus, tempted in the desert"),
+        ("VU", 107, "There's a wideness in God's mercy"),
+        ("VU", 108, "Out of the depths"),
+        ("VU", 109, "O Christ, the healer"),
+        ("VU", 115, "When I survey the wondrous cross"),
+        ("VU", 117, "What wondrous love is this"),
+        ("VU", 120, "In the cross of Christ I glory"),
+        ("VU", 144, "Jesus, keep me near the cross"),
+        ("VU", 595, "Be still, my soul"),
+        ("MV",  82, "Bless now, O God, the journey"),
+        ("MV", 135, "When our heart is filled with sorrow"),
+        ("MV", 139, "Return to the Lord"),
+    ],
+
+    "Palm Sunday": [
+        ("VU", 122, "Hosanna, loud hosanna"),
+        ("VU", 123, "All glory, laud, and honour"),
+        ("VU", 124, "Ride on! Ride on in majesty!"),
+        ("MV", 128, "Filled with excitement"),
+    ],
+
+    "Holy Thursday": [
+        ("VU", 127, "An upper room did our Lord prepare"),
+        ("VU", 459, "Let us break bread together"),
+        ("VU", 460, "One bread, one body"),
+        ("VU", 462, "Loaves were broken, words were spoken"),
+        ("VU", 467, "This is the body of Christ"),
+        ("VU", 468, "Let us talents and tongues employ"),
+        ("MV",  81, "Wash, O God, our sons and daughters"),
+        ("MV", 126, "Stay with us"),
+    ],
+
+    "Good Friday": [
+        ("VU", 113, "O sacred head, now wounded"),
+        ("VU", 115, "When I survey the wondrous cross"),
+        ("VU", 117, "What wondrous love is this"),
+        ("VU", 119, "Were you there?"),
+        ("VU", 120, "In the cross of Christ I glory"),
+        ("VU", 125, "Beneath the cross of Jesus"),
+        ("MV", 136, "Stay with me"),
+    ],
+
+    "Easter": [
+        ("VU", 155, "Jesus Christ is risen today"),
+        ("VU", 157, "The day of resurrection"),
+        ("VU", 159, "Low in the grave he lay"),
+        ("VU", 160, "Hallelujah! hallelujah!"),
+        ("VU", 161, "Thine is the glory"),
+        ("VU", 162, "Good Christians all, rejoice and sing"),
+        ("VU", 163, "This joyful Eastertide"),
+        ("VU", 164, "Christ the Lord is risen today"),
+        ("VU", 165, "Alleluia! Alleluia! Give thanks"),
+        ("VU", 166, "Come, ye faithful, raise the strain"),
+        ("VU", 167, "I know that my Redeemer lives"),
+        ("VU", 169, "Crown him with many crowns"),
+        ("VU", 170, "Hail the day that sees him rise"),
+        ("MV",  1, "Come, O Holy Spirit, come"),
+        ("MV", 122, "Come, Lord Jesus"),
+        ("MV", 174, "Hallelujah"),
+    ],
+
+    "Pentecost": [
+        ("VU", 196, "O Holy Spirit, root of life"),
+        ("VU", 197, "Spirit of the living God"),
+        ("VU", 198, "Spirit, Spirit of gentleness"),
+        ("VU", 199, "Spirit divine, attend our prayers"),
+        ("VU", 200, "Breathe on me, breath of God"),
+        ("VU", 201, "Like the murmur of the dove's song"),
+        ("VU", 202, "On the day of Pentecost"),
+        ("VU", 207, "Wind who makes all winds that blow"),
+        ("MV",   1, "Come, O Holy Spirit, come"),
+        ("MV",   2, "Come, O Holy Spirit / Wa Wa Wa Emimimo"),
+        ("MV",   3, "O Holy Spirit breathe on me"),
+        ("MV",   4, "Holy Spirit, hear us"),
+        ("MV",   5, "Creator Spirit"),
+        ("MV", 173, "Spirit open my heart"),
+    ],
+
+    "Trinity": [
+        ("VU", 315, "Immortal, invisible, God only wise"),
+        ("VU", 316, "Holy, holy, holy"),
+        ("VU", 317, "God, whose almighty word"),
+        ("VU", 943, "Ancient of Days"),
+        ("MV",  12, "Bring many names"),
+        ("MV",  13, "Naming God"),
+        ("MV", 186, "Holy God, we praise your name"),
+    ],
+
+    "Christ the King": [
+        ("VU", 211, "Rejoice, the Lord is King"),
+        ("VU", 213, "Jesus shall reign"),
+        ("VU", 217, "Crown him with many crowns"),
+        ("VU", 220, "All hail the power of Jesus' name"),
+        ("VU", 330, "God of grace and God of glory"),
+        ("MV", 120, "Lift every voice and sing"),
+    ],
+
+    "Ordinary": [
+        # General service hymns good for Ordinary Time
+        ("VU", 262, "Praise to the Lord, the Almighty"),
+        ("VU", 264, "Let all things now living"),
+        ("VU", 270, "Praise our Maker"),
+        ("VU", 272, "Come, let us sing to the Lord"),
+        ("VU", 288, "Morning has broken"),
+        ("VU", 296, "For the beauty of the earth"),
+        ("VU", 306, "God of the sparrow"),
+        ("VU", 307, "How great thou art"),
+        ("VU", 326, "A mighty fortress is our God"),
+        ("VU", 331, "God of grace and God of glory"),
+        ("VU", 332, "O God of every nation"),
+        ("VU", 361, "Be thou my vision"),
+        ("VU", 371, "Spirit of God, descend upon my heart"),
+        ("VU", 374, "O Jesus, I have promised"),
+        ("VU", 376, "Take my life and let it be"),
+        ("VU", 509, "My hope is built on nothing less"),
+        ("MV",  23, "Draw the circle wide"),
+        ("MV",  28, "Called by earth and sky"),
+        ("MV",  29, "All are welcome"),
+        ("MV",  86, "God of the Bible"),
+        ("MV", 177, "I, the Lord of sea and sky"),
+    ],
+}
+
+# ── Major Sunday overrides ────────────────────────────────────────────────────
+# Keyed by substrings that appear in info["week"]
+# More specific → listed first; matching stops at first hit
+
+WEEK_OVERRIDES: list[tuple[str, list[tuple[str, int, str]]]] = [
+
+    ("Ash Wednesday", [
+        ("VU",  97, "Lord, who throughout these forty days"),
+        ("VU", 108, "Out of the depths"),
+        ("VU", 575, "Just as I am, without one plea"),
+        ("MV", 139, "Return to the Lord"),
+    ]),
+
+    ("Advent 1", [
+        ("VU",   4, "Lo, he comes with clouds descending"),
+        ("VU",   5, "O come, O come, Emmanuel"),
+        ("VU",  11, "Prepare the way"),
+        ("VU",  14, "On Jordan's bank the Baptist's cry"),
+        ("MV",  90, "Hope shines as the solitary star"),
+    ]),
+
+    ("Advent 2", [
+        ("VU",   5, "O come, O come, Emmanuel"),
+        ("VU",  12, "Comfort, comfort now my people"),
+        ("VU",  13, "There's a voice in the wilderness"),
+        ("MV",  78, "My soul cries out"),
+    ]),
+
+    ("Advent 3", [
+        ("VU",   7, "The King of glory comes"),
+        ("VU",   8, "Hills of the north, rejoice"),
+        ("VU",  10, "Hail to the Lord's Anointed"),
+        ("MV",  78, "My soul cries out"),
+    ]),
+
+    ("Advent 4", [
+        ("VU",   1, "Come, thou long-expected Jesus"),
+        ("VU",   9, "Come now, O Prince of Peace"),
+        ("VU",  22, "It came upon the midnight clear"),
+        ("MV",  79, "Star-child"),
+    ]),
+
+    ("Christmas Day", [
+        ("VU",  36, "O come, all ye faithful"),
+        ("VU",  44, "Silent night"),
+        ("VU",  48, "Joy to the world"),
+        ("VU",  56, "Go, tell it on the mountain"),
+        ("MV",  77, "Infant holy, infant lowly"),
+    ]),
+
+    ("Baptism of the Lord", [
+        ("VU",  79, "When Jesus comes to be baptized"),
+        ("VU", 442, "Baptized in water"),
+        ("VU", 453, "We know that Christ is raised"),
+        ("MV",  34, "When hands reach out"),
+        ("MV", 161, "We are not our own"),
+    ]),
+
+    ("Transfiguration", [
+        ("VU",  82, "Jesus on the mountain peak"),
+        ("VU",  83, "O wondrous sight, O vision fair"),
+        ("MV",  80, "Transfigure us, O Lord"),
+    ]),
+
+    ("Palm", [
+        ("VU", 122, "Hosanna, loud hosanna"),
+        ("VU", 123, "All glory, laud, and honour"),
+        ("VU", 124, "Ride on! Ride on in majesty!"),
+        ("MV", 128, "Filled with excitement"),
+    ]),
+
+    ("Easter Sunday", [
+        ("VU", 155, "Jesus Christ is risen today"),
+        ("VU", 157, "The day of resurrection"),
+        ("VU", 160, "Hallelujah! hallelujah!"),
+        ("VU", 161, "Thine is the glory"),
+        ("VU", 165, "Alleluia! Alleluia! Give thanks"),
+        ("MV", 174, "Hallelujah"),
+    ]),
+
+    ("Easter 2", [
+        ("VU", 159, "Low in the grave he lay"),
+        ("VU", 163, "This joyful Eastertide"),
+        ("VU", 167, "I know that my Redeemer lives"),
+    ]),
+
+    ("Pentecost", [
+        ("VU", 196, "O Holy Spirit, root of life"),
+        ("VU", 197, "Spirit of the living God"),
+        ("VU", 198, "Spirit, Spirit of gentleness"),
+        ("MV",   1, "Come, O Holy Spirit, come"),
+        ("MV",   3, "O Holy Spirit breathe on me"),
+    ]),
+
+    ("Trinity", [
+        ("VU", 315, "Immortal, invisible, God only wise"),
+        ("VU", 316, "Holy, holy, holy"),
+        ("MV",  12, "Bring many names"),
+    ]),
+
+    ("Reign of Christ", [
+        ("VU", 211, "Rejoice, the Lord is King"),
+        ("VU", 220, "All hail the power of Jesus' name"),
+        ("MV", 120, "Lift every voice and sing"),
+    ]),
+]
+
+# ── Per-Proper suggestions (Ordinary Time) ────────────────────────────────────
+# Keyed by "Proper N" — themes drawn from the semi-continuous OT track
+# and the gospel theme for that week across the three-year cycle.
+
+PROPER_HYMNS: dict[int, list[tuple[str, int, str]]] = {
+    4:  [("VU", 326, "A mighty fortress is our God"),
+         ("VU", 509, "My hope is built on nothing less"),
+         ("MV",  86, "God of the Bible")],
+    5:  [("VU", 288, "Morning has broken"),
+         ("VU", 296, "For the beauty of the earth"),
+         ("MV",  28, "Called by earth and sky")],
+    6:  [("VU", 374, "O Jesus, I have promised"),
+         ("VU", 567, "Will you come and follow me"),
+         ("MV",  91, "When we are tested")],
+    7:  [("VU", 595, "Be still, my soul"),
+         ("VU", 612, "How firm a foundation"),
+         ("MV", 135, "When our heart is filled with sorrow")],
+    8:  [("VU", 262, "Praise to the Lord, the Almighty"),
+         ("VU", 272, "Come, let us sing to the Lord"),
+         ("MV",  23, "Draw the circle wide")],
+    9:  [("VU", 331, "God of grace and God of glory"),
+         ("VU", 332, "O God of every nation"),
+         ("MV",  29, "All are welcome")],
+    10: [("VU", 306, "God of the sparrow"),
+         ("VU", 307, "How great thou art"),
+         ("MV",  28, "Called by earth and sky")],
+    11: [("VU", 376, "Take my life and let it be"),
+         ("VU", 378, "Lord, speak to me"),
+         ("MV", 161, "We are not our own")],
+    12: [("VU", 371, "Spirit of God, descend upon my heart"),
+         ("VU", 384, "Lord of all hopefulness"),
+         ("MV",  86, "God of the Bible")],
+    13: [("VU", 567, "Will you come and follow me"),
+         ("VU", 572, "Lord, you have come to the lakeshore"),
+         ("MV", 177, "I, the Lord of sea and sky")],
+    14: [("VU", 361, "Be thou my vision"),
+         ("VU", 562, "Jesus calls us"),
+         ("MV",  34, "When hands reach out")],
+    15: [("VU", 401, "God, whose giving knows no ending"),
+         ("VU", 460, "One bread, one body"),
+         ("MV",  23, "Draw the circle wide")],
+    16: [("VU", 270, "Praise our Maker"),
+         ("VU", 288, "Morning has broken"),
+         ("MV",  28, "Called by earth and sky")],
+    17: [("VU", 462, "Loaves were broken, words were spoken"),
+         ("VU", 467, "This is the body of Christ"),
+         ("MV",  86, "God of the Bible")],
+    18: [("VU", 509, "My hope is built on nothing less"),
+         ("VU", 595, "Be still, my soul"),
+         ("MV", 135, "When our heart is filled with sorrow")],
+    19: [("VU", 384, "Lord of all hopefulness"),
+         ("VU", 612, "How firm a foundation"),
+         ("MV",  90, "Hope shines as the solitary star")],
+    20: [("VU", 374, "O Jesus, I have promised"),
+         ("VU", 378, "Lord, speak to me"),
+         ("MV", 161, "We are not our own")],
+    21: [("VU", 567, "Will you come and follow me"),
+         ("VU", 572, "Lord, you have come to the lakeshore"),
+         ("MV", 177, "I, the Lord of sea and sky")],
+    22: [("VU", 595, "Be still, my soul"),
+         ("VU", 612, "How firm a foundation"),
+         ("MV", 135, "When our heart is filled with sorrow")],
+    23: [("VU", 332, "O God of every nation"),
+         ("VU", 401, "God, whose giving knows no ending"),
+         ("MV",  29, "All are welcome")],
+    24: [("VU", 107, "There's a wideness in God's mercy"),
+         ("VU", 117, "What wondrous love is this"),
+         ("MV",  82, "Bless now, O God, the journey")],
+    25: [("VU", 262, "Praise to the Lord, the Almighty"),
+         ("VU", 331, "God of grace and God of glory"),
+         ("MV",  86, "God of the Bible")],
+    26: [("VU", 376, "Take my life and let it be"),
+         ("VU", 401, "God, whose giving knows no ending"),
+         ("MV", 161, "We are not our own")],
+    27: [("VU", 306, "God of the sparrow"),
+         ("VU", 371, "Spirit of God, descend upon my heart"),
+         ("MV",  34, "When hands reach out")],
+    28: [("VU", 460, "One bread, one body"),
+         ("VU", 462, "Loaves were broken, words were spoken"),
+         ("MV",  23, "Draw the circle wide")],
+    29: [("VU", 211, "Rejoice, the Lord is King"),
+         ("VU", 361, "Be thou my vision"),
+         ("MV", 120, "Lift every voice and sing")],
+}
+
+
+def get_suggestions(week: str, season: str) -> list[tuple[str, int, str]]:
+    """
+    Return a list of (prefix, number, title) hymn suggestions
+    for the given RCL week string and season.
+
+    Priority:
+    1. Specific week override (major Sundays)
+    2. Proper-specific suggestions for Ordinary Time
+    3. Season-level suggestions
+    Returns at most 8 hymns.
+    """
+    import re
+
+    # 1. Check specific week overrides
+    for key, hymns in WEEK_OVERRIDES:
+        if key.lower() in week.lower():
+            return hymns[:8]
+
+    # 2. Proper-specific (Ordinary Time)
+    m = re.search(r'Proper\s+(\d+)', week, re.IGNORECASE)
+    if m:
+        proper_num = int(m.group(1))
+        proper_hymns = PROPER_HYMNS.get(proper_num)
+        if proper_hymns:
+            # Mix proper-specific with season defaults for variety
+            season_pool = SEASON_HYMNS.get("Ordinary", [])
+            combined = list(proper_hymns)
+            for h in season_pool:
+                if h not in combined:
+                    combined.append(h)
+                if len(combined) >= 8:
+                    break
+            return combined[:8]
+
+    # 3. Season fallback
+    hymns = SEASON_HYMNS.get(season, SEASON_HYMNS.get("Ordinary", []))
+    return hymns[:8]
+

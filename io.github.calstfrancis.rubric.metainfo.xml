@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.calstfrancis.rubric</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Rubric</name>
+  <summary>Worship service planning with RCL integration</summary>
+
+  <description>
+    <p>
+      Rubric is a GNOME-native worship service planning tool for United Church
+      of Canada ministry. Plan service orders, look up lectionary readings,
+      find hymns from Voices United, More Voices, and Let Us Sing, fetch Bible
+      passages, and export polished bulletins to LaTeX and PDF.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Revised Common Lectionary readings, liturgical colour, and hymn suggestions for any Sunday</li>
+      <li>Hymn lookup and suggestions from Voices United, More Voices, and Let Us Sing</li>
+      <li>Bible passage viewer using the World English Bible (public domain)</li>
+      <li>LaTeX export with two-column layout, scripture environment, and Junicode font</li>
+      <li>One-click PDF compilation via xelatex</li>
+      <li>Snippets library with reusable liturgical texts</li>
+      <li>Responsive reading builder</li>
+      <li>Named service order templates</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.calstfrancis.rubric.desktop</launchable>
+
+  <url type="homepage">https://github.com/calstfrancis/rubric</url>
+  <url type="bugtracker">https://github.com/calstfrancis/rubric/issues</url>
+
+  <developer>
+    <name>Caleb St. Francis</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.11" date="2026-04-24">
+      <description>
+        <p>Lectionary year tracker, per-Proper hymn suggestions, inline Hymnary preview, welcome dialog, and app renamed to Rubric.</p>
+      </description>
+    </release>
+    <release version="0.10" date="2026-03-01">
+      <description>
+        <p>Scripture layout improvements, PDF compile button, toast notifications, menu reorganisation.</p>
+      </description>
+    </release>
+  </releases>
+
+  <provides>
+    <mediatype>application/x-liturgy</mediatype>
+  </provides>
+
+  <recommends>
+    <display_length compare="ge">768</display_length>
+  </recommends>
+
+  <requires>
+    <display_length compare="ge">600</display_length>
+  </requires>
+</component>
