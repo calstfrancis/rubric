@@ -1,5 +1,5 @@
 # Rubric
-
+[![Tests](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml/badge.svg)](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml)
 A GNOME-native worship service planning tool for United Church of Canada ministry.
 
 Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and LaTeX export for professional bulletin production.
