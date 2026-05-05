@@ -117,9 +117,29 @@ class Config:
         self.recent_files       : list[str] = []
         self.use_tabs           = False
         self.last_seen_version  : str = ""
+        self.bulletin           : dict = self._default_bulletin()
         self._load()
 
     # backward-compat: old "template_items" key becomes template named "Default"
+    @staticmethod
+    def _default_bulletin() -> dict:
+        return {
+            "church_name":    "Hope United Church",
+            "address":        "",
+            "service_time":   "10:30 am",
+            "website":        "",
+            "email":          "",
+            "phone":          "",
+            "mission":        "",
+            "accessibility":  "All are welcome.",
+            "welcome":        "A warm welcome is extended to all.",
+            "staff": [],          # [{"role": "Minister", "name": "...", "email": "..."}]
+            "announcements":  [], # [{"text": "...", "expires": "YYYY-MM-DD" or ""}]
+            "print_mode":     "booklet",   # "booklet" or "digital"
+            "include_scripture": True,
+            "include_announcements": True,
+        }
+
     def _load(self):
         if CONFIG_PATH.exists():
             try:
@@ -130,6 +150,8 @@ class Config:
                 self.recent_files     = d.get("recent_files",     [])
                 self.use_tabs          = d.get("use_tabs",           False)
                 self.last_seen_version = d.get("last_seen_version",  "")
+                saved_bulletin = d.get("bulletin", {})
+                self.bulletin = {**self._default_bulletin(), **saved_bulletin}
                 self.default_template = d.get("default_template", "")
                 self.templates        = d.get("templates",        {})
                 # migrate old single template
@@ -154,6 +176,7 @@ class Config:
             "recent_files":     self.recent_files,
             "use_tabs":           self.use_tabs,
             "last_seen_version":  self.last_seen_version,
+            "bulletin":           self.bulletin,
         }
         if self.palette is not None: p["palette"] = self.palette
         CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -177,13 +200,23 @@ class SectionDivider:
 
 class ServiceItem:
     is_divider = False
-    def __init__(self, name, section, note="", leader=""):
-        self.name=name; self.section=section; self.note=note; self.leader=leader
+    def __init__(self, name, section, note="", leader="",
+                 show_in_bulletin=True, bulletin_note=""):
+        self.name = name; self.section = section
+        self.note = note; self.leader = leader
+        self.show_in_bulletin = show_in_bulletin  # whether element appears in bulletin
+        self.bulletin_note = bulletin_note         # congregation-facing text (overrides note)
     def to_dict(self):
-        return {"type":"item","name":self.name,"section":self.section,
-                "note":self.note,"leader":self.leader}
+        return {"type": "item", "name": self.name, "section": self.section,
+                "note": self.note, "leader": self.leader,
+                "show_in_bulletin": self.show_in_bulletin,
+                "bulletin_note": self.bulletin_note}
     @classmethod
-    def from_dict(cls, d): return cls(d["name"], d.get("section",""), d.get("note",""), d.get("leader",""))
+    def from_dict(cls, d):
+        return cls(d["name"], d.get("section", ""), d.get("note", ""),
+                   d.get("leader", ""),
+                   d.get("show_in_bulletin", True),
+                   d.get("bulletin_note", ""))
 
 def _entry_from_dict(d):
     return SectionDivider.from_dict(d) if d.get("type")=="divider" else ServiceItem.from_dict(d)
@@ -354,6 +387,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.set_title("Preferences"); self.set_default_size(700,560); self.set_search_enabled(False)
         self._build_latex(); self._build_view(); self._build_template(); self._build_palette()
         if _SNIP_OK: self._build_snippets()
+        self._build_bulletin()
         self.connect("close-request", self._on_close)
 
     def _build_latex(self):
@@ -555,12 +589,170 @@ class PreferencesWindow(Adw.PreferencesWindow):
             del self._snippets[idx]
             save_snippets(self._snippets); self._refresh_snippets_prefs()
 
+    def _build_bulletin(self):
+        """Bulletin preferences tab — church info, staff, announcements."""
+        page = Adw.PreferencesPage(title="Bulletin", icon_name="document-print-symbolic")
+        self.add(page)
+
+        # Church info
+        info_grp = Adw.PreferencesGroup(title="Church information")
+        page.add(info_grp)
+        b = config.bulletin
+        self._bul_entries = {}
+
+        def _entry_row(key, title, subtitle=""):
+            row = Adw.EntryRow(title=title)
+            if subtitle: row.set_subtitle(subtitle)
+            row.set_text(b.get(key, ""))
+            info_grp.add(row)
+            self._bul_entries[key] = row
+
+        _entry_row("church_name",  "Church name")
+        _entry_row("address",      "Address")
+        _entry_row("service_time", "Service time")
+        _entry_row("website",      "Website")
+        _entry_row("email",        "Email")
+        _entry_row("phone",        "Phone")
+
+        # Boilerplate text
+        text_grp = Adw.PreferencesGroup(title="Boilerplate text")
+        page.add(text_grp)
+        _entry_row("welcome",     "Welcome line")
+        _entry_row("accessibility", "Accessibility note")
+
+        def _text_row(key, title):
+            row = Adw.ActionRow(title=title)
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_min_content_height(60); scroll.add_css_class("card")
+            scroll.set_margin_top(4); scroll.set_margin_bottom(4)
+            tv = Gtk.TextView(); tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            tv.set_top_margin(6); tv.set_bottom_margin(6)
+            tv.set_left_margin(8); tv.set_right_margin(8)
+            tv.get_buffer().set_text(b.get(key, ""), -1)
+            scroll.set_child(tv); text_grp.add(scroll)
+            self._bul_entries[key] = tv
+
+        _text_row("mission", "Mission statement")
+
+        # Staff list
+        self._staff_grp = Adw.PreferencesGroup(title="Staff / contact list",
+            description="Appears in the acknowledgements block at the back of the bulletin")
+        page.add(self._staff_grp)
+        self._staff_rows = []
+        self._bul_staff_widgets = []
+        for member in b.get("staff", []):
+            self._add_staff_row(member.get("role",""), member.get("name",""), member.get("email",""))
+        add_staff_row = Adw.ActionRow(title="Add staff member")
+        add_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
+        add_btn.add_css_class("flat")
+        add_btn.connect("clicked", lambda _: self._add_staff_row("", "", ""))
+        add_staff_row.add_suffix(add_btn)
+        self._staff_grp.add(add_staff_row)
+
+        # Announcements
+        self._ann_grp = Adw.PreferencesGroup(title="Announcements",
+            description="Each announcement can have an optional expiry date (YYYY-MM-DD)")
+        page.add(self._ann_grp)
+        self._bul_ann_widgets = []
+        for ann in b.get("announcements", []):
+            self._add_announcement_row(ann.get("text",""), ann.get("expires",""))
+        add_ann_row = Adw.ActionRow(title="Add announcement")
+        add_ann_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
+        add_ann_btn.add_css_class("flat")
+        add_ann_btn.connect("clicked", lambda _: self._add_announcement_row("", ""))
+        add_ann_row.add_suffix(add_ann_btn)
+        self._ann_grp.add(add_ann_row)
+
+    def _add_staff_row(self, role, name, email):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_margin_top(4); box.set_margin_bottom(4)
+        box.set_margin_start(4); box.set_margin_end(4)
+
+        role_e = Gtk.Entry(); role_e.set_placeholder_text("Role")
+        role_e.set_hexpand(True); role_e.set_text(role)
+        name_e = Gtk.Entry(); name_e.set_placeholder_text("Name")
+        name_e.set_hexpand(True); name_e.set_text(name)
+        email_e = Gtk.Entry(); email_e.set_placeholder_text("Email (optional)")
+        email_e.set_hexpand(True); email_e.set_text(email)
+
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic")
+        del_btn.add_css_class("flat")
+        widgets = (role_e, name_e, email_e, box)
+        del_btn.connect("clicked", lambda _b, w=widgets: self._remove_staff_row(w))
+
+        box.append(role_e); box.append(name_e); box.append(email_e); box.append(del_btn)
+        row = Adw.ActionRow(); row.set_child(box)
+        self._staff_grp.add(row)
+        self._bul_staff_widgets.append((role_e, name_e, email_e, row))
+
+    def _remove_staff_row(self, widgets):
+        role_e, name_e, email_e, box = widgets
+        self._bul_staff_widgets = [w for w in self._bul_staff_widgets if w[0] is not role_e]
+        # Remove from group — mark as invisible (can't easily remove from PreferencesGroup)
+        box.get_parent().set_visible(False)
+
+    def _add_announcement_row(self, text, expires):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_top(4); box.set_margin_bottom(4)
+        box.set_margin_start(4); box.set_margin_end(4)
+
+        # Text area
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(50); scroll.add_css_class("card")
+        tv = Gtk.TextView(); tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        tv.set_top_margin(6); tv.set_bottom_margin(6)
+        tv.set_left_margin(8); tv.set_right_margin(8)
+        tv.get_buffer().set_text(text, -1)
+        scroll.set_child(tv); box.append(scroll)
+
+        # Expires row
+        exp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        exp_lbl = Gtk.Label(label="Expires (YYYY-MM-DD, or blank):")
+        exp_lbl.add_css_class("caption"); exp_lbl.set_xalign(0)
+        exp_e = Gtk.Entry(); exp_e.set_text(expires); exp_e.set_width_chars(14)
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic")
+        del_btn.add_css_class("flat")
+        exp_box.append(exp_lbl); exp_box.append(exp_e)
+        sp = Gtk.Box(); sp.set_hexpand(True); exp_box.append(sp)
+        exp_box.append(del_btn)
+        box.append(exp_box)
+
+        row = Adw.ActionRow(); row.set_child(box)
+        widgets = (tv, exp_e, row)
+        del_btn.connect("clicked", lambda _b, w=widgets: w[2].set_visible(False))
+        self._ann_grp.add(row)
+        self._bul_ann_widgets.append((tv, exp_e, row))
+
     def _on_close(self, _):
         buf = self._preamble_view.get_buffer(); s,e = buf.get_bounds()
         config.preamble = buf.get_text(s,e,False)
         builtin = [{"section":s,"items":list(i)} for s,i in SECTIONS]
         config.palette = self._pal if self._pal != builtin else None
         config.use_tabs = self._tabs_active()
+
+        # Save bulletin config
+        b = config.bulletin
+        for key, widget in self._bul_entries.items():
+            if isinstance(widget, Gtk.TextView):
+                buf = widget.get_buffer(); s2,e2 = buf.get_bounds()
+                b[key] = buf.get_text(s2,e2,False)
+            else:
+                b[key] = widget.get_text()
+        b["staff"] = [
+            {"role": r.get_text(), "name": n.get_text(), "email": em.get_text()}
+            for r, n, em, row in self._bul_staff_widgets
+            if row.get_visible() and r.get_text().strip()
+        ]
+        b["announcements"] = []
+        for tv, exp_e, row in self._bul_ann_widgets:
+            if not row.get_visible(): continue
+            buf = tv.get_buffer(); s2,e2 = buf.get_bounds()
+            text = buf.get_text(s2,e2,False).strip()
+            if text:
+                b["announcements"].append({"text": text, "expires": exp_e.get_text().strip()})
+
         config.save(); return False
 
 
@@ -622,6 +814,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("snippets",           self.open_snippets,          "<Ctrl><Shift>i"),
             ("scripture-search",   self.open_scripture_search,  "<Ctrl><Shift>f"),
             ("export-csv",         self.export_csv,             None),
+            ("export-bulletin",    self.export_bulletin,        "<Ctrl><Shift>b"),
             ("git-commit",         self.git_commit,             "<Ctrl><Shift>g"),
             ("show-help",          lambda: self._show_doc("HELP"),      "F1"),
             ("show-faq",           lambda: self._show_doc("FAQ"),       None),
@@ -736,6 +929,7 @@ class MainWindow(Adw.ApplicationWindow):
         export_sec.append("Export LaTeX…",      "win.export-latex")
         export_sec.append("Export plain text…", "win.export-text")
         export_sec.append("Export CSV…",        "win.export-csv")
+        export_sec.append("Export Bulletin…",   "win.export-bulletin")
         menu.append_section("Export", export_sec)
 
         # menu.append("Commit to git", "win.git-commit")  # hidden until stable
@@ -1008,6 +1202,16 @@ class MainWindow(Adw.ApplicationWindow):
         rr_btn.add_css_class("flat")
         rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); itb.append(rr_btn)
 
+        # Bulletin separator + toggle
+        sep4 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        sep4.set_margin_start(8); sep4.set_margin_end(4); itb.append(sep4)
+        self.bulletin_toggle = Gtk.ToggleButton(label="📋")
+        self.bulletin_toggle.set_tooltip_text("Include in congregational bulletin")
+        self.bulletin_toggle.add_css_class("flat")
+        self.bulletin_toggle.set_active(True)
+        self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
+        itb.append(self.bulletin_toggle)
+
         self.item_toolbar_revealer.set_child(itb)
         lower.append(self.item_toolbar_revealer)
         self.hymn_revealer = self.item_toolbar_revealer
@@ -1267,6 +1471,10 @@ class MainWindow(Adw.ApplicationWindow):
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
+            # Bulletin toggle — set state without triggering handler
+            self._updating_note = True
+            self.bulletin_toggle.set_active(si.show_in_bulletin)
+            self._updating_note = False
             # Show/hide hymn segment based on element type
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
@@ -1966,6 +2174,373 @@ class MainWindow(Adw.ApplicationWindow):
             else: cur_i.append(e)
         yield cur_t,cur_i
 
+    def export_bulletin(self):
+        """Export congregational bulletin — prompts for print or digital mode."""
+        dlg = Adw.MessageDialog(
+            transient_for=self,
+            heading="Export Bulletin",
+            body="Choose bulletin format:"
+        )
+        dlg.add_response("cancel",  "Cancel")
+        dlg.add_response("print",   "Print (booklet)")
+        dlg.add_response("digital", "Digital (screen PDF)")
+        dlg.set_response_appearance("print",   Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("digital", Adw.ResponseAppearance.SUGGESTED)
+        def on_resp(d, r):
+            if r == "print":   self._export_bulletin_file(digital=False)
+            elif r == "digital": self._export_bulletin_file(digital=True)
+        dlg.connect("response", on_resp)
+        dlg.present()
+
+    def _export_bulletin_file(self, digital: bool):
+        title = self.service_title_entry.get_text() or "bulletin"
+        date_str = self.selected_date.strftime("%Y-%m-%d") if self.selected_date else "undated"
+        church = config.bulletin.get("church_name", "").replace(" ", "_") or "Bulletin"
+        suffix = "digital" if digital else "print"
+        default_name = f"{church}_{date_str}_{suffix}.tex"
+        dlg = Gtk.FileDialog(title="Save bulletin as…", initial_name=default_name)
+        dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        f = Gtk.FileFilter(); f.set_name("LaTeX (*.tex)"); f.add_pattern("*.tex")
+        filters.append(f); dlg.set_filters(filters)
+        dlg.save(self, None, lambda d, r, dig=digital: self._on_bulletin_save(d, r, dig))
+
+    def _on_bulletin_save(self, dlg, result, digital: bool):
+        try:
+            f = dlg.save_finish(result)
+        except Exception:
+            return
+        path = f.get_path()
+        config.last_dir = str(Path(path).parent)
+        lines = self._build_bulletin_latex(digital=digital)
+        Path(path).write_text("\n".join(lines), encoding="utf-8")
+        self._show_toast(f"Bulletin saved: {Path(path).name}")
+        # Offer to compile
+        pdf_path = Path(path).with_suffix(".pdf")
+        self._compile_bulletin_pdf(path)
+
+    def _compile_bulletin_pdf(self, tex_path_str: str):
+        """Compile bulletin tex to PDF in background thread, then open it."""
+        import subprocess, shutil, threading
+
+        tex_path = Path(tex_path_str)
+        xelatex = shutil.which("xelatex")
+        if not xelatex:
+            for candidate in [
+                Path.home() / "texlive/bin/x86_64-linux/xelatex",
+                Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
+                Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
+            ]:
+                if candidate.exists(): xelatex = str(candidate); break
+
+        if not xelatex:
+            self._show_toast("Bulletin saved — install xelatex to compile to PDF", timeout=6)
+            return
+
+        self._compiling_toast = Adw.Toast.new("Compiling bulletin…")
+        self._compiling_toast.set_timeout(0)
+        self._toast_overlay.add_toast(self._compiling_toast)
+
+        def run():
+            try:
+                result = subprocess.run(
+                    [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
+                    cwd=str(tex_path.parent),
+                    capture_output=True, text=True, timeout=60
+                )
+                GLib.idle_add(self._on_bulletin_compiled, result, tex_path)
+            except subprocess.TimeoutExpired:
+                GLib.idle_add(self._show_toast, "Bulletin compile timed out.", 8)
+                try: self._compiling_toast.dismiss()
+                except Exception: pass
+            except Exception as e:
+                GLib.idle_add(self._show_toast, f"Compile error: {e}", 8)
+                try: self._compiling_toast.dismiss()
+                except Exception: pass
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_bulletin_compiled(self, result, tex_path: Path):
+        try: self._compiling_toast.dismiss()
+        except Exception: pass
+
+        if result.returncode != 0:
+            log_lines = result.stdout.splitlines()
+            errors = [l for l in log_lines if l.startswith("!") or "Error" in l]
+            msg = " — ".join(errors[-2:]) if errors else "xelatex error (check .log file)"
+            self._show_toast(f"Bulletin compile failed: {msg[:80]}", timeout=10)
+            return
+
+        for ext in (".log",".aux",".out",".dvi",".synctex.gz",".toc",".fls",".fdb_latexmk"):
+            try: tex_path.with_suffix(ext).unlink(missing_ok=True)
+            except OSError: pass
+
+        pdf = tex_path.with_suffix(".pdf")
+        if pdf.exists():
+            self._show_toast(f"✓ {pdf.name}", timeout=4)
+            Gtk.show_uri(None, pdf.as_uri(), 0)
+        else:
+            self._show_toast("Compiled — PDF not found.", timeout=6)
+
+    def _build_bulletin_latex(self, digital: bool = False) -> list[str]:
+        """Build complete LaTeX for the congregational bulletin.
+
+        Print mode: memoir class, half-letter (5.5x8.5in), fold for booklet.
+        Digital mode: extarticle, full letter, colour hyperlinks.
+        """
+        from datetime import date as pydate
+        b = config.bulletin
+        church   = _latex_escape(b.get("church_name", ""))
+        address  = _latex_escape(b.get("address", ""))
+        svc_time = _latex_escape(b.get("service_time", ""))
+        website  = _latex_escape(b.get("website", ""))
+        email    = _latex_escape(b.get("email", ""))
+        phone    = _latex_escape(b.get("phone", ""))
+        mission  = _latex_escape(b.get("mission", ""))
+        welcome  = _latex_escape(b.get("welcome", ""))
+        access   = _latex_escape(b.get("accessibility", ""))
+        title    = _latex_escape(self.service_title_entry.get_text() or "Order of Service")
+        date_str = (self.selected_date.strftime("%-d %B %Y")
+                    if self.selected_date else "")
+
+        if digital:
+            # Full letter, colour hyperlinks, extarticle
+            lines = [
+                r"\documentclass[12pt,letterpaper]{extarticle}",
+                r"\usepackage{fontspec}",
+                r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
+                r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
+                r"\usepackage{geometry}",
+                r"\geometry{top=1in,bottom=1in,left=1in,right=1in}",
+                r"\usepackage{parskip,microtype,titlesec,multicol}",
+                r"\usepackage[dvipsnames]{xcolor}",
+                r"\usepackage{hyperref}",
+                r"\hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue}",
+                r"",
+                r"% Section headings: centred small-caps",
+                r"\titleformat{\section}{\normalsize\scshape\centering}{}{0em}{}",
+                r"\titlespacing*{\section}{0pt}{10pt}{4pt}",
+                r"",
+            ]
+        else:
+            # Half-letter booklet via memoir (no titlesec, no geometry pkg)
+            lines = [
+                r"\documentclass[12pt,oneside]{memoir}",
+                r"\usepackage{fontspec}",
+                r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
+                r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
+                r"\usepackage{parskip,microtype,multicol}",
+                r"\usepackage[dvipsnames]{xcolor}",
+                r"\usepackage{hyperref}",
+                r"\hypersetup{hidelinks}",
+                r"",
+                r"% Memoir layout: half-letter, fold for saddle-stitch booklet",
+                r"\setstocksize{8.5in}{5.5in}",
+                r"\settrimmedsize{\stockheight}{\stockwidth}{*}",
+                r"\setlrmarginsandblock{0.6in}{0.6in}{*}",
+                r"\setulmarginsandblock{0.6in}{0.7in}{*}",
+                r"\checkandfixthelayout",
+                r"",
+                r"% Section headings via memoir (not titlesec)",
+                r"\setsecheadstyle{\normalsize\scshape\centering}",
+                r"\setbeforesecskip{10pt}",
+                r"\setaftersecskip{4pt}",
+                r"",
+            ]
+
+        # Shared commands for both modes
+        lines += [
+            r"% Movement headings (Gathering, Word, Response, Sending)",
+            r"\newcommand{\movement}[1]{%",
+            r"  \vspace{8pt}%",
+            r"  \begin{center}{\large\bfseries\scshape #1}\end{center}%",
+            r"  \vspace{4pt}%",
+            r"}",
+            r"",
+            r"% Hymn: bold reference + italic title",
+            r"\newcommand{\hymnref}[2]{\textbf{#1}\enspace #2}",
+            r"",
+            r"% Responsive reading: both Leader and People in bold",
+            r"\newcommand{\ldr}[1]{\textbf{#1}\\}",
+            r"\newcommand{\ppl}[1]{\textbf{#1}\\}",
+            r"",
+            r"% Scripture environment: verse number + hanging indent",
+            r"\newenvironment{scripture}{%",
+            r"  \par\begingroup\setlength{\parskip}{0pt}%",
+            r"  \setlength{\parindent}{-2.4em}\leftskip=2.4em",
+            r"}{\par\endgroup\vspace{4pt}}",
+            r"\newcommand{\sverse}[2]{\textsuperscript{#1}\quad #2\par}",
+            r"",
+        ]
+        lines += [r"\begin{document}", r"\pagestyle{empty}", r""]
+
+        # ── Cover page ────────────────────────────────────────────────────────
+        lines += [
+            r"\begin{center}",
+            r"\vspace*{1.5cm}",
+            r"{\Large\bfseries\scshape " + church + r"}\\[0.4em]",
+        ]
+        if address:
+            lines.append(r"{\small " + address + r"}\\[0.2em]")
+        lines += [
+            r"{\small " + svc_time + r"}\\[2cm]",
+            r"{\LARGE\bfseries " + title + r"}\\[0.6em]",
+            r"{\large " + date_str + r"}\\[2cm]",
+        ]
+        if website or email or phone:
+            lines.append(r"{\small")
+            if website:
+                if digital:
+                    lines.append(r"\href{https://" + b.get("website","") + r"}{" + website + r"}\\")
+                else:
+                    lines.append(website + r"\\")
+            if email:
+                if digital:
+                    lines.append(r"\href{mailto:" + b.get("email","") + r"}{" + email + r"}\\")
+                else:
+                    lines.append(email + r"\\")
+            if phone:
+                lines.append(phone + r"\\")
+            lines.append(r"}")
+        if welcome:
+            lines += [r"\\[1cm]", r"\textit{" + welcome + r"}"]
+        lines += [r"\end{center}", r"\newpage", r""]
+
+        # ── Service order ─────────────────────────────────────────────────────
+        current_section = None
+        in_multicols = False
+
+        for entry in self.service_entries:
+            if isinstance(entry, SectionDivider):
+                if in_multicols:
+                    lines += [r"\end{multicols}", ""]
+                    in_multicols = False
+                current_section = entry.title
+                lines += [
+                    r"\vspace{8pt}",
+                    r"\movement{" + _latex_escape(entry.title) + r"}",
+                    r"\begin{multicols}{2}",
+                    "",
+                ]
+                in_multicols = True
+                continue
+
+            if not isinstance(entry, ServiceItem) or not entry.show_in_bulletin:
+                continue
+
+            lines += ["", r"\section*{" + _latex_escape(entry.name) + "}"]
+
+            # Hymn reference — always show in bulletin as bold reference + title
+            name_lower = entry.name.lower()
+            is_hymn = any(k in name_lower for k in ("hymn","psalm","sung","song","anthem","gloria"))
+
+            # Determine what content to show
+            content = entry.bulletin_note if entry.bulletin_note else entry.note
+
+            if is_hymn and content:
+                import re
+                # Bold the hymn reference (VU 145, MV 79, etc.)
+                m = re.match(r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)', content, re.DOTALL)
+                if m:
+                    ref  = _latex_escape(m.group(1).strip())
+                    rest = _latex_escape(m.group(2).strip().split("\n")[0]) if m.group(2).strip() else ""
+                    if rest:
+                        lines.append(r"\hymnref{" + ref + r"}{\textit{``" + rest + r"''}}")
+                    else:
+                        lines.append(r"\textbf{" + ref + r"}")
+                else:
+                    lines.append(_note_for_latex(content))
+            elif content:
+                # Check if it's a responsive reading
+                if r"\ldr{" in content or r"\ppl{" in content or r"\begin{verse}" in content:
+                    lines.append(content)
+                elif any(l.strip().startswith("\\") for l in content.splitlines()):
+                    lines.append(content)
+                else:
+                    lines.append(_latex_escape(content))
+
+        if in_multicols:
+            lines += ["", r"\end{multicols}"]
+
+        # ── Acknowledgements block ────────────────────────────────────────────
+        staff = b.get("staff", [])
+        # Also harvest leader assignments from the service
+        leaders: dict[str, list[str]] = {}
+        for entry in self.service_entries:
+            if isinstance(entry, ServiceItem) and entry.leader and entry.show_in_bulletin:
+                leaders.setdefault(entry.leader, []).append(entry.name)
+
+        if staff or leaders:
+            lines += [
+                r"\vspace{12pt}",
+                r"\begin{center}\rule{0.4\linewidth}{0.4pt}\end{center}",
+                r"\begin{center}{\small",
+            ]
+            for member in staff:
+                role = _latex_escape(member.get("role", ""))
+                name = _latex_escape(member.get("name", ""))
+                em   = member.get("email", "")
+                if digital and em:
+                    lines.append(r"\textit{" + role + r":} \href{mailto:" + em + r"}{" + name + r"}\\")
+                else:
+                    lines.append(r"\textit{" + role + r":} " + name + r"\\")
+            for person, roles in leaders.items():
+                lines.append(_latex_escape(person) + r" (\textit{" +
+                             _latex_escape(", ".join(roles)) + r"})\\")
+            lines += [r"}\end{center}", ""]
+
+        # ── Announcements ─────────────────────────────────────────────────────
+        if b.get("include_announcements", True):
+            today = pydate.today()
+            active = []
+            for ann in b.get("announcements", []):
+                exp = ann.get("expires", "")
+                if exp:
+                    try:
+                        from datetime import datetime
+                        if datetime.strptime(exp, "%Y-%m-%d").date() < today:
+                            continue
+                    except ValueError:
+                        pass
+                active.append(ann.get("text", "").strip())
+            if active:
+                lines += [
+                    r"\newpage",
+                    r"\begin{center}{\large\bfseries\scshape Announcements}\end{center}",
+                    r"\vspace{4pt}",
+                    "",
+                ]
+                for ann in active:
+                    if any(l.strip().startswith("\\") for l in ann.splitlines()):
+                        lines.append(ann)
+                    else:
+                        lines.append(_latex_escape(ann))
+                    lines.append(r"\vspace{6pt}")
+
+        # ── Back page: mission + contact ──────────────────────────────────────
+        if mission or access or email or website:
+            lines += [
+                r"\newpage",
+                r"\begin{center}",
+                r"\vspace*{\fill}",
+            ]
+            if mission:
+                lines += [
+                    r"{\small\textit{" + mission + r"}}\\[0.8em]",
+                ]
+            if access:
+                lines += [r"{\small " + access + r"}\\[0.4em]"]
+            if website or email or phone:
+                lines.append(r"{\small ")
+                if website: lines.append(website + r"\\")
+                if email:   lines.append(email + r"\\")
+                if phone:   lines.append(phone + r"\\")
+                lines.append(r"}")
+            lines += [r"\vspace*{\fill}", r"\end{center}", ""]
+
+        lines += [r"\end{document}", ""]
+        return lines
+
     def export_text(self):
         dlg = Gtk.FileDialog(title="Export plain text", initial_name="service.txt")
         dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
@@ -2195,6 +2770,18 @@ class MainWindow(Adw.ApplicationWindow):
         entry_obj = self.service_entries[idx]
         if not isinstance(entry_obj, ServiceItem): return
         entry_obj.leader = entry.get_text()
+        self._mark_modified()
+
+    def _on_bulletin_toggled(self, btn):
+        if self._updating_note: return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)): return
+        e = self.service_entries[idx]
+        if not isinstance(e, ServiceItem): return
+        e.show_in_bulletin = btn.get_active()
+        row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
+        if row:
+            row.set_opacity(1.0 if btn.get_active() else 0.45)
         self._mark_modified()
 
     # ── Hymn suggestions ──────────────────────────────────────────────────────
