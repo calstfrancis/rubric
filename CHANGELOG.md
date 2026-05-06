@@ -4,18 +4,32 @@ All notable changes are documented here, newest first.
 
 ---
 
-## Unreleased (current development)
+## Unreleased (v0.12)
 
 ### Added
+- **Congregational bulletin export** (Ctrl+Shift+B) — generates a separate PDF for pew use from the same service file.
+  - **Print / booklet** — `memoir` class, half-letter (5.5 × 8.5 in), designed to fold for saddle-stitch. Cover page with church name and service details; order of service in two-column layout; acknowledgements block with staff names and leader assignments; announcements page; back page with mission statement and contact info.
+  - **Digital / screen** — `extarticle`, full letter, colour hyperlinks via `xcolor`/`hyperref`.
+- **Per-element bulletin toggle** — the 📋 button on the item toolbar marks each element as shown or hidden in the congregational bulletin independently of the leader copy. Hidden elements are visually dimmed in the order list.
+- **Bulletin preferences tab** in Preferences — church name, address, service time, website, email, phone; welcome line; accessibility note; mission statement (multi-line); staff/contact list (role, name, optional email for digital links); announcements list.
+- **Announcement expiry** — each announcement accepts an optional `YYYY-MM-DD` expiry date; outdated announcements are silently omitted when the bulletin is generated.
 - **Lectionary year tracker** in the header bar — a small coloured dot and "Year A · Advent" label showing today's RCL year and season at all times. Updates at midnight. Tooltip shows the full week name.
 - **Per-Proper hymn suggestions** (Propers 4–29) — Ordinary Time now returns hymns specific to each Proper's themes rather than generic suggestions. Blends with the season pool for variety.
+- **Hymn data moved to JSON** — `data/hymn_suggestions.json` replaces the hard-coded Python dict; easier to extend without touching source code.
 - **Inline Hymnary preview** — if `python3-webkit2` (or WebKit 6.0) is installed, clicking a hymn suggestion chip opens an inline browser panel rather than switching to an external browser. Falls back to the system browser if WebKit is not available.
-- **Hymn suggestion injection** — right-clicking a suggestion chip now injects the hymn reference into the *selected element's* Notes/Content instead of creating a new element. Lets you click "Opening Hymn" in your order list then right-click a chip to fill it in.
+- **Hymn suggestion injection** — right-clicking a suggestion chip now injects the hymn reference into the *selected element's* Notes/Content instead of creating a new element.
+- **GitHub Actions CI** — automated `python3 -m unittest` run on every push and pull request.
 
 ### Fixed
+- **Bulletin PDF compile threading violation** — `_compiling_toast.dismiss()` was called directly from the background thread on timeout/exception, which could crash silently and prevent the error toast from appearing. All GTK calls in error paths now go through `GLib.idle_add`.
+- **Bulletin compile error reporting** — `result.stderr` was never checked; both stdout and stderr are now combined when looking for xelatex error lines, so "File 'memoir.cls' not found" and similar errors surface correctly.
+- **`memoir` missing from install instructions** — the in-app TeX Live tab and README omitted `memoir` from both the `tlmgr` and `zypper` install commands; this was the most likely cause of the bulletin compile producing no PDF.
 - `SyntaxWarning: invalid escape sequence '\s'` on launch — caused by `\sverse` in a non-raw docstring. Fixed by making the docstring a raw string (`r"""`).
 - Hymn title from Hymnary now correctly strips the book name prefix. "Voices United: The Hymn and Worship Book... 16. Mary, woman of the promise" → "Mary, woman of the promise".
 - Multi-line verse joining in `_passage_to_latex` — the WEB API returns some verses split across multiple lines; these are now joined into a single `\sverse` call so continuation lines wrap correctly.
+- **Boilerplate text group in Bulletin prefs** — "Welcome line" and "Accessibility note" were being added to the Church information group instead of Boilerplate text due to a closure capture bug in `_build_bulletin`.
+- Removed dead `pdf_path` variable in `_on_bulletin_save` (computed but never used).
+- All inline `import re`, `import subprocess`, `import shutil`, `import threading` calls moved to top-level imports.
 
 ---
 

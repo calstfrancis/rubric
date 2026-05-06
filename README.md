@@ -11,12 +11,19 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 ## Features
 
 - **RCL integration** — lectionary readings, liturgical colour, and season for any Sunday; weekday services default to the coming Sunday with a stepper
-- **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header
-- **Hymn suggestions** — season and Proper-specific suggestions from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
-- **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org
+- **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header, updated daily
+- **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
+- **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org; optional inline Hymnary preview via WebKit
 - **Bible viewer** — fetch World English Bible passages by reference; inserts formatted LaTeX with hanging verse-number indent
 - **LaTeX export** — `extarticle`, two-column layout per liturgical movement, Junicode font, proper scripture environment
 - **PDF compilation** — one-click xelatex compilation from within the app
+- **Congregational bulletin export** — separate PDF for pew use
+  - **Print (booklet)** — `memoir` class, half-letter (5.5 × 8.5 in), fold for saddle-stitch
+  - **Digital (screen PDF)** — `extarticle`, full letter, colour hyperlinks
+  - Cover page, order of service, acknowledgements block, announcements page, back page with mission and contact
+- **Per-element bulletin toggle** — the 📋 button on the item toolbar marks each element as shown or hidden in the bulletin independently of the leader copy
+- **Bulletin preferences** — church name, address, service time, website, email, phone, welcome line, accessibility note, mission statement, staff/contact list, and announcements — all in Preferences → Bulletin
+- **Announcement expiry** — each announcement can carry an optional `YYYY-MM-DD` expiry date; expired announcements are silently omitted from the bulletin
 - **Snippets library** — reusable liturgical texts (land acknowledgement, prayers of the people, lord's prayer, benediction, words of institution)
 - **Responsive reading builder** — L:/P: syntax generates formatted LaTeX
 - **Leader assignment** — per-element leader name exports as right-aligned italic in the section heading
@@ -24,6 +31,7 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **Tab view** — sections as notebook tabs with drag-and-drop between them
 - **Git integration** — commit service files with a single button
 - **CSV export** — for sharing with musicians and AV teams
+- **GitHub Actions CI** — automated test run on every push
 
 ---
 
@@ -37,7 +45,7 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0
 ```
 
-For PDF compilation you also need TeX Live with xelatex. See [docs/texlive.md](docs/texlive.md) or the in-app TeX Live tab (Help → Welcome).
+For PDF compilation you also need TeX Live with xelatex and the `memoir` package (for bulletin export). See [docs/texlive.md](docs/texlive.md) or the in-app TeX Live tab (Help → Welcome).
 
 ---
 

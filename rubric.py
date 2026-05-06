@@ -4,7 +4,7 @@ Rubric — GTK4 + libadwaita worship service order builder
 Requires: sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0
 """
 
-import sys, json
+import sys, json, re, subprocess, shutil, threading
 from pathlib import Path
 
 import gi
@@ -239,7 +239,6 @@ def _passage_to_latex(reference: str, text: str) -> str:
     The API sometimes splits a single verse across multiple lines;
     we join all lines until the next numbered verse into one \sverse call.
     """
-    import re
     lines = text.strip().splitlines()
 
     # First pass: group lines into (verse_num, full_text) pairs
@@ -285,7 +284,6 @@ def _passage_to_latex(reference: str, text: str) -> str:
 def _migrate_scripture_note(note):
     if r'\begin{quotation}' not in note:
         return note
-    import re
     lines = note.splitlines()
     pre, verses, post = [], [], []
     ref_line = ""
@@ -600,11 +598,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
         b = config.bulletin
         self._bul_entries = {}
 
-        def _entry_row(key, title, subtitle=""):
+        def _entry_row(key, title, grp=None, subtitle=""):
             row = Adw.EntryRow(title=title)
             if subtitle: row.set_subtitle(subtitle)
             row.set_text(b.get(key, ""))
-            info_grp.add(row)
+            (grp or info_grp).add(row)
             self._bul_entries[key] = row
 
         _entry_row("church_name",  "Church name")
@@ -617,11 +615,10 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # Boilerplate text
         text_grp = Adw.PreferencesGroup(title="Boilerplate text")
         page.add(text_grp)
-        _entry_row("welcome",     "Welcome line")
-        _entry_row("accessibility", "Accessibility note")
+        _entry_row("welcome",       "Welcome line",       grp=text_grp)
+        _entry_row("accessibility", "Accessibility note", grp=text_grp)
 
         def _text_row(key, title):
-            row = Adw.ActionRow(title=title)
             scroll = Gtk.ScrolledWindow()
             scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
             scroll.set_min_content_height(60); scroll.add_css_class("card")
@@ -1258,7 +1255,6 @@ class MainWindow(Adw.ApplicationWindow):
             first_line = si.note.strip().split('\n')[0].strip()
             # Strip leading LaTeX commands for display
             if first_line.startswith('\\'):
-                import re
                 first_line = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', first_line)
                 first_line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first_line).strip()
             words = first_line.split()
@@ -1626,7 +1622,6 @@ class MainWindow(Adw.ApplicationWindow):
         if not note: return ""
         first_line = note.strip().split('\n')[0].strip()
         if first_line.startswith('\\'):
-            import re
             first_line = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', first_line)
             first_line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first_line).strip()
         words = first_line.split()
@@ -1786,7 +1781,6 @@ class MainWindow(Adw.ApplicationWindow):
         tabs.set_vexpand(True)
 
         def _text_page(content: str) -> Gtk.ScrolledWindow:
-            import re
             scroll = Gtk.ScrolledWindow()
             scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
             scroll.set_vexpand(True)
@@ -1874,7 +1868,7 @@ class MainWindow(Adw.ApplicationWindow):
             "```\n\n"
             "Choose **Basic scheme**, then install required packages:\n\n"
             "```\n"
-            "tlmgr install xetex fontspec geometry parskip microtype titlesec multicol enumitem hyperref junicode\n"
+            "tlmgr install xetex fontspec geometry parskip microtype titlesec multicol enumitem hyperref memoir junicode\n"
             "```\n\n"
             "Add to `~/.bashrc`:\n\n"
             "```\n"
@@ -1882,7 +1876,7 @@ class MainWindow(Adw.ApplicationWindow):
             "```\n\n"
             "## Option B — zypper (openSUSE Tumbleweed)\n\n"
             "```\n"
-            "sudo zypper install texlive-xetex texlive-fontspec texlive-geometry texlive-parskip texlive-microtype texlive-titlesec texlive-multicol texlive-enumitem texlive-hyperref\n"
+            "sudo zypper install texlive-xetex texlive-fontspec texlive-geometry texlive-parskip texlive-microtype texlive-titlesec texlive-multicol texlive-enumitem texlive-hyperref texlive-memoir\n"
             "sudo zypper install junicode-fonts\n"
             "```\n\n"
             "## Verify\n\n"
@@ -2215,14 +2209,10 @@ class MainWindow(Adw.ApplicationWindow):
         lines = self._build_bulletin_latex(digital=digital)
         Path(path).write_text("\n".join(lines), encoding="utf-8")
         self._show_toast(f"Bulletin saved: {Path(path).name}")
-        # Offer to compile
-        pdf_path = Path(path).with_suffix(".pdf")
         self._compile_bulletin_pdf(path)
 
     def _compile_bulletin_pdf(self, tex_path_str: str):
         """Compile bulletin tex to PDF in background thread, then open it."""
-        import subprocess, shutil, threading
-
         tex_path = Path(tex_path_str)
         xelatex = shutil.which("xelatex")
         if not xelatex:
@@ -2246,17 +2236,22 @@ class MainWindow(Adw.ApplicationWindow):
                 result = subprocess.run(
                     [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
                     cwd=str(tex_path.parent),
-                    capture_output=True, text=True, timeout=60
+                    capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
                 )
                 GLib.idle_add(self._on_bulletin_compiled, result, tex_path)
             except subprocess.TimeoutExpired:
-                GLib.idle_add(self._show_toast, "Bulletin compile timed out.", 8)
-                try: self._compiling_toast.dismiss()
-                except Exception: pass
+                def _on_timeout():
+                    try: self._compiling_toast.dismiss()
+                    except Exception: pass
+                    self._show_toast("Bulletin compile timed out.", 8)
+                GLib.idle_add(_on_timeout)
             except Exception as e:
-                GLib.idle_add(self._show_toast, f"Compile error: {e}", 8)
-                try: self._compiling_toast.dismiss()
-                except Exception: pass
+                def _on_error(msg=str(e)):
+                    try: self._compiling_toast.dismiss()
+                    except Exception: pass
+                    self._show_toast(f"Bulletin compile error: {msg}", 8)
+                GLib.idle_add(_on_error)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -2265,13 +2260,16 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception: pass
 
         if result.returncode != 0:
-            log_lines = result.stdout.splitlines()
+            combined = (result.stdout or "") + (result.stderr or "")
+            log_lines = combined.splitlines()
             errors = [l for l in log_lines if l.startswith("!") or "Error" in l]
             msg = " — ".join(errors[-2:]) if errors else "xelatex error (check .log file)"
             self._show_toast(f"Bulletin compile failed: {msg[:80]}", timeout=10)
             return
 
-        for ext in (".log",".aux",".out",".dvi",".synctex.gz",".toc",".fls",".fdb_latexmk"):
+        for ext in (".log", ".aux", ".out", ".dvi", ".synctex.gz",
+                    ".toc", ".lof", ".lot", ".fls", ".fdb_latexmk",
+                    ".maf", ".mtc", ".mtc0"):
             try: tex_path.with_suffix(ext).unlink(missing_ok=True)
             except OSError: pass
 
@@ -2438,7 +2436,6 @@ class MainWindow(Adw.ApplicationWindow):
             content = entry.bulletin_note if entry.bulletin_note else entry.note
 
             if is_hymn and content:
-                import re
                 # Bold the hymn reference (VU 145, MV 79, etc.)
                 m = re.match(r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)', content, re.DOTALL)
                 if m:
@@ -2656,8 +2653,6 @@ class MainWindow(Adw.ApplicationWindow):
 
     def compile_pdf(self):
         """Export to .tex then compile with xelatex, open the resulting PDF."""
-        import subprocess, shutil, threading
-
         if not self.tex_file:
             self.export_latex()
             self._show_toast("Link a .tex file first, then compile again.", timeout=5)
@@ -2692,6 +2687,7 @@ class MainWindow(Adw.ApplicationWindow):
                 result = subprocess.run(
                     [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_name],
                     cwd=tex_dir, capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
                 )
                 GLib.idle_add(self._on_compile_done, result, tex_path)
             except subprocess.TimeoutExpired:
@@ -2708,7 +2704,8 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception: pass
 
         if result.returncode != 0:
-            log_lines = result.stdout.splitlines()
+            combined = (result.stdout or "") + (result.stderr or "")
+            log_lines = combined.splitlines()
             errors = [l for l in log_lines if l.startswith("!") or "Error" in l]
             msg = " — ".join(errors[-2:]) if errors else "xelatex error (check .log file)"
             self._show_toast(f"Compilation failed: {msg[:80]}", timeout=10)
@@ -3079,7 +3076,6 @@ class MainWindow(Adw.ApplicationWindow):
                 current_section = entry.title
             else:
                 # Detect hymn ref: first line of note that matches VU/MV/LUS pattern
-                import re
                 hymn_ref = ""
                 if entry.note:
                     m = re.match(r'^(VU|MV|LUS)\s+\d+[^$]*', entry.note.split('\n')[0])
@@ -3108,7 +3104,6 @@ class MainWindow(Adw.ApplicationWindow):
         if not self.current_file:
             self._error("Not saved", "Save the service file before committing to git.")
             return
-        import subprocess
         path = Path(self.current_file)
         repo_dir = str(path.parent)
         filename  = path.name
@@ -3229,7 +3224,6 @@ class MainWindow(Adw.ApplicationWindow):
         buf.create_tag("hr",      strikethrough=True, foreground="#888888")
         buf.create_tag("bullet",  left_margin=24)
 
-        import re
         lines = doc_path.read_text(encoding="utf-8").splitlines()
         it = buf.get_end_iter()
 
