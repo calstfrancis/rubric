@@ -15,6 +15,17 @@ from gi.repository import Gtk, Adw, Gio, GLib, GObject, Gdk
 sys.path.insert(0, str(Path(__file__).parent))
 from rcl_data import get_liturgical_info
 
+# Import from refactored package
+try:
+    from rubric_package.models.config import Config, config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, DEFAULT_PREAMBLE, SECTIONS, get_palette
+    from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
+    from rubric_package.utils.latex import latex_escape, note_for_latex, passage_to_latex, migrate_scripture_note
+    from rubric_package.utils.colors import section_colour, hex_to_rgb
+    from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS as _HYMN_KW
+    _PACKAGE_OK = True
+except ImportError:
+    _PACKAGE_OK = False
+
 try:
     from hymn_lookup import lookup_hymn, parse_hymn_ref
     _HYMN_OK = True
@@ -58,12 +69,14 @@ except Exception:
         except Exception:
             _WebKit = None
 
-MAX_UNDO      = 50
-AUTOSAVE_SECS = 180
-CONFIG_PATH   = Path.home() / ".config/rubric/config.json"
-AUTOSAVE_PATH = Path.home() / ".local/share/rubric/autosave.liturgy"
+# Define constants locally if package import failed
+if not _PACKAGE_OK:
+    MAX_UNDO = 50
+    AUTOSAVE_SECS = 180
+    CONFIG_PATH = Path.home() / ".config/rubric/config.json"
+    AUTOSAVE_PATH = Path.home() / ".local/share/rubric/autosave.liturgy"
 
-DEFAULT_PREAMBLE = r"""\documentclass[12pt, letterpaper]{extarticle}
+    DEFAULT_PREAMBLE = r"""\documentclass[12pt, letterpaper]{extarticle}
 \usepackage{fontspec}
 \setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
 \usepackage{geometry}
@@ -89,18 +102,18 @@ DEFAULT_PREAMBLE = r"""\documentclass[12pt, letterpaper]{extarticle}
 \hypersetup{hidelinks}
 """
 
-SECTIONS = [
-    ("Gathering", ["Prelude","Welcome","Land acknowledgement","Announcements",
-                   "Call to worship","Opening hymn","Prayer of approach",
-                   "Prayer of confession","Words of assurance","Gloria / sung response"]),
-    ("Word",      ["Hebrew Bible reading","Psalm / sung psalm","Epistle reading",
-                   "Gospel reading","Children's time","Hymn","Anthem / special music",
-                   "Sermon / reflection","Silent reflection"]),
-    ("Response",  ["Hymn","Affirmation of faith","Prayers of the people","Lord's prayer",
-                   "Offering / dedication","Stewardship moment","Table liturgy","Communion"]),
-    ("Sending",   ["Closing hymn","Commissioning","Benediction","Postlude"]),
-]
-_HYMN_KW = {"hymn","psalm","sung","song","music","anthem","gloria"}
+    SECTIONS = [
+        ("Gathering", ["Prelude","Welcome","Land acknowledgement","Announcements",
+                       "Call to worship","Opening hymn","Prayer of approach",
+                       "Prayer of confession","Words of assurance","Gloria / sung response"]),
+        ("Word",      ["Hebrew Bible reading","Psalm / sung psalm","Epistle reading",
+                       "Gospel reading","Children's time","Hymn","Anthem / special music",
+                       "Sermon / reflection","Silent reflection"]),
+        ("Response",  ["Hymn","Affirmation of faith","Prayers of the people","Lord's prayer",
+                       "Offering / dedication","Stewardship moment","Table liturgy","Communion"]),
+        ("Sending",   ["Closing hymn","Commissioning","Benediction","Postlude"]),
+    ]
+    _HYMN_KW = {"hymn","psalm","sung","song","music","anthem","gloria"}
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -325,6 +338,19 @@ def _hex_to_rgb(h):
     return int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
 
 def _is_hymn_element(name): return any(k in name.lower() for k in _HYMN_KW)
+
+
+# ── Backward compatibility aliases ────────────────────────────────────────────
+
+# If package is available, create underscore aliases for existing code
+if _PACKAGE_OK:
+    _entry_from_dict = entry_from_dict
+    _latex_escape = latex_escape
+    _note_for_latex = note_for_latex
+    _passage_to_latex = passage_to_latex
+    _migrate_scripture_note = migrate_scripture_note
+    _section_colour = section_colour
+    _hex_to_rgb = hex_to_rgb
 
 
 # ── Bible viewer ──────────────────────────────────────────────────────────────
