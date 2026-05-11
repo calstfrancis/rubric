@@ -978,15 +978,33 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _build_palette_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL); box.set_size_request(230,-1)
+        # Search entry
+        self._palette_search = Gtk.SearchEntry()
+        self._palette_search.set_placeholder_text("Search elements…")
+        self._palette_search.set_margin_start(10); self._palette_search.set_margin_end(10)
+        self._palette_search.set_margin_top(8); self._palette_search.set_margin_bottom(4)
+        self._palette_search.connect("search-changed", self._on_palette_search_changed)
+        box.append(self._palette_search)
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
         self._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self._palette_inner.set_margin_top(8); self._palette_inner.set_margin_bottom(8)
+        self._palette_inner.set_margin_top(4); self._palette_inner.set_margin_bottom(8)
         self._palette_listboxes: dict[str,Gtk.ListBox] = {}; self._fill_palette_inner()
         scroll.set_child(self._palette_inner); box.append(scroll)
         ab = Gtk.Button(label="Add to service ↓")
         ab.set_margin_start(14); ab.set_margin_end(14); ab.set_margin_top(8); ab.set_margin_bottom(12)
         ab.connect("clicked", lambda _: self._add_selected_palette_item()); box.append(ab)
         return box
+
+    def _on_palette_search_changed(self, entry):
+        text = entry.get_text().lower().strip()
+        for lb in self._palette_listboxes.values():
+            if text:
+                def make_filter(t):
+                    return lambda row: hasattr(row, '_item_name') and t in row._item_name.lower()
+                lb.set_filter_func(make_filter(text))
+            else:
+                lb.set_filter_func(None)
+            lb.invalidate_filter()
 
     def _fill_palette_inner(self):
         while True:
@@ -1096,8 +1114,13 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(self.readings_card)
         self._current_readings = {}
 
-        # ── View stack (list / tabs) — upper pane ─────────────────────────────
-        upper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        # ── Horizontal split: order pane (left) | notes pane (right) ─────────
+        hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        hpaned.set_shrink_start_child(False); hpaned.set_shrink_end_child(False)
+        hpaned.set_position(260); hpaned.set_vexpand(True)
+
+        # ── Order pane (left) ─────────────────────────────────────────────────
+        order_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
         self._view_stack = Gtk.Stack(); self._view_stack.set_vexpand(True)
 
@@ -1123,45 +1146,30 @@ class MainWindow(Adw.ApplicationWindow):
         self._view_stack.add_named(self._notebook, "tabs")
 
         self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
-        upper.append(self._view_stack)
+        order_box.append(self._view_stack)
 
-        # Button bar
-        bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        bb.set_margin_start(12); bb.set_margin_end(12); bb.set_margin_top(4); bb.set_margin_bottom(8)
-        for icon,tip,cb in [("go-up-symbolic","Move up (Ctrl+↑)",self.move_up),
-                             ("go-down-symbolic","Move down (Ctrl+↓)",self.move_down)]:
-            b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.connect("clicked", lambda _,f=cb: f()); bb.append(b)
+        # Order pane button bar
+        bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        bb.set_margin_start(8); bb.set_margin_end(8); bb.set_margin_top(4); bb.set_margin_bottom(8)
+        add_elem_btn = Gtk.Button(label="+ Element", tooltip_text="Add custom element (Ctrl+Shift+N)")
+        add_elem_btn.connect("clicked", lambda _: self.add_custom()); bb.append(add_elem_btn)
+        add_sec_btn = Gtk.Button(label="+ Section", tooltip_text="Add section divider (Ctrl+D)")
+        add_sec_btn.connect("clicked", lambda _: self.add_divider()); bb.append(add_sec_btn)
+        sp = Gtk.Box(); sp.set_hexpand(True); bb.append(sp)
+        for icon, tip, cb in [("go-up-symbolic","Move up (Ctrl+↑)",self.move_up),
+                               ("go-down-symbolic","Move down (Ctrl+↓)",self.move_down)]:
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
+            b.connect("clicked", lambda _, f=cb: f()); bb.append(b)
         rm = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text="Remove selected (Delete)")
         rm.add_css_class("destructive-action"); rm.connect("clicked", lambda _: self.remove_item()); bb.append(rm)
-        sp = Gtk.Box(); sp.set_hexpand(True); bb.append(sp)
-        for label,tip,cb in [("＋ Divider","Add section divider (Ctrl+D)",self.add_divider),
-                              ("＋ Custom…","Add custom element (Ctrl+Shift+N)",self.add_custom)]:
-            b = Gtk.Button(label=label, tooltip_text=tip); b.connect("clicked", lambda _,f=cb: f()); bb.append(b)
-        upper.append(bb)
+        order_box.append(bb)
+        hpaned.set_start_child(order_box)
 
-        # Hymn suggestions strip (revealed when a date is set)
-        self.sugg_revealer = Gtk.Revealer()
-        self.sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self.sugg_revealer.set_transition_duration(200)
-        sugg_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        sugg_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        self._sugg_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        self._sugg_chips_box.set_margin_start(10); self._sugg_chips_box.set_margin_end(10)
-        self._sugg_chips_box.set_margin_bottom(6); self._sugg_chips_box.set_margin_top(6)
-        sugg_scroll = Gtk.ScrolledWindow()
-        sugg_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        sugg_scroll.set_min_content_height(36)
-        sugg_scroll.set_child(self._sugg_chips_box)
-        sugg_outer.append(sugg_scroll)
-        self.sugg_revealer.set_child(sugg_outer)
-        upper.append(self.sugg_revealer)
-
-        # ── Lower pane: combined toolbar + notes ──────────────────────────────
-        lower = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        lower.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        # ── Notes pane (right) ────────────────────────────────────────────────
+        notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        notes_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         # ── Combined single-line item toolbar (revealed when item is selected) ─
-        # Layout: Leader: [entry] | Scripture: [entry] [🔍] | Hymn: [entry] [Look up] [status]
         self.item_toolbar_revealer = Gtk.Revealer()
         self.item_toolbar_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.item_toolbar_revealer.set_transition_duration(150)
@@ -1195,9 +1203,9 @@ class MainWindow(Adw.ApplicationWindow):
         ss_fetch.connect("clicked", lambda _: self._do_scripture_search())
         itb.append(ss_fetch)
 
-        # Hymn segment (only shown for hymn-type elements — controlled via opacity/sensitive)
-        sep2 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep2.set_margin_start(8); sep2.set_margin_end(8); itb.append(sep2)
+        # Hymn segment (only shown for hymn-type elements)
+        sep_hymn = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        sep_hymn.set_margin_start(8); sep_hymn.set_margin_end(8); itb.append(sep_hymn)
         hl = Gtk.Label(label="Hymn #:"); hl.add_css_class("dim-label")
         hl.set_margin_end(4); itb.append(hl)
         self.hymn_entry = Gtk.Entry()
@@ -1211,11 +1219,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.hymn_status = Gtk.Label(); self.hymn_status.add_css_class("dim-label")
         self.hymn_status.set_max_width_chars(18); self.hymn_status.set_ellipsize(3)
         self.hymn_status.set_margin_start(4)
-        # Store refs to hymn segment widgets to show/hide them
-        self._hymn_toolbar_widgets = [sep2, hl, self.hymn_entry, hlb, self.hymn_status]
+        self._hymn_toolbar_widgets = [sep_hymn, hl, self.hymn_entry, hlb, self.hymn_status]
         itb.append(self.hymn_status)
 
-        # Snippets and Responsive reading — right end of toolbar
+        # Snippets and Responsive reading
         sep3 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         sep3.set_margin_start(8); sep3.set_margin_end(4); itb.append(sep3)
         snip_btn = Gtk.Button(label="✂", tooltip_text="Insert snippet (Ctrl+Shift+I)")
@@ -1225,7 +1232,7 @@ class MainWindow(Adw.ApplicationWindow):
         rr_btn.add_css_class("flat")
         rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); itb.append(rr_btn)
 
-        # Bulletin separator + toggle
+        # Bulletin toggle
         sep4 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         sep4.set_margin_start(8); sep4.set_margin_end(4); itb.append(sep4)
         self.bulletin_toggle = Gtk.ToggleButton(label="📋")
@@ -1236,34 +1243,85 @@ class MainWindow(Adw.ApplicationWindow):
         itb.append(self.bulletin_toggle)
 
         self.item_toolbar_revealer.set_child(itb)
-        lower.append(self.item_toolbar_revealer)
+        notes_box.append(self.item_toolbar_revealer)
         self.hymn_revealer = self.item_toolbar_revealer
         self.leader_revealer = self.item_toolbar_revealer
 
-        # Notes text view — fills the lower pane
+        # Notes header: label + Leader/Bulletin tab toggle buttons
+        notes_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        notes_header.set_margin_start(12); notes_header.set_margin_end(12)
+        notes_header.set_margin_top(6); notes_header.set_margin_bottom(2)
+        notes_lbl = Gtk.Label(label="Notes / content")
+        notes_lbl.add_css_class("dim-label"); notes_lbl.add_css_class("caption")
+        notes_header.append(notes_lbl)
+        tab_spacer = Gtk.Box(); tab_spacer.set_hexpand(True); notes_header.append(tab_spacer)
+        tab_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self._leader_tab_btn = Gtk.ToggleButton(label="Leader")
+        self._leader_tab_btn.add_css_class("flat"); self._leader_tab_btn.set_active(True)
+        self._bulletin_tab_btn = Gtk.ToggleButton(label="Bulletin")
+        self._bulletin_tab_btn.add_css_class("flat")
+        self._bulletin_tab_btn.set_group(self._leader_tab_btn)
+        def on_leader_tab(btn):
+            if btn.get_active(): self._notes_stack.set_visible_child_name("leader")
+        def on_bulletin_tab(btn):
+            if btn.get_active(): self._notes_stack.set_visible_child_name("bulletin")
+        self._leader_tab_btn.connect("toggled", on_leader_tab)
+        self._bulletin_tab_btn.connect("toggled", on_bulletin_tab)
+        tab_box.append(self._leader_tab_btn); tab_box.append(self._bulletin_tab_btn)
+        notes_header.append(tab_box)
+        notes_box.append(notes_header)
+        notes_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Notes stack: Leader tab (leader notes) and Bulletin tab (bulletin_note)
+        self._notes_stack = Gtk.Stack(); self._notes_stack.set_vexpand(True)
+        self._notes_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+
         ns = Gtk.ScrolledWindow()
-        ns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        ns.set_vexpand(True)
-        ns.set_margin_start(12); ns.set_margin_end(12); ns.set_margin_bottom(10)
+        ns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); ns.set_vexpand(True)
+        ns.set_margin_start(12); ns.set_margin_end(12); ns.set_margin_top(8); ns.set_margin_bottom(8)
         self.notes_view = Gtk.TextView(); self.notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.notes_view.add_css_class("card")
         self.notes_view.set_top_margin(8); self.notes_view.set_bottom_margin(8)
         self.notes_view.set_left_margin(10); self.notes_view.set_right_margin(10)
         self.notes_view.set_sensitive(False)
         self.notes_view.get_buffer().connect("changed", self._on_notes_changed)
-        ns.set_child(self.notes_view); lower.append(ns)
+        ns.set_child(self.notes_view)
+        self._notes_stack.add_named(ns, "leader")
 
-        # ── Vertical Paned: upper=list, lower=notes ───────────────────────────
-        vpaned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
-        vpaned.set_shrink_start_child(False)
-        vpaned.set_shrink_end_child(False)
-        vpaned.set_resize_start_child(True)
-        vpaned.set_resize_end_child(False)
-        vpaned.set_position(380)   # default split — list gets most space
-        vpaned.set_start_child(upper)
-        vpaned.set_end_child(lower)
-        vpaned.set_vexpand(True)
-        box.append(vpaned)
+        bns = Gtk.ScrolledWindow()
+        bns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); bns.set_vexpand(True)
+        bns.set_margin_start(12); bns.set_margin_end(12); bns.set_margin_top(8); bns.set_margin_bottom(8)
+        self.bulletin_notes_view = Gtk.TextView()
+        self.bulletin_notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.bulletin_notes_view.add_css_class("card")
+        self.bulletin_notes_view.set_top_margin(8); self.bulletin_notes_view.set_bottom_margin(8)
+        self.bulletin_notes_view.set_left_margin(10); self.bulletin_notes_view.set_right_margin(10)
+        self.bulletin_notes_view.set_sensitive(False)
+        self.bulletin_notes_view.get_buffer().connect("changed", self._on_bulletin_notes_changed)
+        bns.set_child(self.bulletin_notes_view)
+        self._notes_stack.add_named(bns, "bulletin")
+
+        notes_box.append(self._notes_stack)
+
+        # Hymn suggestions strip at bottom of notes pane (revealed when a date is set)
+        self.sugg_revealer = Gtk.Revealer()
+        self.sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.sugg_revealer.set_transition_duration(200)
+        sugg_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        sugg_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        self._sugg_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._sugg_chips_box.set_margin_start(10); self._sugg_chips_box.set_margin_end(10)
+        self._sugg_chips_box.set_margin_bottom(6); self._sugg_chips_box.set_margin_top(6)
+        sugg_scroll = Gtk.ScrolledWindow()
+        sugg_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        sugg_scroll.set_min_content_height(36)
+        sugg_scroll.set_child(self._sugg_chips_box)
+        sugg_outer.append(sugg_scroll)
+        self.sugg_revealer.set_child(sugg_outer)
+        notes_box.append(self.sugg_revealer)
+
+        hpaned.set_end_child(notes_box)
+        box.append(hpaned)
 
         return box
 
@@ -1485,11 +1543,13 @@ class MainWindow(Adw.ApplicationWindow):
     def _handle_selection(self, row):
         self._updating_note = True
         buf = self.notes_view.get_buffer()
+        buf_bul = self.bulletin_notes_view.get_buffer()
         if row and hasattr(row,"_entry") and isinstance(row._entry, ServiceItem):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
             buf.set_text(si.note, -1); self.notes_view.set_sensitive(True)
+            buf_bul.set_text(si.bulletin_note, -1); self.bulletin_notes_view.set_sensitive(True)
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
@@ -1504,6 +1564,7 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._selected_global_idx = -1
             buf.set_text("", -1); self.notes_view.set_sensitive(False)
+            buf_bul.set_text("", -1); self.bulletin_notes_view.set_sensitive(False)
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
         self._updating_note = False
@@ -1664,6 +1725,16 @@ class MainWindow(Adw.ApplicationWindow):
         row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
         if isinstance(row, Adw.ActionRow):
             row.set_subtitle(self._note_preview(entry.note))
+        self._mark_modified()
+
+    def _on_bulletin_notes_changed(self, buf):
+        if self._updating_note: return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)): return
+        entry = self.service_entries[idx]
+        if not isinstance(entry, ServiceItem): return
+        s, e = buf.get_bounds()
+        entry.bulletin_note = buf.get_text(s, e, False)
         self._mark_modified()
 
     # ── Calendar / readings ───────────────────────────────────────────────────
@@ -2006,6 +2077,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _reset_state(self):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
         self.service_title_entry.set_text(""); self.notes_view.get_buffer().set_text("", -1)
+        self.bulletin_notes_view.get_buffer().set_text("", -1)
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
         self.current_file=None; self.tex_file=None; self.modified=False
