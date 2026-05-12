@@ -1242,7 +1242,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
         itb.append(self.bulletin_toggle)
 
-        self.item_toolbar_revealer.set_child(itb)
+        itb_scroll = Gtk.ScrolledWindow()
+        itb_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        itb_scroll.set_min_content_height(46)
+        itb_scroll.set_child(itb)
+        self.item_toolbar_revealer.set_child(itb_scroll)
         notes_box.append(self.item_toolbar_revealer)
         self.hymn_revealer = self.item_toolbar_revealer
         self.leader_revealer = self.item_toolbar_revealer
@@ -1283,7 +1287,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.notes_view.add_css_class("card")
         self.notes_view.set_top_margin(8); self.notes_view.set_bottom_margin(8)
         self.notes_view.set_left_margin(10); self.notes_view.set_right_margin(10)
-        self.notes_view.set_sensitive(False)
         self.notes_view.get_buffer().connect("changed", self._on_notes_changed)
         ns.set_child(self.notes_view)
         self._notes_stack.add_named(ns, "leader")
@@ -1296,16 +1299,18 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_notes_view.add_css_class("card")
         self.bulletin_notes_view.set_top_margin(8); self.bulletin_notes_view.set_bottom_margin(8)
         self.bulletin_notes_view.set_left_margin(10); self.bulletin_notes_view.set_right_margin(10)
-        self.bulletin_notes_view.set_sensitive(False)
         self.bulletin_notes_view.get_buffer().connect("changed", self._on_bulletin_notes_changed)
         bns.set_child(self.bulletin_notes_view)
         self._notes_stack.add_named(bns, "bulletin")
 
         notes_box.append(self._notes_stack)
 
-        # Hymn suggestions strip at bottom of notes pane (revealed when a date is set)
+        hpaned.set_end_child(notes_box)
+        box.append(hpaned)
+
+        # Hymn suggestions strip — full width across order + notes panes
         self.sugg_revealer = Gtk.Revealer()
-        self.sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
         self.sugg_revealer.set_transition_duration(200)
         sugg_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         sugg_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
@@ -1314,14 +1319,11 @@ class MainWindow(Adw.ApplicationWindow):
         self._sugg_chips_box.set_margin_bottom(6); self._sugg_chips_box.set_margin_top(6)
         sugg_scroll = Gtk.ScrolledWindow()
         sugg_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        sugg_scroll.set_min_content_height(36)
+        sugg_scroll.set_min_content_height(40)
         sugg_scroll.set_child(self._sugg_chips_box)
         sugg_outer.append(sugg_scroll)
         self.sugg_revealer.set_child(sugg_outer)
-        notes_box.append(self.sugg_revealer)
-
-        hpaned.set_end_child(notes_box)
-        box.append(hpaned)
+        box.append(self.sugg_revealer)
 
         return box
 
@@ -1548,8 +1550,8 @@ class MainWindow(Adw.ApplicationWindow):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
-            buf.set_text(si.note, -1); self.notes_view.set_sensitive(True)
-            buf_bul.set_text(si.bulletin_note, -1); self.bulletin_notes_view.set_sensitive(True)
+            buf.set_text(si.note, -1)
+            buf_bul.set_text(si.bulletin_note, -1)
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
@@ -1563,8 +1565,8 @@ class MainWindow(Adw.ApplicationWindow):
             if is_hymn: self.hymn_status.set_label(""); self.hymn_entry.set_text("")
         else:
             self._selected_global_idx = -1
-            buf.set_text("", -1); self.notes_view.set_sensitive(False)
-            buf_bul.set_text("", -1); self.bulletin_notes_view.set_sensitive(False)
+            buf.set_text("", -1)
+            buf_bul.set_text("", -1)
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
         self._updating_note = False
@@ -2076,7 +2078,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _reset_state(self):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
-        self.service_title_entry.set_text(""); self.notes_view.get_buffer().set_text("", -1)
+        self.service_title_entry.set_text("")
+        self.notes_view.get_buffer().set_text("", -1)
         self.bulletin_notes_view.get_buffer().set_text("", -1)
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
