@@ -38,6 +38,12 @@ for f in hymn_lookup.py hymn_suggestions.py bible_api.py snippets.py; do
     [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$APP_DIR/"
 done
 
+# Data files (hymn suggestions JSON, etc.)
+if [ -d "$SCRIPT_DIR/data" ]; then
+    mkdir -p "$APP_DIR/data"
+    cp "$SCRIPT_DIR/data/"* "$APP_DIR/data/"
+fi
+
 # Documentation
 for f in HELP.md FAQ.md CHANGELOG.md; do
     [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$APP_DIR/"

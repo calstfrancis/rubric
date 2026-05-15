@@ -20,6 +20,8 @@ def _load() -> dict:
     """Load hymn data from JSON, caching after first load."""
     global _cache
     if _cache is None:
+        if not _DATA_FILE.exists():
+            raise FileNotFoundError(f"Hymn suggestions data not found: {_DATA_FILE}")
         with open(_DATA_FILE, encoding="utf-8") as f:
             raw = json.load(f)
         # Convert [prefix, number, title] lists to (prefix, number, title) tuples

@@ -41,7 +41,7 @@ except ImportError:
 try:
     from hymn_suggestions import get_suggestions as _get_hymn_suggestions
     _SUGG_OK = True
-except ImportError:
+except (ImportError, FileNotFoundError):
     _SUGG_OK = False
 
 try:
