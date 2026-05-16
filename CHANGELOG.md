@@ -4,135 +4,134 @@ All notable changes are documented here, newest first.
 
 ---
 
-## Unreleased (v0.12)
+## 0.12 — GitHub sync, planner, simple mode, redo, HTML export
+
+### Added
+
+- **Simple mode** (on by default) — hides LaTeX export buttons, GitHub sync, CSV export, snippets, responsive reading, and the LaTeX preamble preference from new users. Toggle in **Preferences → View → Simple mode**. All features remain fully accessible when turned off; keyboard shortcuts continue to work regardless.
+- **Redo** (Ctrl+Shift+Z) — redo button added to the header bar beside undo. Any new action clears the redo stack.
+- **HTML export** (hamburger menu → Export) — generates a clean, print-ready HTML file and opens it in the default browser. Use File → Print in the browser to produce a PDF without LaTeX. Handles scripture blocks, bold/italic markup, and section headings.
+- **Bulletin export → HTML in simple mode** — in simple mode, Export Bulletin bypasses LaTeX entirely and opens an HTML bulletin in the browser. Includes church name, service details, order of service (bulletin-visible elements only), active announcements, staff list, mission statement, and accessibility note. Expired announcements are filtered automatically.
+- **GitHub repository sync** — set up a local git repository from **Preferences → GitHub** and push/pull to GitHub with one click (⟳ toolbar button or Ctrl+Shift+G). Features:
+  - Guided setup: browse to a folder, click Set up — creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a LaTeX-aware `.gitignore`, and runs `git init`
+  - Remote URL field + Connect button to link a GitHub repository
+  - Pull button in Preferences for downloading changes from another machine
+  - Automatic commit message from the service title and date — no typing required
+  - First-push upstream tracking handled automatically
+  - Friendly error messages for auth failures and missing remotes
+- **Repository-aware default save paths** — when a GitHub repository is configured, Save As defaults to `repo/liturgy/`, Export LaTeX to `repo/tex/`, Export Bulletin (advanced mode) to `repo/bulletins/`, and compiled PDFs move automatically to `repo/pdf/` (service order) or `repo/bulletins/` (bulletin).
+- **Service Planner** (hamburger menu → Service Planner, Ctrl+Shift+L) — scans the `liturgy/` folder and lists all `.liturgy` files grouped into Upcoming and Past, sorted by date, showing element count. Click any row to open that service. If no repository is configured, prompts to choose a folder. Refresh button to rescan.
+- **Scripture translation selector** (Preferences → Scripture) — choose between:
+  - **WEB** (World English Bible) — public domain, works with no setup
+  - **KJV** (King James Version) — public domain
+  - **ASV** (American Standard Version) — public domain
+  - **ESV** — free API key from api.esv.org; ministry and bulletin use explicitly permitted
+  - The Bible Viewer title and attribution line update to match the selected translation.
+
+### Fixed
+
+- **Bulletin compile error (memoir class)** — in simple mode, bulletin export no longer attempts LaTeX compilation at all, bypassing the `memoir` class requirement that caused silent failures on minimal TeX Live installations.
+- **Bulletin compile error reporting** — `result.stderr` was never checked; both stdout and stderr are now combined when looking for xelatex error lines.
+- **Bulletin PDF compile threading violation** — GTK calls in error paths now go through `GLib.idle_add`.
+- `SyntaxWarning: invalid escape sequence '\s'` on launch — caused by `\sverse` in a non-raw docstring.
+- Hymn title from Hymnary now correctly strips the book name prefix.
+- Multi-line verse joining in `_passage_to_latex`.
+- **Boilerplate text group in Bulletin prefs** — closure capture bug fixed.
+
+---
+
+## 0.11 — Bulletin export and lectionary tracker
 
 ### Added
 - **Congregational bulletin export** (Ctrl+Shift+B) — generates a separate PDF for pew use from the same service file.
-  - **Print / booklet** — `memoir` class, half-letter (5.5 × 8.5 in), designed to fold for saddle-stitch. Cover page with church name and service details; order of service in two-column layout; acknowledgements block with staff names and leader assignments; announcements page; back page with mission statement and contact info.
-  - **Digital / screen** — `extarticle`, full letter, colour hyperlinks via `xcolor`/`hyperref`.
-- **Per-element bulletin toggle** — the 📋 button on the item toolbar marks each element as shown or hidden in the congregational bulletin independently of the leader copy. Hidden elements are visually dimmed in the order list.
-- **Bulletin preferences tab** in Preferences — church name, address, service time, website, email, phone; welcome line; accessibility note; mission statement (multi-line); staff/contact list (role, name, optional email for digital links); announcements list.
-- **Announcement expiry** — each announcement accepts an optional `YYYY-MM-DD` expiry date; outdated announcements are silently omitted when the bulletin is generated.
-- **Lectionary year tracker** in the header bar — a small coloured dot and "Year A · Advent" label showing today's RCL year and season at all times. Updates at midnight. Tooltip shows the full week name.
-- **Per-Proper hymn suggestions** (Propers 4–29) — Ordinary Time now returns hymns specific to each Proper's themes rather than generic suggestions. Blends with the season pool for variety.
-- **Hymn data moved to JSON** — `data/hymn_suggestions.json` replaces the hard-coded Python dict; easier to extend without touching source code.
-- **Inline Hymnary preview** — if `python3-webkit2` (or WebKit 6.0) is installed, clicking a hymn suggestion chip opens an inline browser panel rather than switching to an external browser. Falls back to the system browser if WebKit is not available.
-- **Hymn suggestion injection** — right-clicking a suggestion chip now injects the hymn reference into the *selected element's* Notes/Content instead of creating a new element.
-- **GitHub Actions CI** — automated `python3 -m unittest` run on every push and pull request.
-
-### Fixed
-- **Bulletin PDF compile threading violation** — `_compiling_toast.dismiss()` was called directly from the background thread on timeout/exception, which could crash silently and prevent the error toast from appearing. All GTK calls in error paths now go through `GLib.idle_add`.
-- **Bulletin compile error reporting** — `result.stderr` was never checked; both stdout and stderr are now combined when looking for xelatex error lines, so "File 'memoir.cls' not found" and similar errors surface correctly.
-- **`memoir` missing from install instructions** — the in-app TeX Live tab and README omitted `memoir` from both the `tlmgr` and `zypper` install commands; this was the most likely cause of the bulletin compile producing no PDF.
-- `SyntaxWarning: invalid escape sequence '\s'` on launch — caused by `\sverse` in a non-raw docstring. Fixed by making the docstring a raw string (`r"""`).
-- Hymn title from Hymnary now correctly strips the book name prefix. "Voices United: The Hymn and Worship Book... 16. Mary, woman of the promise" → "Mary, woman of the promise".
-- Multi-line verse joining in `_passage_to_latex` — the WEB API returns some verses split across multiple lines; these are now joined into a single `\sverse` call so continuation lines wrap correctly.
-- **Boilerplate text group in Bulletin prefs** — "Welcome line" and "Accessibility note" were being added to the Church information group instead of Boilerplate text due to a closure capture bug in `_build_bulletin`.
-- Removed dead `pdf_path` variable in `_on_bulletin_save` (computed but never used).
-- All inline `import re`, `import subprocess`, `import shutil`, `import threading` calls moved to top-level imports.
+  - **Print / booklet** — `memoir` class, half-letter (5.5 × 8.5 in), fold for saddle-stitch
+  - **Digital / screen** — `extarticle`, full letter, colour hyperlinks
+- **Per-element bulletin toggle** — 📋 button marks each element shown or hidden in the bulletin independently of the leader copy
+- **Bulletin preferences tab** — church name, address, service time, website, email, phone, welcome line, accessibility note, mission statement, staff/contact list, announcements with optional expiry dates
+- **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header
+- **Per-Proper hymn suggestions** (Propers 4–29)
+- **Hymn data moved to JSON** — `data/hymn_suggestions.json`
+- **Inline Hymnary preview** — WebKit panel if available
+- **Hymn suggestion injection** — right-click injects into selected element
+- **GitHub Actions CI**
 
 ---
 
 ## 0.10 — Scripture layout, compile improvements, menu cleanup
 
 ### Added
-- **Compile to PDF** button (print icon, Ctrl+Shift+P) — xelatex in background thread, toast-only feedback ("Compiling PDF…" stays until done, then "✓ filename.pdf"). No dialogs to dismiss.
-- **YouTube search** link (▶) beside each hymn suggestion chip.
-- **Prayers of the People** snippet with full preamble/praise/lament/asks/intercession/silence/inclusion structure.
-- **Benediction** and **Lord's Prayer (traditional poetic)** snippets from actual service text.
-- **Help/FAQ/What's New** in hamburger menu — rendered Markdown with heading sizes, bold, code spans, horizontal rules.
-
-### Fixed
-- Scripture `{scripture}` environment: `\setlength{\parskip}{0pt}` suppresses inter-verse spacing; `\leftskip=2.4em` + `\parindent=-2.4em` gives hanging indent (verse number flush-left, continuation lines indented 2.4em).
-- `\sverse{N}{text}` macro — simple `\textsuperscript{#1}\quad #2\par`, all indent logic in the environment.
-- Compile toasts replace all dialogs — no more overlapping windows.
-- Hamburger menu reorganised: Export section (LaTeX, plain text, CSV), Help section.
+- **Compile to PDF** button (Ctrl+Shift+P)
+- **YouTube search** link beside hymn suggestion chips
+- **Prayers of the People**, **Benediction**, **Lord's Prayer** snippets
+- **Help/FAQ/What's New** in hamburger menu
 
 ---
 
 ## 0.9 — Space-saving UI and export improvements
 
 ### Added
-- **Leader assignment** field per element — right-aligned italic name in `\section*` heading on export.
-- **Responsive reading builder** (Ctrl+R / ℟ button) — L:/P: syntax generates LaTeX with bold/italic speaker labels.
-- **Snippets library** (Ctrl+Shift+I / ✂ button) with default liturgical texts. Managed in Preferences → Snippets tab.
-- **Scripture search bar** in item toolbar — fetch any Bible reference directly.
-- **Hymn suggestions strip** — season/week-appropriate VU/MV/LUS suggestions appear when a date is set. Left-click → Hymnary, right-click → inject into selected element.
-- **CSV export** — Section, Element, Leader, Hymn ref, Notes preview.
-- **Git integration** (Ctrl+Shift+G) — stages and commits `.liturgy` and linked `.tex` file.
-- **Two-column layout** per liturgical movement in LaTeX export using `multicol`.
-- Parts (`\newpage` + centred heading) — no rule; sections (`\section*`) keep `\titlerule`.
-- Date passed to `\date{}` in LaTeX export.
-- `extarticle` document class, margins 0.5in left/right.
-
-### Changed
-- Season/year/dot and RCL reading buttons condensed into one row.
-- Year badge removed (duplicated in week string).
-- Leader, Scripture, Hymn lookup merged into single item toolbar. Snippets and Responsive buttons in same toolbar.
-- "Notes / Content" label removed.
-- "Suggested hymns" label removed from suggestion strip.
+- **Leader assignment** field per element
+- **Responsive reading builder** (Ctrl+R)
+- **Snippets library** (Ctrl+Shift+I)
+- **Scripture search bar** in item toolbar
+- **Hymn suggestions strip**
+- **CSV export**
+- **Git integration**
+- **Two-column layout** per liturgical movement in LaTeX export
 
 ---
 
 ## 0.8 — Title popover and resizable notes
 
 ### Added
-- **Service title and date** moved into header popover — click the window title to open.
-- **Resizable Notes/Content pane** via vertical `GtkPaned`.
-- **Quick LaTeX export button** (Ctrl+E) — one-click to linked file; right-click to change/unlink.
-- `tex_file` path stored in `.liturgy` JSON and restored on open.
-- **Multiple templates** — named, with chooser dialog. Old single-template config migrated.
-- **Recent files** submenu (last 10).
-
-### Fixed
-- "Error opening file: must be number, not str" — `TextBuffer.set_text("", "")` → `set_text("", -1)`.
+- Service title and date moved into header popover
+- Resizable Notes/Content pane
+- Quick LaTeX export button (Ctrl+E)
+- Multiple named templates with chooser dialog
+- Recent files submenu
 
 ---
 
 ## 0.7 — Weekday RCL and hymn lookup
 
 ### Added
-- **Weekday Sunday stepper** — weekday dates show next Sunday's readings with ← → navigation.
-- **Autosave** every 3 minutes with recovery on next launch.
-- **Duplicate service** in hamburger menu.
-
-### Fixed
-- Tab view selection loop, template not loading at startup.
+- Weekday Sunday stepper
+- Autosave every 3 minutes with recovery
+- Duplicate service
 
 ---
 
 ## 0.6 — Tab view and section management
 
 ### Added
-- **Tab view** toggle (Preferences → View).
-- Tab right-click for Rename and Delete section.
-- Drag-and-drop between tabs.
-- Note preview (first 5 words) as row subtitle.
+- Tab view toggle
+- Tab right-click for Rename and Delete
+- Drag-and-drop between tabs
+- Note preview as row subtitle
 
 ---
 
 ## 0.5 — Bible viewer and hymn lookup
 
 ### Added
-- **Bible viewer** — fetches WEB text, "Insert as LaTeX" adds `{scripture}` block.
-- **Hymn lookup** — `VU 16` fetches title from Hymnary, cached locally.
-- **Liturgical colour bar** using Cairo DrawingArea.
+- Bible viewer with WEB text and LaTeX insert
+- Hymn lookup from Hymnary.org
+- Liturgical colour bar
 
 ---
 
 ## 0.4 — RCL date picker and preferences
 
 ### Added
-- Calendar date picker, RCL readings card, liturgical colour.
-- `Adw.PreferencesWindow` with LaTeX, Template, Palette tabs.
+- Calendar date picker, RCL readings card, liturgical colour
+- Preferences window
 
 ---
 
 ## 0.3 — LaTeX export
 
 ### Added
-- Full `xelatex`-compatible export (Junicode, geometry, titlesec).
-- Notes/Content passed through as raw LaTeX or escaped plain text.
+- Full xelatex-compatible export (Junicode, geometry, titlesec)
 
 ---
 
