@@ -66,6 +66,7 @@ class Config:
         self.use_tabs: bool = False
         self.last_seen_version: str = ""
         self.bulletin: dict[str, Any] = self._default_bulletin()
+        self.github_repo: str = ""
         self._load()
 
     @staticmethod
@@ -101,6 +102,7 @@ class Config:
                 self.last_seen_version = d.get("last_seen_version", "")
                 saved_bulletin = d.get("bulletin", {})
                 self.bulletin = {**self._default_bulletin(), **saved_bulletin}
+                self.github_repo = d.get("github_repo", "")
                 self.default_template = d.get("default_template", "")
                 self.templates = d.get("templates", {})
                 # migrate old single template
@@ -129,6 +131,7 @@ class Config:
             "use_tabs": self.use_tabs,
             "last_seen_version": self.last_seen_version,
             "bulletin": self.bulletin,
+            "github_repo": self.github_repo,
         }
         if self.palette is not None:
             p["palette"] = self.palette

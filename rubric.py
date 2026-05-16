@@ -131,6 +131,9 @@ class Config:
         self.use_tabs           = False
         self.last_seen_version  : str = ""
         self.bulletin           : dict = self._default_bulletin()
+        self.github_repo        : str = ""
+        self.bible_translation  : str = "web"
+        self.bible_api_key_esv  : str = ""
         self._load()
 
     # backward-compat: old "template_items" key becomes template named "Default"
@@ -165,8 +168,11 @@ class Config:
                 self.last_seen_version = d.get("last_seen_version",  "")
                 saved_bulletin = d.get("bulletin", {})
                 self.bulletin = {**self._default_bulletin(), **saved_bulletin}
+                self.github_repo      = d.get("github_repo",      "")
                 self.default_template = d.get("default_template", "")
                 self.templates        = d.get("templates",        {})
+                self.bible_translation = d.get("bible_translation", "web")
+                self.bible_api_key_esv = d.get("bible_api_key_esv", "")
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -190,6 +196,9 @@ class Config:
             "use_tabs":           self.use_tabs,
             "last_seen_version":  self.last_seen_version,
             "bulletin":           self.bulletin,
+            "github_repo":        self.github_repo,
+            "bible_translation":  self.bible_translation,
+            "bible_api_key_esv":  self.bible_api_key_esv,
         }
         if self.palette is not None: p["palette"] = self.palette
         CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -356,9 +365,12 @@ if _PACKAGE_OK:
 # ── Bible viewer ──────────────────────────────────────────────────────────────
 
 class BibleViewer(Adw.Window):
-    def __init__(self, reference, on_insert_cb, **kw):
+    def __init__(self, reference, on_insert_cb, translation="web", esv_key="", **kw):
         super().__init__(**kw)
-        self.set_title(f"{reference}  ·  WEB"); self.set_default_size(520,460); self.set_modal(True)
+        self._translation = translation
+        from bible_api import TRANSLATION_LABELS
+        trl_label = TRANSLATION_LABELS.get(translation, translation.upper())
+        self.set_title(f"{reference}  ·  {translation.upper()}"); self.set_default_size(520,460); self.set_modal(True)
         self._on_insert_cb = on_insert_cb; self._text = ""; self._ref = reference
         self._verses: list[dict] = []   # raw verse dicts from API
         tv = Adw.ToolbarView(); tv.add_top_bar(Adw.HeaderBar()); self.set_content(tv)
@@ -379,13 +391,13 @@ class BibleViewer(Adw.Window):
         self._bot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._bot.set_margin_start(16); self._bot.set_margin_end(16)
         self._bot.set_margin_top(4); self._bot.set_margin_bottom(14); self._bot.set_visible(False)
-        attr = Gtk.Label(label="World English Bible (Public Domain)")
+        attr = Gtk.Label(label=trl_label)
         attr.add_css_class("caption"); attr.add_css_class("dim-label")
         attr.set_hexpand(True); attr.set_xalign(0); self._bot.append(attr)
         ins = Gtk.Button(label="Insert as LaTeX"); ins.add_css_class("suggested-action")
         ins.connect("clicked", self._on_insert); self._bot.append(ins); outer.append(self._bot)
         tv.set_content(outer)
-        if _BIBLE_OK: fetch_passage(reference, self._on_fetched)
+        if _BIBLE_OK: fetch_passage(reference, self._on_fetched, translation=translation, esv_key=esv_key)
         else: self._status.set_title("Unavailable"); self._status.set_description("bible_api.py not found")
 
     def _on_fetched(self, text, error):
@@ -411,7 +423,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.set_title("Preferences"); self.set_default_size(700,560); self.set_search_enabled(False)
         self._build_latex(); self._build_view(); self._build_template(); self._build_palette()
         if _SNIP_OK: self._build_snippets()
-        self._build_bulletin()
+        self._build_bulletin(); self._build_github(); self._build_scripture()
         self.connect("close-request", self._on_close)
 
     def _build_latex(self):
@@ -776,7 +788,289 @@ class PreferencesWindow(Adw.PreferencesWindow):
             if text:
                 b["announcements"].append({"text": text, "expires": exp_e.get_text().strip()})
 
+        # Save scripture settings
+        if hasattr(self, "_scripture_combo"):
+            idx = self._scripture_combo.get_selected()
+            config.bible_translation = self._scripture_trl_keys[idx] if idx < len(self._scripture_trl_keys) else "web"
+        if hasattr(self, "_esv_key_row"):
+            config.bible_api_key_esv = self._esv_key_row.get_text().strip()
+
         config.save(); return False
+
+    def _build_scripture(self):
+        from bible_api import TRANSLATION_LABELS
+        page = Adw.PreferencesPage(title="Scripture", icon_name="x-office-document-symbolic")
+        self.add(page)
+
+        grp = Adw.PreferencesGroup(title="Bible translation",
+            description="Used when fetching passages via Scripture lookup and RCL reading buttons.")
+        page.add(grp)
+
+        trl_keys = list(TRANSLATION_LABELS.keys())
+        trl_display = list(TRANSLATION_LABELS.values())
+
+        combo_row = Adw.ComboRow(title="Translation")
+        model = Gtk.StringList()
+        for label in trl_display:
+            model.append(label)
+        combo_row.set_model(model)
+        current_trl = config.bible_translation if config.bible_translation in trl_keys else "web"
+        combo_row.set_selected(trl_keys.index(current_trl) if current_trl in trl_keys else 0)
+        grp.add(combo_row)
+        self._scripture_combo = combo_row
+        self._scripture_trl_keys = trl_keys
+
+        esv_grp = Adw.PreferencesGroup(title="ESV API key",
+            description="Required only for the ESV translation. Get a free key at api.esv.org (ministry use).")
+        page.add(esv_grp)
+
+        self._esv_key_row = Adw.EntryRow(title="ESV API key")
+        self._esv_key_row.set_text(config.bible_api_key_esv)
+        esv_grp.add(self._esv_key_row)
+
+        note_row = Adw.ActionRow(title="api.esv.org",
+            subtitle="Sign up for a free ministry API key at api.esv.org")
+        note_row.set_sensitive(False)
+        esv_grp.add(note_row)
+
+        # Show/hide ESV key section based on selection
+        def on_trl_changed(combo, _pspec):
+            idx = combo.get_selected()
+            key = trl_keys[idx] if idx < len(trl_keys) else "web"
+            esv_grp.set_visible(key == "esv")
+
+        combo_row.connect("notify::selected", on_trl_changed)
+        # Set initial visibility
+        esv_grp.set_visible(current_trl == "esv")
+
+    def _build_github(self):
+        page = Adw.PreferencesPage(title="GitHub", icon_name="network-server-symbolic")
+        self.add(page)
+
+        # ── Repository folder ──────────────────────────────────────────────
+        loc_grp = Adw.PreferencesGroup(
+            title="Repository folder",
+            description="A folder on this computer that is (or will become) a git repository. "
+                        "Rubric will save liturgy files, LaTeX, and PDFs in subfolders here."
+        )
+        page.add(loc_grp)
+
+        self._repo_row = Adw.ActionRow(title="Folder")
+        self._repo_row.set_subtitle(config.github_repo or "Not configured")
+        browse_btn = Gtk.Button(label="Browse…", valign=Gtk.Align.CENTER)
+        browse_btn.add_css_class("flat")
+        browse_btn.connect("clicked", self._on_repo_browse)
+        self._repo_row.add_suffix(browse_btn)
+        loc_grp.add(self._repo_row)
+
+        # ── New repository setup ───────────────────────────────────────────
+        setup_grp = Adw.PreferencesGroup(
+            title="New repository",
+            description="Creates liturgy/, tex/, and pdf/ subfolders and initialises git in the selected folder."
+        )
+        page.add(setup_grp)
+
+        setup_row = Adw.ActionRow(
+            title="Set up selected folder as a repository",
+            subtitle="Run this once after choosing a folder above"
+        )
+        setup_btn = Gtk.Button(label="Set up", valign=Gtk.Align.CENTER)
+        setup_btn.add_css_class("suggested-action")
+        setup_btn.connect("clicked", self._on_repo_setup)
+        setup_row.add_suffix(setup_btn)
+        setup_grp.add(setup_row)
+
+        # ── GitHub remote ──────────────────────────────────────────────────
+        remote_grp = Adw.PreferencesGroup(
+            title="Connect to GitHub",
+            description="Paste the URL of your GitHub repository (e.g. https://github.com/yourname/liturgy). "
+                        "Create a free private repository at github.com first."
+        )
+        page.add(remote_grp)
+
+        self._remote_entry = Adw.EntryRow(title="GitHub repository URL")
+        self._remote_entry.set_text(self._detect_remote())
+        remote_grp.add(self._remote_entry)
+
+        connect_row = Adw.ActionRow(title="Save remote URL")
+        connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER)
+        connect_btn.add_css_class("suggested-action")
+        connect_btn.connect("clicked", self._on_remote_connect)
+        connect_row.add_suffix(connect_btn)
+        remote_grp.add(connect_row)
+
+        # ── Pull ───────────────────────────────────────────────────────────
+        pull_grp = Adw.PreferencesGroup(
+            title="Pull from GitHub",
+            description="Download changes from GitHub — use when you have worked on another machine or a collaborator has pushed changes."
+        )
+        page.add(pull_grp)
+
+        pull_row = Adw.ActionRow(title="Pull latest changes")
+        pull_btn = Gtk.Button(label="Pull", valign=Gtk.Align.CENTER)
+        pull_btn.connect("clicked", self._on_prefs_pull)
+        pull_row.add_suffix(pull_btn)
+        pull_grp.add(pull_row)
+
+        # ── Getting-started guide ──────────────────────────────────────────
+        help_grp = Adw.PreferencesGroup(title="Getting started — new users")
+        page.add(help_grp)
+        for title, subtitle in [
+            ("1. Create a GitHub account",    "Free at github.com"),
+            ("2. Create a private repository",'Name it something like "liturgy" and tick Private'),
+            ("3. Set up a folder above",       "Browse to an empty folder, then click Set up"),
+            ("4. Paste the repository URL",    "Copy from the green Code button → HTTPS tab on GitHub"),
+            ("5. Click Connect, then Push ⟳",  "Use the ⟳ button in the main toolbar to push files"),
+        ]:
+            r = Adw.ActionRow(title=title, subtitle=subtitle)
+            r.set_sensitive(False)
+            help_grp.add(r)
+
+    def _detect_remote(self) -> str:
+        repo = config.github_repo
+        if not repo:
+            return ""
+        try:
+            r = subprocess.run(
+                ["git", "-C", repo, "remote", "get-url", "origin"],
+                capture_output=True, text=True, timeout=5
+            )
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    def _on_repo_browse(self, _btn):
+        dlg = Gtk.FileDialog(title="Choose repository folder")
+        dlg.select_folder(self, None, self._on_repo_folder_chosen)
+
+    def _on_repo_folder_chosen(self, dlg, result):
+        try:
+            f = dlg.select_folder_finish(result)
+        except GLib.Error:
+            return
+        config.github_repo = f.get_path()
+        config.save()
+        self._repo_row.set_subtitle(config.github_repo)
+        self._remote_entry.set_text(self._detect_remote())
+
+    def _on_repo_setup(self, _btn):
+        repo = config.github_repo
+        if not repo:
+            dlg = Adw.MessageDialog(transient_for=self, heading="No folder selected",
+                body="Browse to a folder first, then click Set up.")
+            dlg.add_response("ok", "OK"); dlg.present(); return
+
+        repo_path = Path(repo)
+        errors = []
+        for subdir in ("liturgy", "tex", "pdf", "bulletins"):
+            try:
+                (repo_path / subdir).mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                errors.append(str(e))
+
+        gitignore = repo_path / ".gitignore"
+        if not gitignore.exists():
+            try:
+                gitignore.write_text(
+                    "# LaTeX build artefacts\n"
+                    "*.aux\n*.log\n*.out\n*.fls\n*.fdb_latexmk\n*.synctex.gz\n"
+                    "*.toc\n*.lof\n*.lot\n*.dvi\n*.maf\n*.mtc\n*.mtc0\n",
+                    encoding="utf-8"
+                )
+            except OSError as e:
+                errors.append(str(e))
+
+        try:
+            r = subprocess.run(["git", "-C", repo, "init"],
+                               capture_output=True, text=True, timeout=10)
+            if r.returncode != 0:
+                errors.append(r.stderr.strip())
+        except Exception as e:
+            errors.append(str(e))
+
+        if errors:
+            dlg = Adw.MessageDialog(transient_for=self, heading="Setup error",
+                body="\n".join(errors))
+            dlg.add_response("ok", "OK"); dlg.present()
+        else:
+            dlg = Adw.MessageDialog(
+                transient_for=self,
+                heading="Repository ready",
+                body=f"Created liturgy/, tex/, pdf/, and bulletins/ folders in:\n{repo}\n\n"
+                     "Next: create a private repository on github.com, copy its URL, "
+                     "and paste it in the field below."
+            )
+            dlg.add_response("ok", "OK"); dlg.present()
+
+    def _on_remote_connect(self, _btn):
+        repo = config.github_repo
+        url  = self._remote_entry.get_text().strip()
+        if not repo:
+            dlg = Adw.MessageDialog(transient_for=self, heading="No repository configured",
+                body="Set up a folder first.")
+            dlg.add_response("ok", "OK"); dlg.present(); return
+        if not url:
+            dlg = Adw.MessageDialog(transient_for=self, heading="No URL entered",
+                body="Paste your GitHub repository URL in the field above.")
+            dlg.add_response("ok", "OK"); dlg.present(); return
+        try:
+            check = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"],
+                                   capture_output=True, text=True, timeout=5)
+            cmd = ["git", "-C", repo, "remote",
+                   "set-url" if check.returncode == 0 else "add",
+                   "origin", url]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        except Exception as e:
+            dlg = Adw.MessageDialog(transient_for=self, heading="Error", body=str(e))
+            dlg.add_response("ok", "OK"); dlg.present(); return
+
+        if r.returncode != 0:
+            dlg = Adw.MessageDialog(transient_for=self, heading="Could not connect",
+                body=r.stderr.strip() or "Unknown error")
+            dlg.add_response("ok", "OK"); dlg.present()
+        else:
+            dlg = Adw.MessageDialog(
+                transient_for=self,
+                heading="Connected to GitHub",
+                body=f"Remote set to:\n{url}\n\n"
+                     "Use the ⟳ Push button in the main toolbar to upload your files."
+            )
+            dlg.add_response("ok", "OK"); dlg.present()
+
+    def _on_prefs_pull(self, _btn):
+        repo = config.github_repo
+        if not repo:
+            dlg = Adw.MessageDialog(transient_for=self, heading="No repository configured",
+                body="Set up a folder and connect to GitHub first.")
+            dlg.add_response("ok", "OK"); dlg.present(); return
+
+        progress = Adw.MessageDialog(transient_for=self,
+            heading="Pulling from GitHub…", body="Please wait.")
+        progress.present()
+
+        def run():
+            try:
+                r = subprocess.run(["git", "-C", repo, "pull"],
+                                   capture_output=True, text=True, timeout=60)
+                def on_done():
+                    progress.destroy()
+                    if r.returncode != 0:
+                        err = (r.stderr or r.stdout or "Unknown error").strip()
+                        d = Adw.MessageDialog(transient_for=self, heading="Pull failed", body=err[:400])
+                        d.add_response("ok", "OK"); d.present()
+                    else:
+                        out = r.stdout.strip() or "Already up to date."
+                        d = Adw.MessageDialog(transient_for=self, heading="Pull complete", body=out[:400])
+                        d.add_response("ok", "OK"); d.present()
+                GLib.idle_add(on_done)
+            except Exception as e:
+                def on_err():
+                    progress.destroy()
+                    d = Adw.MessageDialog(transient_for=self, heading="Pull error", body=str(e))
+                    d.add_response("ok", "OK"); d.present()
+                GLib.idle_add(on_err)
+
+        threading.Thread(target=run, daemon=True).start()
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
@@ -786,6 +1080,7 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(**kw); self.set_default_size(1000,700)
         self.service_entries: list = []
         self._undo_stack: list[list[dict]] = []
+        self._redo_stack: list[list[dict]] = []
         self.current_file: str|None = None
         self.tex_file: str|None = None
         self.modified = False; self._updating_note = False
@@ -808,6 +1103,16 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.idle_add(self._check_autosave)
         GLib.idle_add(self._check_welcome)
 
+    # ── Repo helpers ──────────────────────────────────────────────────────────
+
+    def _repo_subdir(self, subdir: str):
+        """Return Path to {github_repo}/{subdir}/ if it exists, else None."""
+        if config.github_repo:
+            p = Path(config.github_repo) / subdir
+            if p.is_dir():
+                return p
+        return None
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     def _setup_actions(self):
@@ -828,6 +1133,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("move-down",     self.move_down,         "<Ctrl>Down"),
             ("remove-item",   self.remove_item,       "Delete"),
             ("undo",          self.undo,              "<Ctrl>z"),
+            ("redo",          self.redo,              "<Ctrl><Shift>z"),
             ("preferences",   self.open_preferences,  "<Ctrl>comma"),
             ("clear-recent",       self._clear_recent,      None),
             ("tab-rename",         self._tab_rename_action, None),
@@ -838,7 +1144,10 @@ class MainWindow(Adw.ApplicationWindow):
             ("scripture-search",   self.open_scripture_search,  "<Ctrl><Shift>f"),
             ("export-csv",         self.export_csv,             None),
             ("export-bulletin",    self.export_bulletin,        "<Ctrl><Shift>b"),
-            ("git-commit",         self.git_commit,             "<Ctrl><Shift>g"),
+            ("export-html",        self.export_html,            None),
+            ("open-planner",       self.open_planner,           "<Ctrl><Shift>l"),
+            ("git-push",           self.git_push,               "<Ctrl><Shift>g"),
+            ("git-pull",           self.git_pull,               None),
             ("show-help",          lambda: self._show_doc("HELP"),      "F1"),
             ("show-faq",           lambda: self._show_doc("FAQ"),       None),
             ("show-changelog",     lambda: self._show_doc("CHANGELOG"), None),
@@ -860,6 +1169,8 @@ class MainWindow(Adw.ApplicationWindow):
             b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.connect("clicked", lambda _,f=cb: f()); hdr.pack_start(b)
         self.undo_btn = Gtk.Button(icon_name="edit-undo-symbolic", tooltip_text="Undo (Ctrl+Z)")
         self.undo_btn.connect("clicked", lambda _: self.undo()); self.undo_btn.set_sensitive(False); hdr.pack_start(self.undo_btn)
+        self.redo_btn = Gtk.Button(icon_name="edit-redo-symbolic", tooltip_text="Redo (Ctrl+Shift+Z)")
+        self.redo_btn.connect("clicked", lambda _: self.redo()); self.redo_btn.set_sensitive(False); hdr.pack_start(self.redo_btn)
 
         # Title widget lives inside a MenuButton so clicking it opens the service info popover
         self.title_widget = Adw.WindowTitle(title="Rubric", subtitle="New service")
@@ -904,6 +1215,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         sb = Gtk.Button(icon_name="document-save-symbolic", tooltip_text="Save (Ctrl+S)")
         sb.add_css_class("suggested-action"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
+
+        self.push_btn = Gtk.Button(icon_name="emblem-synchronizing-symbolic",
+                                   tooltip_text="Push to GitHub (Ctrl+Shift+G)")
+        self.push_btn.connect("clicked", lambda _: self.git_push())
+        hdr.pack_end(self.push_btn)
 
         self.tex_btn = Gtk.Button(icon_name="emblem-documents-symbolic",
                                   tooltip_text="Export to LaTeX (Ctrl+E)")
@@ -953,9 +1269,16 @@ class MainWindow(Adw.ApplicationWindow):
         export_sec.append("Export plain text…", "win.export-text")
         export_sec.append("Export CSV…",        "win.export-csv")
         export_sec.append("Export Bulletin…",   "win.export-bulletin")
+        export_sec.append("Export HTML (print from browser)…", "win.export-html")
         menu.append_section("Export", export_sec)
 
-        # menu.append("Commit to git", "win.git-commit")  # hidden until stable
+        menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
+
+        git_sec = Gio.Menu()
+        git_sec.append("Push to GitHub (Ctrl+Shift+G)", "win.git-push")
+        git_sec.append("Pull from GitHub",              "win.git-pull")
+        menu.append_section("GitHub Sync", git_sec)
+
         help_sec = Gio.Menu()
         help_sec.append("Help (F1)",   "win.show-help")
         help_sec.append("FAQ",         "win.show-faq")
@@ -1654,11 +1977,21 @@ class MainWindow(Adw.ApplicationWindow):
         self._undo_stack.append([e.to_dict() for e in self.service_entries])
         if len(self._undo_stack) > MAX_UNDO: self._undo_stack.pop(0)
         self.undo_btn.set_sensitive(True)
+        self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
 
     def undo(self):
         if not self._undo_stack: return
+        self._redo_stack.append([e.to_dict() for e in self.service_entries])
+        self.redo_btn.set_sensitive(True)
         self.service_entries = [_entry_from_dict(d) for d in self._undo_stack.pop()]
         self._refresh_order_list(); self.undo_btn.set_sensitive(bool(self._undo_stack)); self._mark_modified()
+
+    def redo(self):
+        if not self._redo_stack: return
+        self._undo_stack.append([e.to_dict() for e in self.service_entries])
+        self.undo_btn.set_sensitive(True)
+        self.service_entries = [_entry_from_dict(d) for d in self._redo_stack.pop()]
+        self._refresh_order_list(); self.redo_btn.set_sensitive(bool(self._redo_stack)); self._mark_modified()
 
     # ── Hymn lookup ───────────────────────────────────────────────────────────
 
@@ -1691,7 +2024,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_reading_clicked(self, key):
         ref = self._current_readings.get(key,"")
         if not ref or ref=="—": return
-        BibleViewer(ref, self._on_bible_insert, transient_for=self).present()
+        BibleViewer(ref, self._on_bible_insert, translation=config.bible_translation, esv_key=config.bible_api_key_esv, transient_for=self).present()
 
     def _on_bible_insert(self, text):
         idx = self._selected_index()
@@ -2078,6 +2411,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _reset_state(self):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
+        self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
         self.service_title_entry.set_text("")
         self.notes_view.get_buffer().set_text("", -1)
         self.bulletin_notes_view.get_buffer().set_text("", -1)
@@ -2140,7 +2474,9 @@ class MainWindow(Adw.ApplicationWindow):
     def open_file(self):
         def do_open():
             dlg = Gtk.FileDialog(title="Open service")
-            dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
+            liturgy_dir = self._repo_subdir("liturgy")
+            initial = str(liturgy_dir) if liturgy_dir else config.last_dir
+            dlg.set_initial_folder(Gio.File.new_for_path(initial))
             filters = Gio.ListStore.new(Gtk.FileFilter); f = Gtk.FileFilter()
             f.set_name("Liturgy files (*.liturgy, *.json)"); f.add_pattern("*.liturgy"); f.add_pattern("*.json")
             filters.append(f); dlg.set_filters(filters)
@@ -2188,8 +2524,10 @@ class MainWindow(Adw.ApplicationWindow):
         else: self.save_file_as()
 
     def save_file_as(self):
+        liturgy_dir = self._repo_subdir("liturgy")
+        initial = str(liturgy_dir) if liturgy_dir else config.last_dir
         dlg = Gtk.FileDialog(title="Save service", initial_name="service.liturgy")
-        dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
+        dlg.set_initial_folder(Gio.File.new_for_path(initial))
         filters = Gio.ListStore.new(Gtk.FileFilter); f = Gtk.FileFilter()
         f.set_name("Liturgy files (*.liturgy)"); f.add_pattern("*.liturgy"); filters.append(f); dlg.set_filters(filters)
         dlg.save(self, None, self._on_save_as_response)
@@ -2293,8 +2631,11 @@ class MainWindow(Adw.ApplicationWindow):
         church = config.bulletin.get("church_name", "").replace(" ", "_") or "Bulletin"
         suffix = "digital" if digital else "print"
         default_name = f"{church}_{date_str}_{suffix}.tex"
+        bul_dir = self._repo_subdir("bulletins")
+        tex_dir = self._repo_subdir("tex")
+        initial = str(bul_dir) if bul_dir else (str(tex_dir) if tex_dir else config.last_dir)
         dlg = Gtk.FileDialog(title="Save bulletin as…", initial_name=default_name)
-        dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
+        dlg.set_initial_folder(Gio.File.new_for_path(initial))
         filters = Gio.ListStore.new(Gtk.FileFilter)
         f = Gtk.FileFilter(); f.set_name("LaTeX (*.tex)"); f.add_pattern("*.tex")
         filters.append(f); dlg.set_filters(filters)
@@ -2375,6 +2716,14 @@ class MainWindow(Adw.ApplicationWindow):
             except OSError: pass
 
         pdf = tex_path.with_suffix(".pdf")
+        pdf_dir = self._repo_subdir("bulletins")
+        if pdf_dir and pdf.exists():
+            dest = pdf_dir / pdf.name
+            try:
+                shutil.move(str(pdf), str(dest))
+                pdf = dest
+            except OSError:
+                pass
         if pdf.exists():
             self._show_toast(f"✓ {pdf.name}", timeout=4)
             Gtk.show_uri(None, pdf.as_uri(), 0)
@@ -2639,6 +2988,83 @@ class MainWindow(Adw.ApplicationWindow):
         lines += [r"\end{document}", ""]
         return lines
 
+    def export_html(self):
+        title = self.service_title_entry.get_text() or "Order of Service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+
+        import tempfile, re as _re
+
+        def strip_latex(text: str) -> str:
+            """Remove common LaTeX markup for HTML display."""
+            text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}', lambda m: m.group(1), text, flags=_re.DOTALL)
+            text = _re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'<sup>\1</sup>&nbsp;\2', text)
+            text = _re.sub(r'\\textbf\{([^}]*)\}', r'<strong>\1</strong>', text)
+            text = _re.sub(r'\\textit\{([^}]*)\}', r'<em>\1</em>', text)
+            text = _re.sub(r'\\emph\{([^}]*)\}', r'<em>\1</em>', text)
+            text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
+            text = _re.sub(r'\\[a-zA-Z]+\*?\s*', '', text)
+            return text.strip()
+
+        css = """
+    body { font-family: Georgia, 'Times New Roman', serif; max-width: 700px; margin: 0 auto; padding: 1.5em; color: #111; }
+    h1 { font-size: 1.6em; text-align: center; margin-bottom: 0.1em; }
+    .date { text-align: center; color: #555; font-style: italic; margin-bottom: 2em; }
+    h2 { font-size: 1.1em; font-variant: small-caps; letter-spacing: 0.08em; border-bottom: 1px solid #999; padding-bottom: 2px; margin-top: 2em; margin-bottom: 0.5em; }
+    .element { margin-bottom: 0.8em; }
+    .element-name { font-weight: bold; }
+    .leader { font-style: italic; color: #444; margin-left: 0.5em; font-size: 0.9em; }
+    .note { margin-top: 0.2em; margin-left: 1em; color: #333; font-size: 0.95em; line-height: 1.5; }
+    .verse-num { vertical-align: super; font-size: 0.75em; margin-right: 0.2em; }
+    @media print {
+      body { padding: 0; }
+      h2 { page-break-after: avoid; }
+      .element { page-break-inside: avoid; }
+    }
+    """
+
+        lines = [
+            "<!DOCTYPE html>",
+            "<html lang='en'><head><meta charset='utf-8'>",
+            f"<title>{title}</title>",
+            f"<style>{css}</style>",
+            "</head><body>",
+            f"<h1>{title}</h1>",
+        ]
+        if date_str:
+            lines.append(f"<p class='date'>{date_str}</p>")
+
+        for sec, items in self._grouped_entries():
+            if not items and sec is None:
+                continue
+            if sec:
+                lines.append(f"<h2>{sec}</h2>")
+            for si in items:
+                leader_html = f"<span class='leader'>({si.leader})</span>" if si.leader else ""
+                lines.append(f"<div class='element'>")
+                lines.append(f"<div class='element-name'>{si.name}{leader_html}</div>")
+                if si.note:
+                    note = si.note
+                    note_html = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
+                        lambda m: "<div class='note'>" + _re.sub(r'\\sverse\{(\d+)\}\{([^}]+)\}',
+                            r"<sup class='verse-num'>\1</sup>\2 ", m.group(1).strip()) + "</div>",
+                        note, flags=_re.DOTALL)
+                    if note_html == note:
+                        clean = strip_latex(note)
+                        note_lines = clean.split('\n')
+                        note_html = "<div class='note'>" + "<br>".join(note_lines) + "</div>"
+                    lines.append(note_html)
+                lines.append("</div>")
+
+        lines += ["</body></html>"]
+        html = "\n".join(lines)
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+            f.write(html)
+            tmp_path = f.name
+
+        Gtk.show_uri(None, GLib.filename_to_uri(tmp_path, None), 0)
+        self._show_toast("Opened in browser — use File → Print to save as PDF", timeout=6)
+
     def export_text(self):
         dlg = Gtk.FileDialog(title="Export plain text", initial_name="service.txt")
         dlg.set_initial_folder(Gio.File.new_for_path(config.last_dir))
@@ -2819,6 +3245,14 @@ class MainWindow(Adw.ApplicationWindow):
             except OSError: pass
 
         pdf_path = tex_path.with_suffix(".pdf")
+        pdf_dir = self._repo_subdir("pdf")
+        if pdf_dir and pdf_path.exists():
+            dest = pdf_dir / pdf_path.name
+            try:
+                shutil.move(str(pdf_path), str(dest))
+                pdf_path = dest
+            except OSError:
+                pass
         if pdf_path.exists():
             self._show_toast(f"✓ {pdf_path.name}", timeout=4)
             Gtk.show_uri(None, pdf_path.as_uri(), 0)
@@ -2837,14 +3271,15 @@ class MainWindow(Adw.ApplicationWindow):
 
     def export_latex(self):
         """Full file-chooser export (also called by quick_export when no link exists)."""
-        # Suggest a sensible default name derived from the .liturgy file or title
+        tex_dir = self._repo_subdir("tex")
         if self.current_file:
             default = Path(self.current_file).stem + ".tex"
-            folder  = str(Path(self.current_file).parent)
         else:
             title   = self.service_title_entry.get_text() or "service"
             default = title.replace(" ", "_").lower() + ".tex"
-            folder  = config.last_dir
+        folder = str(tex_dir) if tex_dir else (
+            str(Path(self.current_file).parent) if self.current_file else config.last_dir
+        )
         dlg = Gtk.FileDialog(title="Export LaTeX", initial_name=default)
         dlg.set_initial_folder(Gio.File.new_for_path(folder))
         filters = Gio.ListStore.new(Gtk.FileFilter)
@@ -3013,7 +3448,7 @@ class MainWindow(Adw.ApplicationWindow):
         if not _BIBLE_OK:
             self._error("Bible lookup unavailable", "bible_api.py not found.")
             return
-        BibleViewer(ref, self._on_bible_insert, transient_for=self).present()
+        BibleViewer(ref, self._on_bible_insert, translation=config.bible_translation, esv_key=config.bible_api_key_esv, transient_for=self).present()
         self.scripture_entry.set_text("")
 
     def open_scripture_search(self):
@@ -3199,85 +3634,130 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception as e:
             self._error("CSV export error", str(e))
 
-    # ── Git integration ───────────────────────────────────────────────────────
+    # ── Git / GitHub integration ──────────────────────────────────────────────
 
-    def git_commit(self):
-        if not self.current_file:
-            self._error("Not saved", "Save the service file before committing to git.")
+    def git_push(self):
+        repo = config.github_repo
+        if not repo:
+            self._show_toast("Set up a GitHub repository in Preferences → GitHub first.", timeout=6)
             return
-        path = Path(self.current_file)
-        repo_dir = str(path.parent)
-        filename  = path.name
-        title = self.service_title_entry.get_text() or filename
-        date_str  = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
-        msg = f"Service: {title}" + (f" — {date_str}" if date_str else "")
 
-        try:
-            # Find the actual git repo root
-            root_result = subprocess.run(
-                ["git", "-C", repo_dir, "rev-parse", "--show-toplevel"],
-                capture_output=True, text=True, timeout=5
-            )
-            if root_result.returncode != 0:
-                self._error("Not a git repository",
-                            f"{repo_dir} is not inside a git repository.\n\n"
-                            "Run 'git init' in that directory first.")
-                return
+        if self.current_file:
+            self.save_file()
 
-            repo_root = root_result.stdout.strip()
+        from datetime import date as _date
+        title    = self.service_title_entry.get_text() or "service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else \
+                   _date.today().strftime("%-d %B %Y")
+        msg = f"Service: {title} – {date_str}"
 
-            # Show confirmation dialog with repo location before committing
-            dlg = Adw.MessageDialog(
-                transient_for=self,
-                heading="Commit to git?",
-                body=f"Repository: {repo_root}\n\nCommit message:\n{msg}"
-            )
-            dlg.add_response("cancel", "Cancel")
-            dlg.add_response("commit", "Commit")
-            dlg.set_response_appearance("commit", Adw.ResponseAppearance.SUGGESTED)
-            dlg.set_default_response("commit")
+        push_toast = Adw.Toast.new("Pushing to GitHub…")
+        push_toast.set_timeout(0)
+        self._toast_overlay.add_toast(push_toast)
+        self.push_btn.set_sensitive(False)
 
-            def on_resp(d, r):
-                if r != "commit":
+        def run():
+            def abort(heading, body=""):
+                push_toast.dismiss()
+                self.push_btn.set_sensitive(True)
+                if body:
+                    self._error(heading, body)
+                else:
+                    self._show_toast(heading, timeout=6)
+
+            try:
+                add_r = subprocess.run(["git", "-C", repo, "add", "-A"],
+                                       capture_output=True, text=True, timeout=10)
+                if add_r.returncode != 0:
+                    GLib.idle_add(abort, "Push failed",
+                                  add_r.stderr.strip() or "git add failed")
                     return
-                try:
-                    # Use absolute paths for git add — works regardless of repo root depth
-                    add = subprocess.run(
-                        ["git", "add", str(path.resolve())],
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if add.returncode != 0:
-                        self._error("git add failed", add.stderr.strip()); return
-                    if self.tex_file:
-                        subprocess.run(
-                            ["git", "add", str(Path(self.tex_file).resolve())],
-                            capture_output=True, text=True, timeout=10
-                        )
-                    commit = subprocess.run(
-                        ["git", "-C", repo_root, "commit", "-m", msg],
-                        capture_output=True, text=True, timeout=15
-                    )
-                    if commit.returncode != 0:
-                        out = commit.stdout.strip() + commit.stderr.strip()
-                        if "nothing to commit" in out:
-                            self._show_toast("Nothing new to commit.")
-                        else:
-                            self._error("git commit failed", out)
+
+                status_r = subprocess.run(["git", "-C", repo, "status", "--porcelain"],
+                                          capture_output=True, text=True, timeout=5)
+                if status_r.stdout.strip():
+                    commit_r = subprocess.run(["git", "-C", repo, "commit", "-m", msg],
+                                              capture_output=True, text=True, timeout=15)
+                    if commit_r.returncode != 0:
+                        out = (commit_r.stderr or commit_r.stdout or "").strip()
+                        GLib.idle_add(abort, "Push failed (commit)", out)
                         return
-                    short = commit.stdout.strip().splitlines()[0] if commit.stdout else "Committed."
-                    self._show_toast(short)
-                except Exception as e:
-                    self._error("git error", str(e))
 
-            dlg.connect("response", on_resp)
-            dlg.present()
+                push_r = subprocess.run(["git", "-C", repo, "push"],
+                                        capture_output=True, text=True, timeout=30)
+                if push_r.returncode != 0:
+                    err_low = (push_r.stderr or "").lower()
+                    if "no upstream" in err_low or "set-upstream" in err_low or \
+                       "set the upstream" in err_low:
+                        push_r = subprocess.run(
+                            ["git", "-C", repo, "push", "--set-upstream", "origin", "HEAD"],
+                            capture_output=True, text=True, timeout=30
+                        )
 
-        except FileNotFoundError:
-            self._error("git not found", "Install git: sudo zypper install git")
-        except subprocess.TimeoutExpired:
-            self._error("git timed out", "The git operation took too long.")
-        except Exception as e:
-            self._error("git error", str(e))
+                def finish():
+                    push_toast.dismiss()
+                    self.push_btn.set_sensitive(True)
+                    if push_r.returncode != 0:
+                        err = (push_r.stderr or push_r.stdout or "Unknown error").strip()
+                        if "Repository not found" in err:
+                            self._error("Push failed",
+                                "Repository not found on GitHub.\n\n"
+                                "Check the URL in Preferences → GitHub.")
+                        elif "Permission denied" in err or "Authentication failed" in err:
+                            self._error("Push failed",
+                                "Authentication failed.\n\n"
+                                "Make sure you have SSH keys set up, or use a GitHub\n"
+                                "personal access token.\n\nSee: github.com/settings/keys")
+                        else:
+                            self._error("Push failed", err[:400])
+                    else:
+                        self._show_toast("✓ Pushed to GitHub", timeout=4)
+
+                GLib.idle_add(finish)
+
+            except subprocess.TimeoutExpired:
+                GLib.idle_add(abort, "Push timed out — check your network connection.")
+            except FileNotFoundError:
+                GLib.idle_add(abort, "git not found", "Install git: sudo zypper install git")
+            except Exception as e:
+                GLib.idle_add(abort, "Push error", str(e))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def git_pull(self):
+        repo = config.github_repo
+        if not repo:
+            self._show_toast("Set up a GitHub repository in Preferences → GitHub first.", timeout=6)
+            return
+
+        pull_toast = Adw.Toast.new("Pulling from GitHub…")
+        pull_toast.set_timeout(0)
+        self._toast_overlay.add_toast(pull_toast)
+
+        def run():
+            try:
+                r = subprocess.run(["git", "-C", repo, "pull"],
+                                   capture_output=True, text=True, timeout=60)
+                def on_done():
+                    pull_toast.dismiss()
+                    if r.returncode != 0:
+                        err = (r.stderr or r.stdout or "Unknown error").strip()
+                        self._error("Pull failed", err[:400])
+                    else:
+                        out = r.stdout.strip() or "Already up to date."
+                        self._show_toast(f"✓ {out[:80]}", timeout=5)
+                GLib.idle_add(on_done)
+            except subprocess.TimeoutExpired:
+                GLib.idle_add(lambda: (pull_toast.dismiss(),
+                              self._show_toast("Pull timed out.", timeout=6)))
+            except FileNotFoundError:
+                GLib.idle_add(lambda: (pull_toast.dismiss(),
+                              self._error("git not found", "Install git: sudo zypper install git")))
+            except Exception as e:
+                GLib.idle_add(lambda: (pull_toast.dismiss(),
+                              self._error("Pull error", str(e))))
+
+        threading.Thread(target=run, daemon=True).start()
 
 
     def _show_toast(self, message: str, timeout: int = 3):
@@ -3406,6 +3886,137 @@ class MainWindow(Adw.ApplicationWindow):
             if r=="save": self.save_file(); self.destroy()
             elif r=="discard": self.destroy()
         dlg.connect("response", on_resp); dlg.present(); return True
+
+    def open_planner(self):
+        folder = self._repo_subdir("liturgy")
+        if not folder:
+            dlg = Gtk.FileDialog(title="Choose folder containing .liturgy files")
+            def on_chosen(d, r):
+                try:
+                    f = d.select_folder_finish(r)
+                    PlannerWindow(folder=Path(f.get_path()), main_window=self, transient_for=self).present()
+                except GLib.Error:
+                    pass
+            dlg.select_folder(self, None, on_chosen)
+        else:
+            PlannerWindow(folder=folder, main_window=self, transient_for=self).present()
+
+
+# ── Service Planner ───────────────────────────────────────────────────────────
+
+class PlannerWindow(Adw.Window):
+    def __init__(self, folder: Path, main_window, **kw):
+        super().__init__(**kw)
+        self._folder = folder
+        self._main = main_window
+        self.set_title("Service Planner")
+        self.set_default_size(560, 600)
+        self.set_modal(False)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv.add_top_bar(hdr)
+
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
+        refresh_btn.connect("clicked", lambda _: self._load())
+        hdr.pack_end(refresh_btn)
+
+        new_btn = Gtk.Button(label="New service…")
+        new_btn.add_css_class("suggested-action")
+        new_btn.connect("clicked", self._on_new)
+        hdr.pack_start(new_btn)
+
+        self._list = Gtk.ListBox()
+        self._list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._list.add_css_class("boxed-list")
+        self._list.set_margin_start(16); self._list.set_margin_end(16)
+        self._list.set_margin_top(16); self._list.set_margin_bottom(16)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_child(self._list)
+        tv.set_content(scroll)
+        self.set_content(tv)
+
+        self._load()
+
+    def _load(self):
+        while True:
+            child = self._list.get_first_child()
+            if child is None: break
+            self._list.remove(child)
+
+        from datetime import date as _date
+        today = _date.today()
+
+        services = []
+        try:
+            for p in self._folder.glob("*.liturgy"):
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    title = d.get("title", "") or p.stem
+                    date_str = d.get("date", "")
+                    item_count = len([i for i in d.get("items", []) if i.get("type") != "divider"])
+                    try:
+                        svc_date = _date.fromisoformat(date_str) if date_str else None
+                    except ValueError:
+                        svc_date = None
+                    services.append((svc_date, title, item_count, p))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        upcoming = sorted([(d, t, c, p) for d, t, c, p in services if d and d >= today], key=lambda x: x[0])
+        past = sorted([(d, t, c, p) for d, t, c, p in services if not d or d < today], key=lambda x: (x[0] or _date.min), reverse=True)
+
+        if not services:
+            row = Adw.ActionRow(title="No services found",
+                subtitle=f"Save .liturgy files to {self._folder} to see them here")
+            row.set_sensitive(False)
+            self._list.append(row)
+            return
+
+        def add_separator(label):
+            lbl = Gtk.Label(label=label)
+            lbl.add_css_class("heading"); lbl.add_css_class("dim-label")
+            lbl.set_xalign(0); lbl.set_margin_start(4)
+            lbl.set_margin_top(12); lbl.set_margin_bottom(2)
+            row = Gtk.ListBoxRow(); row.set_activatable(False)
+            row.set_child(lbl); self._list.append(row)
+
+        if upcoming:
+            add_separator("Upcoming")
+            for svc_date, title, count, path in upcoming:
+                date_label = svc_date.strftime("%-d %B %Y") if svc_date else "No date"
+                row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
+                row.set_activatable(True)
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.connect("activated", lambda _r, p=path: self._open(p))
+                self._list.append(row)
+
+        if past:
+            add_separator("Past services")
+            for svc_date, title, count, path in past:
+                date_label = svc_date.strftime("%-d %B %Y") if svc_date else "No date"
+                row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
+                row.set_activatable(True)
+                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                row.connect("activated", lambda _r, p=path: self._open(p))
+                self._list.append(row)
+
+    def _open(self, path: Path):
+        self._main._confirm_discard(lambda p=path: self._main._load_file(str(p)))
+
+    def _on_new(self, _btn):
+        dlg = Adw.MessageDialog(transient_for=self,
+            heading="New service",
+            body="This will open a blank service in the main window.")
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("new", "New service")
+        dlg.set_response_appearance("new", Adw.ResponseAppearance.SUGGESTED)
+        dlg.connect("response", lambda d, r: self._main.new_service() if r == "new" else None)
+        dlg.present()
 
 
 # ── Application ───────────────────────────────────────────────────────────────

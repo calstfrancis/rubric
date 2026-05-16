@@ -1,8 +1,11 @@
 """
-bible_api.py — Asynchronous Bible passage fetcher via bible-api.com (WEB translation)
+bible_api.py — Asynchronous Bible passage fetcher.
 
-The World English Bible is in the public domain.
-API: https://bible-api.com/{reference}?translation=web
+Supports:
+  - WEB (World English Bible)     via bible-api.com  (public domain)
+  - KJV (King James Version)      via bible-api.com  (public domain)
+  - ASV (American Standard)       via bible-api.com  (public domain)
+  - ESV (English Standard)        via api.esv.org    (free API key required)
 """
 
 import threading
@@ -15,6 +18,17 @@ import re
 import gi
 gi.require_version("GLib", "2.0")
 from gi.repository import GLib
+
+ESV_API = "https://api.esv.org/v3/passage/text/"
+
+BIBLE_API_TRANSLATIONS = {"web": "web", "kjv": "kjv", "asv": "asv"}
+
+TRANSLATION_LABELS = {
+    "web": "World English Bible (Public Domain)",
+    "kjv": "King James Version (Public Domain)",
+    "asv": "American Standard Version (Public Domain)",
+    "esv": "English Standard Version (ESV API key required)",
+}
 
 # RCL abbreviation → full book name accepted by bible-api.com
 BOOK_MAP: dict[str, str] = {
@@ -60,7 +74,7 @@ def clean_reference(ref: str) -> str:
     # Remove letter suffixes: 14a → 14
     ref = re.sub(r'(\d+)[a-zA-Z]\b', r'\1', ref)
     # Replace em/en dashes with ASCII hyphens
-    ref = ref.replace('\u2013', '-').replace('\u2014', '-')
+    ref = ref.replace('–', '-').replace('—', '-')
     # Replace non-breaking spaces
     ref = ref.replace('\xa0', ' ').strip()
     return ref
@@ -75,19 +89,27 @@ def map_book(ref: str) -> str:
     return ref
 
 
-def fetch_passage(reference: str, callback):
+def fetch_passage(reference: str, callback, translation: str = "web", esv_key: str = ""):
     """
-    Asynchronously fetch a Bible passage (World English Bible).
+    Asynchronously fetch a Bible passage.
 
     callback(text: str | None, error: str | None) is called on
     the GLib main loop when the result is ready.
+
+    translation: one of "web", "kjv", "asv", "esv"
+    esv_key: required when translation == "esv"
     """
     def fetch():
         cleaned = clean_reference(reference)
+
+        if translation == "esv" and esv_key:
+            _fetch_esv(cleaned, callback, esv_key)
+            return
+
+        # Fall back to bible-api.com for web/kjv/asv
+        trl = BIBLE_API_TRANSLATIONS.get(translation, "web")
         full_ref = map_book(cleaned)
-        url = ("https://bible-api.com/"
-               + urllib.parse.quote(full_ref)
-               + "?translation=web")
+        url = ("https://bible-api.com/" + urllib.parse.quote(full_ref) + f"?translation={trl}")
 
         try:
             req = urllib.request.Request(
@@ -98,34 +120,59 @@ def fetch_passage(reference: str, callback):
                 data = json.loads(resp.read().decode("utf-8"))
 
             if "error" in data:
-                GLib.idle_add(callback, None, data["error"])
-                return
+                GLib.idle_add(callback, None, data["error"]); return
 
             verses = data.get("verses", [])
             if verses:
-                parts = []
-                for v in verses:
-                    vnum = v.get("verse", "")
-                    text = v.get("text", "").strip()
-                    parts.append(f"{vnum}\u2003{text}")
+                parts = [f"{v.get('verse','')} {v.get('text','').strip()}" for v in verses]
                 passage = "\n".join(parts)
             else:
                 passage = data.get("text", "").strip()
 
             if not passage:
-                GLib.idle_add(callback, None, "No text returned for this reference")
-                return
-
+                GLib.idle_add(callback, None, "No text returned"); return
             GLib.idle_add(callback, passage, None)
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                GLib.idle_add(callback, None,
-                              f"Passage not found: {cleaned}")
-            else:
-                GLib.idle_add(callback, None, f"HTTP error {e.code}")
+            GLib.idle_add(callback, None, f"HTTP error {e.code}" if e.code != 404
+                          else f"Passage not found: {cleaned}")
         except Exception as e:
-            GLib.idle_add(callback, None,
-                          f"Network error: {type(e).__name__}")
+            GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
 
     threading.Thread(target=fetch, daemon=True).start()
+
+
+def _fetch_esv(reference: str, callback, key: str):
+    params = urllib.parse.urlencode({
+        "q": reference,
+        "include-verse-numbers": "true",
+        "include-footnotes": "false",
+        "include-headings": "false",
+        "include-copyright": "false",
+        "include-short-copyright": "false",
+        "indent-paragraphs": "0",
+        "indent-poetry": "false",
+    })
+    url = f"{ESV_API}?{params}"
+    try:
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Token {key}",
+            "User-Agent": "Mozilla/5.0 LiturgyPlanner/1.0"
+        })
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        passages = data.get("passages", [])
+        if not passages:
+            GLib.idle_add(callback, None, "No text returned for this reference"); return
+        text = passages[0].strip()
+        # Format into verse-per-line using [1] [2] markers
+        text = re.sub(r'\[(\d+)\]', lambda m: f"\n{m.group(1)} ", text)
+        text = re.sub(r'\n+', '\n', text).strip()
+        GLib.idle_add(callback, text, None)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            GLib.idle_add(callback, None, "Invalid ESV API key — check Preferences → Scripture")
+        else:
+            GLib.idle_add(callback, None, f"ESV API error {e.code}")
+    except Exception as e:
+        GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
