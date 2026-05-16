@@ -134,6 +134,7 @@ class Config:
         self.github_repo        : str = ""
         self.bible_translation  : str = "web"
         self.bible_api_key_esv  : str = ""
+        self.simple_mode        : bool = True
         self._load()
 
     # backward-compat: old "template_items" key becomes template named "Default"
@@ -173,6 +174,7 @@ class Config:
                 self.templates        = d.get("templates",        {})
                 self.bible_translation = d.get("bible_translation", "web")
                 self.bible_api_key_esv = d.get("bible_api_key_esv", "")
+                self.simple_mode       = d.get("simple_mode", True)
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -199,6 +201,7 @@ class Config:
             "github_repo":        self.github_repo,
             "bible_translation":  self.bible_translation,
             "bible_api_key_esv":  self.bible_api_key_esv,
+            "simple_mode":        self.simple_mode,
         }
         if self.palette is not None: p["palette"] = self.palette
         CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -421,8 +424,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.set_title("Preferences"); self.set_default_size(700,560); self.set_search_enabled(False)
-        self._build_latex(); self._build_view(); self._build_template(); self._build_palette()
-        if _SNIP_OK: self._build_snippets()
+        self._build_view()
+        if not config.simple_mode:
+            self._build_latex()
+        self._build_template(); self._build_palette()
+        if _SNIP_OK and not config.simple_mode:
+            self._build_snippets()
         self._build_bulletin(); self._build_github(); self._build_scripture()
         self.connect("close-request", self._on_close)
 
@@ -448,6 +455,31 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)
+
+        # ── Simple mode ───────────────────────────────────────────────────
+        mode_grp = Adw.PreferencesGroup(
+            title="Feature level",
+            description="Simple mode hides LaTeX export, GitHub sync, CSV export, "
+                        "snippets, and other technical features. You can turn it off "
+                        "whenever you're ready to explore more."
+        )
+        page.add(mode_grp)
+        try:
+            self._simple_row = Adw.SwitchRow(
+                title="Simple mode",
+                subtitle="Show only the essential features for building a service"
+            )
+            self._simple_row.set_active(config.simple_mode)
+            mode_grp.add(self._simple_row)
+        except AttributeError:
+            row = Adw.ActionRow(title="Simple mode",
+                                subtitle="Show only the essential features for building a service")
+            self._simple_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+            self._simple_switch.set_active(config.simple_mode)
+            row.add_suffix(self._simple_switch); row.set_activatable_widget(self._simple_switch)
+            mode_grp.add(row); self._simple_row = None
+
+        # ── Layout ────────────────────────────────────────────────────────
         grp = Adw.PreferencesGroup(title="Service order layout",
             description="Tab view groups items by section divider. "
                         "Switching modes preserves all data.")
@@ -458,13 +490,17 @@ class PreferencesWindow(Adw.PreferencesWindow):
             self._tabs_row.set_active(config.use_tabs)
             grp.add(self._tabs_row)
         except AttributeError:
-            # Older libadwaita fallback
             row = Adw.ActionRow(title="Tab view",
                                 subtitle="Show sections as tabs instead of one long list")
             self._tabs_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
             self._tabs_switch.set_active(config.use_tabs)
             row.add_suffix(self._tabs_switch); row.set_activatable_widget(self._tabs_switch)
             grp.add(row); self._tabs_row = None
+
+    def _simple_mode_active(self) -> bool:
+        if hasattr(self, "_simple_row") and self._simple_row:
+            return self._simple_row.get_active()
+        return self._simple_switch.get_active()
 
     def _tabs_active(self):
         if hasattr(self, "_tabs_row") and self._tabs_row:
@@ -761,11 +797,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._bul_ann_widgets.append((tv, exp_e, row))
 
     def _on_close(self, _):
-        buf = self._preamble_view.get_buffer(); s,e = buf.get_bounds()
-        config.preamble = buf.get_text(s,e,False)
+        if hasattr(self, "_preamble_view"):
+            buf = self._preamble_view.get_buffer(); s,e = buf.get_bounds()
+            config.preamble = buf.get_text(s,e,False)
         builtin = [{"section":s,"items":list(i)} for s,i in SECTIONS]
         config.palette = self._pal if self._pal != builtin else None
         config.use_tabs = self._tabs_active()
+        config.simple_mode = self._simple_mode_active()
+        win = self.get_transient_for()
+        if win and hasattr(win, "_apply_simple_mode"):
+            win._apply_simple_mode()
 
         # Save bulletin config
         b = config.bulletin
@@ -1113,6 +1154,57 @@ class MainWindow(Adw.ApplicationWindow):
                 return p
         return None
 
+    # ── Simple mode ───────────────────────────────────────────────────────────
+
+    def _apply_simple_mode(self):
+        simple = config.simple_mode
+        self.push_btn.set_visible(not simple)
+        self.tex_btn.set_visible(not simple)
+        self.pdf_btn.set_visible(not simple)
+        self._refresh_menu()
+
+    def _refresh_menu(self):
+        simple = config.simple_mode
+        menu = Gio.Menu()
+        menu.append("Preferences", "win.preferences")
+        menu.append("Duplicate service", "win.duplicate")
+        if not simple:
+            menu.append("Save order as template…", "win.save-template")
+        menu.append("Save as…", "win.save-as")
+
+        export_sec = Gio.Menu()
+        if not simple:
+            export_sec.append("Export LaTeX…", "win.export-latex")
+        export_sec.append("Export plain text…", "win.export-text")
+        if not simple:
+            export_sec.append("Export CSV…", "win.export-csv")
+        export_sec.append("Export Bulletin…", "win.export-bulletin")
+        export_sec.append("Export HTML (print from browser)…", "win.export-html")
+        menu.append_section("Export", export_sec)
+
+        menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
+
+        if not simple:
+            git_sec = Gio.Menu()
+            git_sec.append("Push to GitHub (Ctrl+Shift+G)", "win.git-push")
+            git_sec.append("Pull from GitHub", "win.git-pull")
+            menu.append_section("GitHub Sync", git_sec)
+
+        if not simple:
+            adv_sec = Gio.Menu()
+            adv_sec.append("Responsive reading… (Ctrl+R)", "win.responsive-reading")
+            adv_sec.append("Snippets… (Ctrl+Shift+I)", "win.snippets")
+            menu.append_section("Advanced", adv_sec)
+
+        help_sec = Gio.Menu()
+        help_sec.append("Help (F1)", "win.show-help")
+        help_sec.append("FAQ", "win.show-faq")
+        help_sec.append("What's New", "win.show-changelog")
+        menu.append_section("Help", help_sec)
+        menu.append_section("Recent files", self._recent_sec)
+
+        self._menu_btn.set_menu_model(menu)
+
     # ── Actions ───────────────────────────────────────────────────────────────
 
     def _setup_actions(self):
@@ -1257,36 +1349,11 @@ class MainWindow(Adw.ApplicationWindow):
         self._update_lect_label()
         # Refresh at midnight (86400 seconds)
         GLib.timeout_add_seconds(86400, self._update_lect_label)
-        menu = Gio.Menu()
-        menu.append("Preferences",            "win.preferences")
-        menu.append("Duplicate service",       "win.duplicate")
-        menu.append("Save order as template…", "win.save-template")
-        menu.append("Save as…",               "win.save-as")
-
-        # Export submenu
-        export_sec = Gio.Menu()
-        export_sec.append("Export LaTeX…",      "win.export-latex")
-        export_sec.append("Export plain text…", "win.export-text")
-        export_sec.append("Export CSV…",        "win.export-csv")
-        export_sec.append("Export Bulletin…",   "win.export-bulletin")
-        export_sec.append("Export HTML (print from browser)…", "win.export-html")
-        menu.append_section("Export", export_sec)
-
-        menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
-
-        git_sec = Gio.Menu()
-        git_sec.append("Push to GitHub (Ctrl+Shift+G)", "win.git-push")
-        git_sec.append("Pull from GitHub",              "win.git-pull")
-        menu.append_section("GitHub Sync", git_sec)
-
-        help_sec = Gio.Menu()
-        help_sec.append("Help (F1)",   "win.show-help")
-        help_sec.append("FAQ",         "win.show-faq")
-        help_sec.append("What's New",  "win.show-changelog")
-        menu.append_section("Help", help_sec)
-        self._recent_sec = Gio.Menu(); menu.append_section("Recent files", self._recent_sec)
+        self._recent_sec = Gio.Menu()
         self._rebuild_recent_menu()
-        hdr.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu", menu_model=menu))
+        self._menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu")
+        hdr.pack_end(self._menu_btn)
+        self._refresh_menu()
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
         self._toast_overlay = Adw.ToastOverlay()
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1296,6 +1363,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._toast_overlay.set_child(paned)
         tv.set_content(self._toast_overlay)
         self.set_content(tv)
+        self._apply_simple_mode()
 
     # ── Palette panel ─────────────────────────────────────────────────────────
 
@@ -2608,7 +2676,10 @@ class MainWindow(Adw.ApplicationWindow):
         yield cur_t,cur_i
 
     def export_bulletin(self):
-        """Export congregational bulletin — prompts for print or digital mode."""
+        """Export congregational bulletin."""
+        if config.simple_mode:
+            self._export_bulletin_html()
+            return
         dlg = Adw.MessageDialog(
             transient_for=self,
             heading="Export Bulletin",
@@ -2624,6 +2695,153 @@ class MainWindow(Adw.ApplicationWindow):
             elif r == "digital": self._export_bulletin_file(digital=True)
         dlg.connect("response", on_resp)
         dlg.present()
+
+    def _export_bulletin_html(self):
+        """Simple-mode bulletin: build HTML and open in browser for printing."""
+        import tempfile, re as _re
+        from datetime import date as _date
+
+        b = config.bulletin
+        church   = b.get("church_name", "")
+        address  = b.get("address", "")
+        svc_time = b.get("service_time", "")
+        website  = b.get("website", "")
+        email    = b.get("email", "")
+        phone    = b.get("phone", "")
+        mission  = b.get("mission", "").strip()
+        welcome  = b.get("welcome", "").strip()
+        access   = b.get("accessibility", "").strip()
+        staff    = b.get("staff", [])
+
+        title    = self.service_title_entry.get_text() or "Order of Service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+
+        today = _date.today()
+        announcements = []
+        for ann in b.get("announcements", []):
+            exp = ann.get("expires", "")
+            if exp:
+                try:
+                    if _date.fromisoformat(exp) < today:
+                        continue
+                except ValueError:
+                    pass
+            text = ann.get("text", "").strip()
+            if text:
+                announcements.append(text)
+
+        def strip_latex(text):
+            text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
+                lambda m: _re.sub(r'\\sverse\{(\d+)\}\{([^}]+)\}',
+                    r'<sup>\1</sup>\2 ', m.group(1).strip()),
+                text, flags=_re.DOTALL)
+            text = _re.sub(r'\\textbf\{([^}]*)\}', r'<strong>\1</strong>', text)
+            text = _re.sub(r'\\textit\{([^}]*)\}', r'<em>\1</em>', text)
+            text = _re.sub(r'\\emph\{([^}]*)\}', r'<em>\1</em>', text)
+            text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
+            text = _re.sub(r'\\[a-zA-Z]+\*?\s*', '', text)
+            return text.strip()
+
+        css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, 'Times New Roman', serif; font-size: 11pt;
+       color: #111; max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }
+.church-name { font-size: 18pt; font-variant: small-caps; letter-spacing: 0.05em;
+               text-align: center; margin-bottom: 4px; }
+.church-sub  { font-size: 9.5pt; text-align: center; color: #444; line-height: 1.6; }
+.title       { font-size: 15pt; font-weight: bold; text-align: center;
+               margin: 18px 0 2px; }
+.date        { font-size: 11pt; font-style: italic; text-align: center;
+               color: #555; margin-bottom: 16px; }
+hr           { border: none; border-top: 1px solid #bbb; margin: 12px 0; }
+h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08em;
+               text-align: center; margin: 16px 0 6px; }
+.el          { margin-bottom: 8px; }
+.el-name     { font-weight: bold; font-size: 10.5pt; }
+.leader      { font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }
+.note        { font-size: 10pt; margin: 2px 0 0 12px; line-height: 1.55; }
+.ann-head    { font-weight: bold; font-variant: small-caps; margin: 4px 0; }
+.ann-item    { font-size: 10pt; margin-bottom: 5px; padding-left: 10px; }
+.back        { margin-top: 20px; font-size: 9.5pt; color: #444; line-height: 1.6; }
+.staff-item  { margin-bottom: 1px; }
+.mission     { font-style: italic; margin-top: 8px; }
+@media print { body { padding: 0; } @page { margin: 0.75in; } }
+"""
+
+        def esc(s):
+            return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+        lines = [
+            "<!DOCTYPE html><html lang='en'>",
+            f"<head><meta charset='utf-8'><title>{esc(church)} – {esc(title)}</title>",
+            f"<style>{css}</style></head><body>",
+        ]
+
+        if church:
+            lines.append(f"<div class='church-name'>{esc(church)}</div>")
+        sub_parts = [p for p in [address, svc_time] if p]
+        if sub_parts:
+            lines.append(f"<div class='church-sub'>{esc(' • '.join(sub_parts))}</div>")
+        contact = [p for p in [website, email, phone] if p]
+        if contact:
+            lines.append(f"<div class='church-sub'>{esc(' • '.join(contact))}</div>")
+        if welcome:
+            lines.append(f"<div class='church-sub' style='margin-top:6px;font-style:italic'>{esc(welcome)}</div>")
+
+        lines.append(f"<div class='title'>{esc(title)}</div>")
+        if date_str:
+            lines.append(f"<div class='date'>{esc(date_str)}</div>")
+        lines.append("<hr>")
+
+        for sec, items in self._grouped_entries():
+            visible = [si for si in items
+                       if isinstance(si, ServiceItem) and si.show_in_bulletin]
+            if not visible and sec is None:
+                continue
+            if sec:
+                lines.append(f"<h2>{esc(sec)}</h2>")
+            for si in visible:
+                leader_html = (f"<span class='leader'>({esc(si.leader)})</span>"
+                               if si.leader else "")
+                lines.append(f"<div class='el'>"
+                             f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
+                if si.note:
+                    clean = strip_latex(si.note)
+                    lines.append(f"<div class='note'>"
+                                 f"{clean.replace(chr(10), '<br>')}</div>")
+                lines.append("</div>")
+
+        if announcements:
+            lines.append("<hr><div class='ann-head'>Announcements</div>")
+            for ann in announcements:
+                lines.append(f"<div class='ann-item'>{esc(ann)}</div>")
+
+        back = []
+        if staff:
+            for m in staff:
+                role = m.get("role", "").strip()
+                name = m.get("name", "").strip()
+                if role or name:
+                    em = m.get("email", "").strip()
+                    em_str = f" &lt;{esc(em)}&gt;" if em else ""
+                    back.append(f"<div class='staff-item'>"
+                                f"<strong>{esc(role)}</strong>: {esc(name)}{em_str}</div>")
+        if mission:
+            back.append(f"<div class='mission'>{esc(mission)}</div>")
+        if access:
+            back.append(f"<div>{esc(access)}</div>")
+        if back:
+            lines.append("<hr><div class='back'>" + "\n".join(back) + "</div>")
+
+        lines.append("</body></html>")
+
+        with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+            f.write("\n".join(lines))
+            tmp = f.name
+
+        Gtk.show_uri(None, GLib.filename_to_uri(tmp, None), 0)
+        self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
     def _export_bulletin_file(self, digital: bool):
         title = self.service_title_entry.get_text() or "bulletin"
