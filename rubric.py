@@ -118,7 +118,7 @@ if not _PACKAGE_OK:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.11"
+APP_VERSION = "0.12"
 
 class Config:
     def __init__(self):
@@ -258,9 +258,9 @@ def _note_for_latex(n):
     return n if any(l.strip().startswith("\\") for l in n.splitlines()) else _latex_escape(n)
 
 
-def _passage_to_latex(reference: str, text: str) -> str:
+def _passage_to_latex(reference: str, text: str, translation: str = "web") -> str:
     r"""
-    Convert WEB verse text to LaTeX inside a {scripture} environment.
+    Convert Bible verse text to LaTeX inside a {scripture} environment.
     The API sometimes splits a single verse across multiple lines;
     we join all lines until the next numbered verse into one \sverse call.
     """
@@ -297,10 +297,11 @@ def _passage_to_latex(reference: str, text: str) -> str:
         latex_lines.append(f"\\sverse{{{vnum}}}{{{_latex_escape(vtext)}}}")
 
     ref_escaped = _latex_escape(reference)
+    trl_label = translation.upper()
     body = "\n".join(latex_lines)
     return (
-        f"% {ref_escaped} (WEB)\n"
-        f"{{\\small\\textit{{{ref_escaped} (WEB)}}}}\n"
+        f"% {ref_escaped} ({trl_label})\n"
+        f"{{\\small\\textit{{{ref_escaped} ({trl_label})}}}}\n"
         f"\\begin{{scripture}}\n"
         f"{body}\n"
         f"\\end{{scripture}}"
@@ -413,7 +414,7 @@ class BibleViewer(Adw.Window):
 
     def _on_insert(self, _):
         if self._on_insert_cb and self._text:
-            latex = _passage_to_latex(self._ref, self._text)
+            latex = _passage_to_latex(self._ref, self._text, self._translation)
             self._on_insert_cb(latex)
         self.close()
 
@@ -749,19 +750,20 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         del_btn = Gtk.Button(icon_name="list-remove-symbolic")
         del_btn.add_css_class("flat")
-        widgets = (role_e, name_e, email_e, box)
+        widgets = [role_e, name_e, email_e, None]  # row filled in below
         del_btn.connect("clicked", lambda _b, w=widgets: self._remove_staff_row(w))
 
         box.append(role_e); box.append(name_e); box.append(email_e); box.append(del_btn)
         row = Adw.ActionRow(); row.set_child(box)
+        widgets[3] = row  # fill in the ActionRow reference
         self._staff_grp.add(row)
         self._bul_staff_widgets.append((role_e, name_e, email_e, row))
 
     def _remove_staff_row(self, widgets):
-        role_e, name_e, email_e, box = widgets
+        role_e, name_e, email_e, row = widgets
         self._bul_staff_widgets = [w for w in self._bul_staff_widgets if w[0] is not role_e]
-        # Remove from group — mark as invisible (can't easily remove from PreferencesGroup)
-        box.get_parent().set_visible(False)
+        if row:
+            row.set_visible(False)
 
     def _add_announcement_row(self, text, expires):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -2082,7 +2084,7 @@ class MainWindow(Adw.ApplicationWindow):
             if not isinstance(entry, ServiceItem): return
             entry.note = (hymn_line+"\n"+entry.note if entry.note else hymn_line)
             self._updating_note = True; self.notes_view.get_buffer().set_text(entry.note,-1); self._updating_note = False
-            row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
+            row = self._find_row_for_index(idx)
             if isinstance(row, Adw.ActionRow): row.set_subtitle(self._note_preview(entry.note))
             self._mark_modified()
         lookup_hymn(prefix, number, on_result)
@@ -2108,6 +2110,23 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Notes ─────────────────────────────────────────────────────────────────
 
+    def _find_row_for_index(self, idx: int):
+        """Return the UI row widget for a given entry index, in either flat or tab view."""
+        if not config.use_tabs:
+            return self.order_listbox.get_row_at_index(idx)
+        entry = self.service_entries[idx] if 0 <= idx < len(self.service_entries) else None
+        if entry is None:
+            return None
+        for _div, lb in self._tab_listboxes:
+            i = 0
+            while True:
+                r = lb.get_row_at_index(i)
+                if r is None: break
+                if hasattr(r, "_entry") and r._entry is entry:
+                    return r
+                i += 1
+        return None
+
     def _note_preview(self, note: str) -> str:
         if not note: return ""
         first_line = note.strip().split('\n')[0].strip()
@@ -2124,8 +2143,7 @@ class MainWindow(Adw.ApplicationWindow):
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
         s, e = buf.get_bounds(); entry.note = buf.get_text(s, e, False)
-        # Update subtitle preview on the active row
-        row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
+        row = self._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
             row.set_subtitle(self._note_preview(entry.note))
         self._mark_modified()
@@ -2612,6 +2630,9 @@ class MainWindow(Adw.ApplicationWindow):
             with open(path,"w",encoding="utf-8") as f: json.dump(self._service_data(),f,indent=2,ensure_ascii=False)
             self.modified=False; self._update_title(); self._clear_autosave()
             config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
+            if getattr(self, "_close_after_save", False):
+                self._close_after_save = False
+                self.destroy()
         except Exception as e: self._error("Error saving",str(e))
 
     # ── Recent files ──────────────────────────────────────────────────────────
@@ -3240,26 +3261,32 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
     }
     """
 
+        def _esc_title(s: str) -> str:
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
         lines = [
             "<!DOCTYPE html>",
             "<html lang='en'><head><meta charset='utf-8'>",
-            f"<title>{title}</title>",
+            f"<title>{_esc_title(title)}</title>",
             f"<style>{css}</style>",
             "</head><body>",
-            f"<h1>{title}</h1>",
+            f"<h1>{_esc_title(title)}</h1>",
         ]
         if date_str:
             lines.append(f"<p class='date'>{date_str}</p>")
+
+        def _esc(s: str) -> str:
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         for sec, items in self._grouped_entries():
             if not items and sec is None:
                 continue
             if sec:
-                lines.append(f"<h2>{sec}</h2>")
+                lines.append(f"<h2>{_esc(sec)}</h2>")
             for si in items:
-                leader_html = f"<span class='leader'>({si.leader})</span>" if si.leader else ""
+                leader_html = f"<span class='leader'>({_esc(si.leader)})</span>" if si.leader else ""
                 lines.append(f"<div class='element'>")
-                lines.append(f"<div class='element-name'>{si.name}{leader_html}</div>")
+                lines.append(f"<div class='element-name'>{_esc(si.name)}{leader_html}</div>")
                 if si.note:
                     note = si.note
                     note_html = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
@@ -3646,8 +3673,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 self._updating_note = True
                 self.notes_view.get_buffer().set_text(entry.note, -1)
                 self._updating_note = False
-                # Update row subtitle preview
-                row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
+                row = self._find_row_for_index(idx)
                 if isinstance(row, Adw.ActionRow):
                     row.set_subtitle(self._note_preview(entry.note))
                 self._mark_modified()
@@ -3738,7 +3764,6 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         latex_lines = [
             "% Responsive reading",
             "\\begin{verse}",
-            "\\textbf{Leader:}\\\\",
         ]
         auto_leader = True  # alternating mode when no prefix
         for line in lines:
@@ -3966,14 +3991,20 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                         self._show_toast(f"✓ {out[:80]}", timeout=5)
                 GLib.idle_add(on_done)
             except subprocess.TimeoutExpired:
-                GLib.idle_add(lambda: (pull_toast.dismiss(),
-                              self._show_toast("Pull timed out.", timeout=6)))
+                def _on_timeout():
+                    pull_toast.dismiss()
+                    self._show_toast("Pull timed out.", timeout=6)
+                GLib.idle_add(_on_timeout)
             except FileNotFoundError:
-                GLib.idle_add(lambda: (pull_toast.dismiss(),
-                              self._error("git not found", "Install git: sudo zypper install git")))
+                def _on_no_git():
+                    pull_toast.dismiss()
+                    self._error("git not found", "Install git: sudo zypper install git")
+                GLib.idle_add(_on_no_git)
             except Exception as e:
-                GLib.idle_add(lambda: (pull_toast.dismiss(),
-                              self._error("Pull error", str(e))))
+                def _on_pull_err(msg=str(e)):
+                    pull_toast.dismiss()
+                    self._error("Pull error", msg)
+                GLib.idle_add(_on_pull_err)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -4059,6 +4090,9 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 buf.insert_with_tags_by_name(it, "  • " + m.group(1) + "\n", "bullet")
                 continue
 
+            # Table separator rows (|---|---|) — skip
+            if re.match(r'^\|[-| :]+\|$', line):
+                continue
             # Table rows — render as monospaced
             if line.startswith("|"):
                 buf.insert_with_tags_by_name(it, line + "\n", "code")
@@ -4101,7 +4135,13 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         dlg.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
         dlg.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE); dlg.set_default_response("save")
         def on_resp(d,r):
-            if r=="save": self.save_file(); self.destroy()
+            if r=="save":
+                if self.current_file:
+                    self.save_file(); self.destroy()
+                else:
+                    # save_file_as opens an async dialog; let _write do the destroy
+                    self._close_after_save = True
+                    self.save_file_as()
             elif r=="discard": self.destroy()
         dlg.connect("response", on_resp); dlg.present(); return True
 

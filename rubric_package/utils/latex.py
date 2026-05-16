@@ -37,16 +37,17 @@ def note_for_latex(note: str) -> str:
     return latex_escape(note)
 
 
-def passage_to_latex(reference: str, text: str) -> str:
+def passage_to_latex(reference: str, text: str, translation: str = "web") -> str:
     r"""
-    Convert WEB verse text to LaTeX inside a {scripture} environment.
+    Convert Bible verse text to LaTeX inside a {scripture} environment.
 
     The API sometimes splits a single verse across multiple lines;
     we join all lines until the next numbered verse into one \sverse call.
 
     Args:
         reference: Bible reference (e.g., "John 3:16")
-        text: Verse text from WEB API
+        text: Verse text from the Bible API
+        translation: Translation key (web, kjv, asv, esv) — used for attribution
 
     Returns:
         LaTeX code for the scripture environment
@@ -84,10 +85,11 @@ def passage_to_latex(reference: str, text: str) -> str:
         latex_lines.append(f"\\sverse{{{vnum}}}{{{latex_escape(vtext)}}}")
 
     ref_escaped = latex_escape(reference)
+    trl_label = translation.upper()
     body = "\n".join(latex_lines)
     return (
-        f"% {ref_escaped} (WEB)\n"
-        f"{{\\small\\textit{{{ref_escaped} (WEB)}}}}\n"
+        f"% {ref_escaped} ({trl_label})\n"
+        f"{{\\small\\textit{{{ref_escaped} ({trl_label})}}}}\n"
         f"\\begin{{scripture}}\n"
         f"{body}\n"
         f"\\end{{scripture}}"
