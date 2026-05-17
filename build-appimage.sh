@@ -51,6 +51,6 @@ else
     exit 1
 fi
 
-"$APPIMAGETOOL" "$APPDIR" "$OUTPUT"
+APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGETOOL" "$APPDIR" "$OUTPUT"
 echo ""
 echo "Done: $OUTPUT"
