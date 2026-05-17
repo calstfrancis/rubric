@@ -4121,7 +4121,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         about.set_application_icon("io.github.calstfrancis.rubric")
         about.set_version(APP_VERSION)
         about.set_comments("Worship service planning with RCL integration\nfor United Church of Canada ministry.")
-        about.set_developer_name("Caleb St. Francis")
+        about.set_developers(["Cal St Francis https://calstfrancis.github.io"])
         about.set_license_type(Gtk.License.GPL_3_0)
         about.set_website("https://github.com/calstfrancis/rubric")
         about.set_issue_url("https://github.com/calstfrancis/rubric/issues")
