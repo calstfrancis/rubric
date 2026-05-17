@@ -45,7 +45,7 @@ fi
 # ── Pack squashfs + prepend runtime ───────────────────────────────────────────
 echo "Packing squashfs..."
 SQUASHFS="$(mktemp /tmp/rubric-XXXXXX.squashfs)"
-mksquashfs "$APPDIR" "$SQUASHFS" -root-owned -noappend -comp zstd -quiet
+mksquashfs "$APPDIR" "$SQUASHFS" -root-owned -noappend -comp xz -quiet
 
 echo "Assembling AppImage..."
 cat "$RUNTIME" "$SQUASHFS" > "$OUTPUT"
