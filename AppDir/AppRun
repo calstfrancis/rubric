@@ -1,20 +1,19 @@
 #!/bin/sh
 # Rubric AppImage launcher
-SELF="$(readlink -f "$0")"
-HERE="$(dirname "$SELF")"
+# $APPDIR is set by the AppImage runtime to the squashfs mount point.
+HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 
-# Check for Python 3
-if ! command -v python3 >/dev/null 2>&1; then
-    zenity --error --text="Rubric requires Python 3, which was not found on your system." 2>/dev/null \
-        || echo "Rubric requires Python 3." >&2
+_error() {
+    notify-send -a "Rubric" -i dialog-error "Rubric failed to start" "$1" 2>/dev/null \
+        || zenity --error --title="Rubric" --text="$1" 2>/dev/null \
+        || echo "Rubric: $1" >&2
     exit 1
-fi
+}
 
-# Check for GTK4 + libadwaita bindings
-if ! python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1')" 2>/dev/null; then
-    zenity --error --text="Rubric requires GTK4 and libadwaita Python bindings (python3-gobject, typelib-1_0-Adw-1)." 2>/dev/null \
-        || echo "Rubric requires GTK4 and libadwaita Python bindings." >&2
-    exit 1
-fi
+command -v python3 >/dev/null 2>&1 \
+    || _error "Python 3 was not found. Install python3 and try again."
+
+python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1')" 2>/dev/null \
+    || _error "GTK4 and libadwaita Python bindings are required.\nInstall: sudo zypper install python3-gobject typelib-1_0-Adw-1"
 
 exec python3 "$HERE/usr/share/rubric/rubric.py" "$@"
