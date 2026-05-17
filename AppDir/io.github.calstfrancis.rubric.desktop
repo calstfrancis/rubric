@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Rubric
+GenericName=Worship Service Planner
+Comment=Plan worship service orders with RCL readings
+Exec=rubric %f
+Icon=io.github.calstfrancis.rubric
+Terminal=false
+Type=Application
+Categories=Office;Education;
+Keywords=worship;liturgy;service;church;UCC;lectionary;RCL;
+StartupNotify=true
+StartupWMClass=rubric
+MimeType=application/x-liturgy;
