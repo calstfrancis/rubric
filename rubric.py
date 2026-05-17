@@ -1175,13 +1175,7 @@ class MainWindow(Adw.ApplicationWindow):
         menu.append("Save as…", "win.save-as")
 
         export_sec = Gio.Menu()
-        if not simple:
-            export_sec.append("Export LaTeX…", "win.export-latex")
-        export_sec.append("Export plain text…", "win.export-text")
-        if not simple:
-            export_sec.append("Export CSV…", "win.export-csv")
-        export_sec.append("Export Bulletin…", "win.export-bulletin")
-        export_sec.append("Export HTML (print from browser)…", "win.export-html")
+        export_sec.append("Export as…", "win.export-as")
         menu.append_section("Export", export_sec)
 
         menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
@@ -1202,6 +1196,7 @@ class MainWindow(Adw.ApplicationWindow):
         help_sec.append("Help (F1)", "win.show-help")
         help_sec.append("FAQ", "win.show-faq")
         help_sec.append("What's New", "win.show-changelog")
+        help_sec.append("About Rubric", "win.show-about")
         menu.append_section("Help", help_sec)
         menu.append_section("Recent files", self._recent_sec)
 
@@ -1245,6 +1240,8 @@ class MainWindow(Adw.ApplicationWindow):
             ("show-help",          lambda: self._show_doc("HELP"),      "F1"),
             ("show-faq",           lambda: self._show_doc("FAQ"),       None),
             ("show-changelog",     lambda: self._show_doc("CHANGELOG"), None),
+            ("show-about",         self.show_about,                     None),
+            ("export-as",          self.export_as,                      None),
         ]:
             a = Gio.SimpleAction.new(name, None)
             a.connect("activate", lambda _a,_p,f=cb: f()); self.add_action(a)
@@ -4117,6 +4114,43 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         tv.set_content(scroll)
         win.set_content(tv)
         win.present()
+
+    def show_about(self):
+        about = Adw.AboutWindow(transient_for=self)
+        about.set_application_name("Rubric")
+        about.set_application_icon("io.github.calstfrancis.rubric")
+        about.set_version(APP_VERSION)
+        about.set_comments("Worship service planning with RCL integration\nfor United Church of Canada ministry.")
+        about.set_developer_name("Caleb St. Francis")
+        about.set_license_type(Gtk.License.GPL_3_0)
+        about.set_website("https://github.com/calstfrancis/rubric")
+        about.set_issue_url("https://github.com/calstfrancis/rubric/issues")
+        about.present()
+
+    def export_as(self):
+        simple = config.simple_mode
+        dlg = Adw.MessageDialog(
+            transient_for=self,
+            heading="Export as…",
+            body="Choose a format to export to:"
+        )
+        dlg.add_response("cancel",   "Cancel")
+        dlg.add_response("html",     "HTML  (print from browser)")
+        dlg.add_response("bulletin", "Bulletin")
+        if not simple:
+            dlg.add_response("latex", "LaTeX")
+            dlg.add_response("text",  "Plain text")
+            dlg.add_response("csv",   "CSV")
+        dlg.set_response_appearance("html",     Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("bulletin", Adw.ResponseAppearance.SUGGESTED)
+        def on_resp(d, r):
+            if r == "html":     self.export_html()
+            elif r == "bulletin": self.export_bulletin()
+            elif r == "latex":  self.export_latex()
+            elif r == "text":   self.export_text()
+            elif r == "csv":    self.export_csv()
+        dlg.connect("response", on_resp)
+        dlg.present()
 
     def open_preferences(self):
         prefs = PreferencesWindow(transient_for=self, modal=True)

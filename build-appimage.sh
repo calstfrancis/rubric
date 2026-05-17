@@ -19,6 +19,9 @@ mkdir -p "$DEST"
 cp rubric.py bible_api.py hymn_lookup.py hymn_suggestions.py rcl_data.py snippets.py "$DEST/"
 cp -r data "$DEST/"
 cp -r rubric_package "$DEST/"
+for f in HELP.md FAQ.md CHANGELOG.md; do
+    [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$DEST/"
+done
 
 # Desktop file (AppImage spec requires one at root and in usr/share/applications)
 cp io.github.calstfrancis.rubric.desktop "$APPDIR/"
