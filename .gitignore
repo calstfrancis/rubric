@@ -21,13 +21,19 @@ __pycache__/
 hymn_cache.json
 autosave.liturgy
 
-# Editor
+# Editor / tools
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+.claude/
+rubric_redesign_mockup.html
+
+# Flatpak leftovers
+.flatpak-build/
+.flatpak-builder/
 
 # Backup files created during development
 *.bak*
