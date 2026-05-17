@@ -1,6 +1,5 @@
 #!/bin/sh
-# Rubric AppImage launcher
-# $APPDIR is set by the AppImage runtime to the squashfs mount point.
+# Rubric launcher — runs from extracted payload directory
 HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 
 _error() {
