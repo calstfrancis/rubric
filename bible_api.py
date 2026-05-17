@@ -15,9 +15,16 @@ import urllib.parse
 import json
 import re
 
-import gi
-gi.require_version("GLib", "2.0")
-from gi.repository import GLib
+try:
+    import gi
+    gi.require_version("GLib", "2.0")
+    from gi.repository import GLib as _GLib
+
+    def _idle_add(fn, *args):
+        _GLib.idle_add(fn, *args)
+except (ImportError, ValueError):
+    def _idle_add(fn, *args):
+        fn(*args)
 
 ESV_API = "https://api.esv.org/v3/passage/text/"
 
@@ -120,7 +127,7 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
                 data = json.loads(resp.read().decode("utf-8"))
 
             if "error" in data:
-                GLib.idle_add(callback, None, data["error"]); return
+                _idle_add(callback, None, data["error"]); return
 
             verses = data.get("verses", [])
             if verses:
@@ -130,14 +137,14 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
                 passage = data.get("text", "").strip()
 
             if not passage:
-                GLib.idle_add(callback, None, "No text returned"); return
-            GLib.idle_add(callback, passage, None)
+                _idle_add(callback, None, "No text returned"); return
+            _idle_add(callback, passage, None)
 
         except urllib.error.HTTPError as e:
-            GLib.idle_add(callback, None, f"HTTP error {e.code}" if e.code != 404
+            _idle_add(callback, None, f"HTTP error {e.code}" if e.code != 404
                           else f"Passage not found: {cleaned}")
         except Exception as e:
-            GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
+            _idle_add(callback, None, f"Network error: {type(e).__name__}")
 
     threading.Thread(target=fetch, daemon=True).start()
 
@@ -163,16 +170,16 @@ def _fetch_esv(reference: str, callback, key: str):
             data = json.loads(resp.read().decode("utf-8"))
         passages = data.get("passages", [])
         if not passages:
-            GLib.idle_add(callback, None, "No text returned for this reference"); return
+            _idle_add(callback, None, "No text returned for this reference"); return
         text = passages[0].strip()
         # Format into verse-per-line using [1] [2] markers
         text = re.sub(r'\[(\d+)\]', lambda m: f"\n{m.group(1)} ", text)
         text = re.sub(r'\n+', '\n', text).strip()
-        GLib.idle_add(callback, text, None)
+        _idle_add(callback, text, None)
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            GLib.idle_add(callback, None, "Invalid ESV API key — check Preferences → Scripture")
+            _idle_add(callback, None, "Invalid ESV API key — check Preferences → Scripture")
         else:
-            GLib.idle_add(callback, None, f"ESV API error {e.code}")
+            _idle_add(callback, None, f"ESV API error {e.code}")
     except Exception as e:
-        GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
+        _idle_add(callback, None, f"Network error: {type(e).__name__}")
