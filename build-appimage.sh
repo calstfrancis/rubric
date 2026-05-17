@@ -1,9 +1,5 @@
 #!/bin/bash
 # Build Rubric.AppImage
-# Requires: appimagetool (download from https://github.com/AppImage/appimagetool/releases)
-#
-#   wget -O appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-#   chmod +x appimagetool
 
 set -e
 
@@ -43,15 +39,17 @@ echo "AppDir ready. Running appimagetool..."
 
 OUTPUT="Rubric-$VERSION-x86_64.AppImage"
 
+APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+
 if command -v appimagetool >/dev/null 2>&1; then
     APPIMAGETOOL="appimagetool"
 elif [ -f "$SCRIPT_DIR/appimagetool" ]; then
     APPIMAGETOOL="$SCRIPT_DIR/appimagetool"
 else
-    echo "appimagetool not found. Download it:"
-    echo "  wget -O appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
-    echo "  chmod +x appimagetool"
-    exit 1
+    echo "appimagetool not found — downloading..."
+    wget -q --show-progress -O "$SCRIPT_DIR/appimagetool" "$APPIMAGETOOL_URL"
+    chmod +x "$SCRIPT_DIR/appimagetool"
+    APPIMAGETOOL="$SCRIPT_DIR/appimagetool"
 fi
 
 APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGETOOL" "$APPDIR" "$OUTPUT"
