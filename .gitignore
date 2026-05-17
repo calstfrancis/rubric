@@ -36,3 +36,8 @@ autosave.liturgy
 dist/
 build/
 .aider*
+
+# AppImage build output
+*.AppImage
+appimagetool
+AppDir/usr/

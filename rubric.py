@@ -4,7 +4,7 @@ Rubric — GTK4 + libadwaita worship service order builder
 Requires: sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0
 """
 
-import sys, os, json, re, subprocess, shutil, threading
+import sys, json, re, subprocess, shutil, threading
 from pathlib import Path
 
 import gi
@@ -13,15 +13,6 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, Gio, GLib, GObject, Gdk
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-# When running inside a Flatpak sandbox, route git through flatpak-spawn
-# so the host's git binary and credentials are used transparently.
-_IN_FLATPAK = bool(os.environ.get("FLATPAK_ID"))
-
-def _git(*args) -> list[str]:
-    """Return a git command list, prefixed with flatpak-spawn --host when sandboxed."""
-    cmd = list(args)
-    return ["flatpak-spawn", "--host"] + cmd if _IN_FLATPAK else cmd
 from rcl_data import get_liturgical_info
 
 # Import from refactored package
@@ -984,7 +975,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             return ""
         try:
             r = subprocess.run(
-                _git("git", "-C", repo, "remote", "get-url", "origin"),
+                ["git", "-C", repo, "remote", "get-url", "origin"],
                 capture_output=True, text=True, timeout=5
             )
             return r.stdout.strip() if r.returncode == 0 else ""
@@ -1033,7 +1024,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 errors.append(str(e))
 
         try:
-            r = subprocess.run(_git("git", "-C", repo, "init"),
+            r = subprocess.run(["git", "-C", repo, "init"],
                                capture_output=True, text=True, timeout=10)
             if r.returncode != 0:
                 errors.append(r.stderr.strip())
@@ -1066,11 +1057,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 body="Paste your GitHub repository URL in the field above.")
             dlg.add_response("ok", "OK"); dlg.present(); return
         try:
-            check = subprocess.run(_git("git", "-C", repo, "remote", "get-url", "origin"),
+            check = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"],
                                    capture_output=True, text=True, timeout=5)
-            cmd = _git("git", "-C", repo, "remote",
-                       "set-url" if check.returncode == 0 else "add",
-                       "origin", url)
+            cmd = ["git", "-C", repo, "remote",
+                   "set-url" if check.returncode == 0 else "add",
+                   "origin", url]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except Exception as e:
             dlg = Adw.MessageDialog(transient_for=self, heading="Error", body=str(e))
@@ -1102,7 +1093,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         def run():
             try:
-                r = subprocess.run(_git("git", "-C", repo, "pull"),
+                r = subprocess.run(["git", "-C", repo, "pull"],
                                    capture_output=True, text=True, timeout=60)
                 def on_done():
                     progress.destroy()
@@ -3918,31 +3909,31 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                     self._show_toast(heading, timeout=6)
 
             try:
-                add_r = subprocess.run(_git("git", "-C", repo, "add", "-A"),
+                add_r = subprocess.run(["git", "-C", repo, "add", "-A"],
                                        capture_output=True, text=True, timeout=10)
                 if add_r.returncode != 0:
                     GLib.idle_add(abort, "Push failed",
                                   add_r.stderr.strip() or "git add failed")
                     return
 
-                status_r = subprocess.run(_git("git", "-C", repo, "status", "--porcelain"),
+                status_r = subprocess.run(["git", "-C", repo, "status", "--porcelain"],
                                           capture_output=True, text=True, timeout=5)
                 if status_r.stdout.strip():
-                    commit_r = subprocess.run(_git("git", "-C", repo, "commit", "-m", msg),
+                    commit_r = subprocess.run(["git", "-C", repo, "commit", "-m", msg],
                                               capture_output=True, text=True, timeout=15)
                     if commit_r.returncode != 0:
                         out = (commit_r.stderr or commit_r.stdout or "").strip()
                         GLib.idle_add(abort, "Push failed (commit)", out)
                         return
 
-                push_r = subprocess.run(_git("git", "-C", repo, "push"),
+                push_r = subprocess.run(["git", "-C", repo, "push"],
                                         capture_output=True, text=True, timeout=30)
                 if push_r.returncode != 0:
                     err_low = (push_r.stderr or "").lower()
                     if "no upstream" in err_low or "set-upstream" in err_low or \
                        "set the upstream" in err_low:
                         push_r = subprocess.run(
-                            _git("git", "-C", repo, "push", "--set-upstream", "origin", "HEAD"),
+                            ["git", "-C", repo, "push", "--set-upstream", "origin", "HEAD"],
                             capture_output=True, text=True, timeout=30
                         )
 
@@ -3988,7 +3979,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
 
         def run():
             try:
-                r = subprocess.run(_git("git", "-C", repo, "pull"),
+                r = subprocess.run(["git", "-C", repo, "pull"],
                                    capture_output=True, text=True, timeout=60)
                 def on_done():
                     pull_toast.dismiss()
