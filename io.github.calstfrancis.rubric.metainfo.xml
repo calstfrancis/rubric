@@ -10,19 +10,22 @@
   <description>
     <p>
       Rubric is a GNOME-native worship service planning tool for United Church
-      of Canada ministry. Plan service orders, look up lectionary readings,
-      find hymns from Voices United, More Voices, and Let Us Sing, fetch Bible
-      passages, and export polished bulletins to LaTeX and PDF.
+      of Canada ministry. Simple mode keeps things focused: plan service orders,
+      look up RCL readings, find hymns, fetch Bible passages, and export HTML
+      bulletins — no LaTeX required. Advanced mode adds PDF compilation,
+      LaTeX export, snippets, and a responsive reading builder.
     </p>
     <p>Features include:</p>
     <ul>
-      <li>Revised Common Lectionary readings, liturgical colour, and hymn suggestions for any Sunday</li>
-      <li>Hymn lookup and suggestions from Voices United, More Voices, and Let Us Sing</li>
-      <li>Bible passage viewer using the World English Bible (public domain)</li>
-      <li>LaTeX export with two-column layout, scripture environment, and Junicode font</li>
-      <li>One-click PDF compilation via xelatex</li>
-      <li>Snippets library with reusable liturgical texts</li>
-      <li>Responsive reading builder</li>
+      <li>Revised Common Lectionary readings, liturgical colour, and per-Proper hymn suggestions</li>
+      <li>Hymn lookup from Voices United, More Voices, and Let Us Sing via Hymnary.org</li>
+      <li>Bible passage viewer (WEB, KJV, ASV, ESV) with one-click scripture insertion</li>
+      <li>HTML bulletin export — print to PDF directly from your browser</li>
+      <li>Service Planner to browse and open all your saved services</li>
+      <li>GitHub sync to back up and share services across machines</li>
+      <li>LaTeX export with two-column layout and scripture environment (advanced mode)</li>
+      <li>One-click PDF compilation via xelatex (advanced mode)</li>
+      <li>Snippets library and responsive reading builder (advanced mode)</li>
       <li>Named service order templates</li>
     </ul>
   </description>
@@ -39,6 +42,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.12" date="2026-05-16">
+      <description>
+        <p>Simple mode (HTML-only workflow, no LaTeX required), Service Planner, GitHub sync, redo support, translation selector (WEB/KJV/ASV/ESV), and HTML bulletin export.</p>
+      </description>
+    </release>
     <release version="0.11" date="2026-04-24">
       <description>
         <p>Lectionary year tracker, per-Proper hymn suggestions, inline Hymnary preview, welcome dialog, and app renamed to Rubric.</p>
