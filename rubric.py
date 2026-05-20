@@ -1198,6 +1198,7 @@ class MainWindow(Adw.ApplicationWindow):
         help_sec.append("Help (F1)", "win.show-help")
         help_sec.append("FAQ", "win.show-faq")
         help_sec.append("What's New", "win.show-changelog")
+        help_sec.append("Welcome wizard…", "win.show-wizard")
         help_sec.append("About Rubric", "win.show-about")
         menu.append_section("Help", help_sec)
         menu.append_section("Recent files", self._recent_sec)
@@ -1239,10 +1240,11 @@ class MainWindow(Adw.ApplicationWindow):
             ("open-planner",       self.open_planner,           "<Ctrl><Shift>l"),
             ("git-push",           self.git_push,               "<Ctrl><Shift>g"),
             ("git-pull",           self.git_pull,               None),
-            ("show-help",          lambda: self._show_doc("HELP"),      "F1"),
-            ("show-faq",           lambda: self._show_doc("FAQ"),       None),
-            ("show-changelog",     lambda: self._show_doc("CHANGELOG"), None),
-            ("show-about",         self.show_about,                     None),
+            ("show-help",          lambda: self._show_doc("HELP"),       "F1"),
+            ("show-faq",           lambda: self._show_doc("FAQ"),        None),
+            ("show-changelog",     lambda: self._show_doc("CHANGELOG"),  None),
+            ("show-wizard",        self._show_first_launch_wizard,       None),
+            ("show-about",         self.show_about,                      None),
             ("export-as",          self.export_as,                      None),
         ]:
             a = Gio.SimpleAction.new(name, None)
