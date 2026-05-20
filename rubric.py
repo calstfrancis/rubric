@@ -134,7 +134,10 @@ class Config:
         self.github_repo        : str = ""
         self.bible_translation  : str = "web"
         self.bible_api_key_esv  : str = ""
-        self.simple_mode        : bool = True
+        self.simple_mode            : bool = True
+        self.first_launch_completed : bool = False
+        self.quickstart_dismissed   : bool = False
+        self.recently_used          : list[str] = []
         self._load()
 
     # backward-compat: old "template_items" key becomes template named "Default"
@@ -174,7 +177,10 @@ class Config:
                 self.templates        = d.get("templates",        {})
                 self.bible_translation = d.get("bible_translation", "web")
                 self.bible_api_key_esv = d.get("bible_api_key_esv", "")
-                self.simple_mode       = d.get("simple_mode", True)
+                self.simple_mode             = d.get("simple_mode", True)
+                self.first_launch_completed  = d.get("first_launch_completed", False)
+                self.quickstart_dismissed    = d.get("quickstart_dismissed", False)
+                self.recently_used           = d.get("recently_used", [])
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -201,7 +207,10 @@ class Config:
             "github_repo":        self.github_repo,
             "bible_translation":  self.bible_translation,
             "bible_api_key_esv":  self.bible_api_key_esv,
-            "simple_mode":        self.simple_mode,
+            "simple_mode":            self.simple_mode,
+            "first_launch_completed": self.first_launch_completed,
+            "quickstart_dismissed":   self.quickstart_dismissed,
+            "recently_used":          self.recently_used,
         }
         if self.palette is not None: p["palette"] = self.palette
         CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -1396,26 +1405,65 @@ class MainWindow(Adw.ApplicationWindow):
         self._palette_search = Gtk.SearchEntry()
         self._palette_search.set_placeholder_text("Search elements…")
         self._palette_search.set_margin_start(12); self._palette_search.set_margin_end(12)
-        self._palette_search.set_margin_top(8); self._palette_search.set_margin_bottom(4)
+        self._palette_search.set_margin_top(8); self._palette_search.set_margin_bottom(2)
         self._palette_search.connect("search-changed", self._on_palette_search_changed)
         box.append(self._palette_search)
+
+        # Hymn cache indicator
+        cache_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        cache_bar.set_margin_start(12); cache_bar.set_margin_end(12)
+        cache_bar.set_margin_bottom(4)
+        try:
+            from rubric_package.db import hymn_count as _hcount
+            _n = _hcount()
+        except Exception:
+            _n = 0
+        self._hymn_cache_lbl = Gtk.Label(label=f"📚 {_n} hymns cached")
+        self._hymn_cache_lbl.add_css_class("caption")
+        self._hymn_cache_lbl.add_css_class("dim-label")
+        self._hymn_cache_lbl.set_hexpand(True); self._hymn_cache_lbl.set_xalign(0)
+        cache_bar.append(self._hymn_cache_lbl)
+        clear_btn = Gtk.Button(label="Clear")
+        clear_btn.add_css_class("flat"); clear_btn.add_css_class("caption")
+        clear_btn.connect("clicked", self._on_hymn_cache_clear)
+        cache_bar.append(clear_btn)
+        box.append(cache_bar)
+
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
         self._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._palette_inner.set_margin_top(4); self._palette_inner.set_margin_bottom(8)
-        self._palette_listboxes: dict[str,Gtk.ListBox] = {}; self._fill_palette_inner()
+        self._palette_listboxes: dict[str,Gtk.ListBox] = {}
+        self._palette_expanders: list[Gtk.Expander] = []
+        self._fill_palette_inner()
         scroll.set_child(self._palette_inner); box.append(scroll)
         return box
 
+    def _on_hymn_cache_clear(self, _btn):
+        try:
+            from rubric_package.db import hymn_clear, hymn_count as _hcount
+            hymn_clear()
+            self._hymn_cache_lbl.set_label(f"📚 {_hcount()} hymns cached")
+        except Exception:
+            pass
+
     def _on_palette_search_changed(self, entry):
         text = entry.get_text().lower().strip()
+        if text:
+            for exp in self._palette_expanders:
+                exp.set_expanded(True)
         for lb in self._palette_listboxes.values():
             if text:
-                def make_filter(t):
-                    return lambda row: hasattr(row, '_item_name') and t in row._item_name.lower()
-                lb.set_filter_func(make_filter(text))
+                lb.set_filter_func(
+                    lambda row, t=text: hasattr(row, '_item_name') and t in row._item_name.lower())
             else:
                 lb.set_filter_func(None)
             lb.invalidate_filter()
+
+    def _section_for_item(self, name: str) -> str:
+        for sname, items in get_palette():
+            if name in items:
+                return sname
+        return ""
 
     def _fill_palette_inner(self):
         while True:
@@ -1423,17 +1471,55 @@ class MainWindow(Adw.ApplicationWindow):
             if c is None: break
             self._palette_inner.remove(c)
         self._palette_listboxes.clear()
-        for sname, items in get_palette():
-            lbl = Gtk.Label(label=sname); lbl.add_css_class("heading"); lbl.set_xalign(0)
-            lbl.set_margin_start(12); lbl.set_margin_end(12); lbl.set_margin_top(12); lbl.set_margin_bottom(4)
-            self._palette_inner.append(lbl)
+        self._palette_expanders.clear()
+
+        # Recently used section
+        if config.recently_used:
+            rec_lbl = Gtk.Label(label="Recent")
+            rec_lbl.add_css_class("caption"); rec_lbl.add_css_class("dim-label")
+            rec_lbl.set_xalign(0)
+            rec_lbl.set_margin_start(12); rec_lbl.set_margin_end(12)
+            rec_lbl.set_margin_top(8); rec_lbl.set_margin_bottom(2)
+            self._palette_inner.append(rec_lbl)
+            rec_lb = Gtk.ListBox(); rec_lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+            rec_lb.add_css_class("boxed-list")
+            rec_lb.set_margin_start(12); rec_lb.set_margin_end(12); rec_lb.set_margin_bottom(4)
+            rec_lb.connect("row-activated", self._on_palette_row_activated)
+            for rname in config.recently_used[:6]:
+                row = Adw.ActionRow(title=rname); row.set_activatable(True)
+                row._item_name = rname; row._section_name = self._section_for_item(rname)
+                rec_lb.append(row)
+            self._palette_inner.append(rec_lb)
+            self._palette_listboxes["__recent__"] = rec_lb
+            self._palette_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Sections with expanders (first expanded, rest collapsed)
+        for i, (sname, items) in enumerate(get_palette()):
+            exp = Gtk.Expander(label=sname)
+            exp.set_margin_start(12); exp.set_margin_end(12)
+            exp.set_margin_top(8); exp.set_margin_bottom(2)
+            exp.set_expanded(i == 0)
             lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            lb.add_css_class("boxed-list"); lb.set_margin_start(12); lb.set_margin_end(12); lb.set_margin_bottom(4)
+            lb.add_css_class("boxed-list"); lb.set_margin_bottom(4)
             lb.connect("row-activated", self._on_palette_row_activated)
             for iname in items:
                 row = Adw.ActionRow(title=iname); row.set_activatable(True)
-                row._item_name=iname; row._section_name=sname; lb.append(row)
-            self._palette_inner.append(lb); self._palette_listboxes[sname] = lb
+                row._item_name = iname; row._section_name = sname; lb.append(row)
+            exp.set_child(lb)
+            self._palette_inner.append(exp)
+            self._palette_listboxes[sname] = lb
+            self._palette_expanders.append(exp)
+
+    def _refresh_recently_used(self):
+        lb = self._palette_listboxes.get("__recent__")
+        if lb is None:
+            self._fill_palette_inner(); return
+        while lb.get_first_child():
+            lb.remove(lb.get_first_child())
+        for rname in config.recently_used[:6]:
+            row = Adw.ActionRow(title=rname); row.set_activatable(True)
+            row._item_name = rname; row._section_name = self._section_for_item(rname)
+            lb.append(row)
 
     # ── Order panel ───────────────────────────────────────────────────────────
 
@@ -1996,7 +2082,19 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Palette actions ───────────────────────────────────────────────────────
 
-    def _on_palette_row_activated(self, _lb, row): self._push_undo(); self._add_entry(ServiceItem(row._item_name, row._section_name))
+    def _on_palette_row_activated(self, _lb, row):
+        self._push_undo(); self._add_entry(ServiceItem(row._item_name, row._section_name))
+        name = row._item_name
+        was_empty = not config.recently_used
+        if name in config.recently_used:
+            config.recently_used.remove(name)
+        config.recently_used.insert(0, name)
+        config.recently_used = config.recently_used[:6]
+        config.save()
+        if was_empty:
+            self._fill_palette_inner()
+        else:
+            self._refresh_recently_used()
     def _add_selected_palette_item(self):
         for lb in self._palette_listboxes.values():
             r = lb.get_selected_row()
@@ -2328,7 +2426,7 @@ class MainWindow(Adw.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_size_request(320, -1)
 
-        # Thin header strip
+        # Header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         hdr.set_margin_start(10); hdr.set_margin_end(6)
         hdr.set_margin_top(6); hdr.set_margin_bottom(6)
@@ -2336,11 +2434,30 @@ class MainWindow(Adw.ApplicationWindow):
         lbl.add_css_class("heading"); lbl.set_hexpand(True); lbl.set_xalign(0)
         hdr.append(lbl)
 
-        open_btn = Gtk.Button(icon_name="web-browser-symbolic",
-                              tooltip_text="Open in browser")
-        open_btn.add_css_class("flat")
-        open_btn.connect("clicked", lambda _: self._export_bulletin_html())
-        hdr.append(open_btn)
+        # Compiling indicator (hidden until xelatex is running)
+        self._preview_spinner = Gtk.Spinner()
+        self._preview_spinner.set_visible(False)
+        hdr.append(self._preview_spinner)
+        self._preview_compiling_lbl = Gtk.Label(label="Compiling…")
+        self._preview_compiling_lbl.add_css_class("dim-label")
+        self._preview_compiling_lbl.add_css_class("caption")
+        self._preview_compiling_lbl.set_visible(False)
+        hdr.append(self._preview_compiling_lbl)
+
+        # Export options gear (print/digital mode + quick church name)
+        gear_btn = Gtk.MenuButton(icon_name="emblem-system-symbolic",
+                                  tooltip_text="Preview options")
+        gear_btn.add_css_class("flat")
+        gear_btn.set_popover(self._build_preview_gear_popover())
+        hdr.append(gear_btn)
+
+        # Popout into separate window
+        popout_btn = Gtk.Button(icon_name="view-restore-symbolic",
+                                tooltip_text="Open in separate window")
+        popout_btn.add_css_class("flat")
+        popout_btn.connect("clicked", lambda _: self._popout_preview())
+        hdr.append(popout_btn)
+
         box.append(hdr)
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
@@ -2361,6 +2478,70 @@ class MainWindow(Adw.ApplicationWindow):
             box.append(status)
 
         return box
+
+    def _build_preview_gear_popover(self) -> Gtk.Popover:
+        """Small popover for print/digital mode toggle and quick church name edit."""
+        pop = Gtk.Popover()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_top(12); box.set_margin_bottom(12)
+        box.set_margin_start(12); box.set_margin_end(12)
+
+        fmt_lbl = Gtk.Label(label="Preview format")
+        fmt_lbl.add_css_class("caption"); fmt_lbl.add_css_class("dim-label")
+        fmt_lbl.set_xalign(0)
+        box.append(fmt_lbl)
+
+        toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        toggle_box.add_css_class("linked")
+        print_btn  = Gtk.ToggleButton(label="Print")
+        digital_btn = Gtk.ToggleButton(label="Digital")
+        digital_btn.set_group(print_btn)
+        if config.bulletin.get("print_mode", "booklet") == "digital":
+            digital_btn.set_active(True)
+        else:
+            print_btn.set_active(True)
+
+        def on_mode(btn, is_digital):
+            if btn.get_active():
+                config.bulletin["print_mode"] = "digital" if is_digital else "booklet"
+                config.save()
+                self._schedule_preview_update()
+
+        print_btn.connect("toggled",  lambda b: on_mode(b, False))
+        digital_btn.connect("toggled", lambda b: on_mode(b, True))
+        toggle_box.append(print_btn); toggle_box.append(digital_btn)
+        box.append(toggle_box)
+
+        cn_lbl = Gtk.Label(label="Church name")
+        cn_lbl.add_css_class("caption"); cn_lbl.add_css_class("dim-label")
+        cn_lbl.set_xalign(0); cn_lbl.set_margin_top(4)
+        box.append(cn_lbl)
+
+        cn_entry = Gtk.Entry()
+        cn_entry.set_text(config.bulletin.get("church_name", ""))
+        cn_entry.set_placeholder_text("Church name")
+
+        def on_cn_changed(e):
+            config.bulletin["church_name"] = e.get_text()
+            self._schedule_preview_update()
+
+        cn_entry.connect("changed", on_cn_changed)
+        box.append(cn_entry)
+
+        full_prefs_btn = Gtk.Button(label="Bulletin preferences…")
+        full_prefs_btn.add_css_class("flat"); full_prefs_btn.set_margin_top(4)
+        full_prefs_btn.connect("clicked", lambda _: (pop.popdown(),
+                                                     self._open_prefs_page("Bulletin")))
+        box.append(full_prefs_btn)
+
+        pop.set_child(box)
+        return pop
+
+    def _open_prefs_page(self, page_title: str):
+        """Open Preferences and navigate to the named page."""
+        a = self.lookup_action("preferences")
+        if a:
+            a.activate(None)
 
     def _toggle_preview_panel(self, btn):
         visible = btn.get_active()
@@ -2391,12 +2572,114 @@ class MainWindow(Adw.ApplicationWindow):
             return False
         if self._preview_webview is None:
             return False
-        try:
-            html = self._build_bulletin_html()
-            self._preview_webview.load_html(html, None)
-        except Exception:
-            pass
+        if getattr(self, "_preview_compiling", False):
+            return False  # Don't queue another compile while one is running
+        if not config.simple_mode and self._find_xelatex():
+            self._compile_preview_pdf()
+        else:
+            try:
+                html = self._build_bulletin_html()
+                self._preview_webview.load_html(html, None)
+            except Exception:
+                pass
         return False
+
+    def _find_xelatex(self) -> str | None:
+        """Return path to xelatex, or None."""
+        x = shutil.which("xelatex")
+        if x:
+            return x
+        for candidate in [
+            Path.home() / "texlive/bin/x86_64-linux/xelatex",
+            Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
+            Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
+        ]:
+            if candidate.exists():
+                return str(candidate)
+        return None
+
+    def _compile_preview_pdf(self):
+        """Build bulletin TeX, compile in background, load the PDF in the preview."""
+        import tempfile
+        xelatex = self._find_xelatex()
+        if not xelatex:
+            return
+
+        try:
+            digital = config.bulletin.get("print_mode", "booklet") == "digital"
+            lines = self._build_bulletin_latex(digital=digital)
+            tex_src = "\n".join(lines)
+        except Exception:
+            return
+
+        if not getattr(self, "_preview_pdf_dir", None):
+            self._preview_pdf_dir = tempfile.mkdtemp(prefix="rubric-preview-")
+
+        tex_path = Path(self._preview_pdf_dir) / "preview.tex"
+        try:
+            tex_path.write_text(tex_src, encoding="utf-8")
+        except Exception:
+            return
+
+        self._preview_compiling = True
+        self._preview_spinner.set_visible(True)
+        self._preview_spinner.start()
+        self._preview_compiling_lbl.set_visible(True)
+
+        def run():
+            try:
+                subprocess.run(
+                    [xelatex, "-interaction=nonstopmode", "-halt-on-error",
+                     "preview.tex"],
+                    cwd=self._preview_pdf_dir,
+                    capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
+                )
+                pdf = Path(self._preview_pdf_dir) / "preview.pdf"
+                if pdf.exists():
+                    GLib.idle_add(self._load_preview_pdf, str(pdf))
+                else:
+                    GLib.idle_add(self._preview_compile_done)
+            except Exception:
+                GLib.idle_add(self._preview_compile_done)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _load_preview_pdf(self, pdf_path: str):
+        self._preview_pdf_path = pdf_path
+        self._preview_compile_done()
+        if self._preview_webview:
+            self._preview_webview.load_uri(f"file://{pdf_path}")
+        return False
+
+    def _preview_compile_done(self):
+        self._preview_compiling = False
+        self._preview_spinner.stop()
+        self._preview_spinner.set_visible(False)
+        self._preview_compiling_lbl.set_visible(False)
+        return False
+
+    def _popout_preview(self):
+        """Open the current bulletin preview in a separate window."""
+        if not _WEBKIT_OK:
+            return
+        win = Adw.Window(title="Bulletin Preview", transient_for=self)
+        win.set_default_size(720, 960)
+        wv = _WebKit.WebView()
+        wv.set_vexpand(True); wv.set_hexpand(True)
+        pdf_path = getattr(self, "_preview_pdf_path", None)
+        if pdf_path and Path(pdf_path).exists():
+            wv.load_uri(f"file://{pdf_path}")
+        else:
+            try:
+                wv.load_html(self._build_bulletin_html(), None)
+            except Exception:
+                pass
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.set_vexpand(True); box.append(wv)
+        win.set_content(box)
+        self._preview_popout_win = win  # prevent GC
+        win.present()
 
     def _mark_modified(self): self.modified=True; self._update_title(); self._schedule_preview_update()
 
@@ -3136,7 +3419,15 @@ class MainWindow(Adw.ApplicationWindow):
             text = _re.sub(r'\\textbf\{([^}]*)\}', r'<strong>\1</strong>', text)
             text = _re.sub(r'\\textit\{([^}]*)\}', r'<em>\1</em>', text)
             text = _re.sub(r'\\emph\{([^}]*)\}', r'<em>\1</em>', text)
+            # Strip spacing/structural commands entirely (don't emit their argument)
+            text = _re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
+            text = _re.sub(
+                r'\\(?:noindent|newline|newpage|pagebreak|clearpage|par'
+                r'|medskip|bigskip|smallskip|linebreak|centering)\b\s*',
+                ' ', text)
+            # Generic commands with one braced arg: emit the arg content
             text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
+            # Remaining bare commands
             text = _re.sub(r'\\[a-zA-Z]+\*?\s*', '', text)
             return text.strip()
 

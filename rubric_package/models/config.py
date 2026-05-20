@@ -69,6 +69,7 @@ class Config:
         self.github_repo: str = ""
         self.first_launch_completed: bool = False
         self.quickstart_dismissed: bool = False
+        self.recently_used: list[str] = []
         self._load()
 
     @staticmethod
@@ -109,6 +110,7 @@ class Config:
                 self.templates = d.get("templates", {})
                 self.first_launch_completed = d.get("first_launch_completed", False)
                 self.quickstart_dismissed = d.get("quickstart_dismissed", False)
+                self.recently_used = d.get("recently_used", [])
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -138,6 +140,7 @@ class Config:
             "github_repo": self.github_repo,
             "first_launch_completed": self.first_launch_completed,
             "quickstart_dismissed": self.quickstart_dismissed,
+            "recently_used": self.recently_used,
         }
         if self.palette is not None:
             p["palette"] = self.palette

@@ -83,6 +83,25 @@ def hymn_set(key: str, title: str) -> None:
         con.close()
 
 
+def hymn_count() -> int:
+    """Return the number of cached hymn lookups."""
+    con = _open()
+    try:
+        return con.execute("SELECT COUNT(*) FROM hymn_cache").fetchone()[0]
+    finally:
+        con.close()
+
+
+def hymn_clear() -> None:
+    """Delete all cached hymn lookups."""
+    con = _open()
+    try:
+        con.execute("DELETE FROM hymn_cache")
+        con.commit()
+    finally:
+        con.close()
+
+
 # ── Snippets ──────────────────────────────────────────────────────────────────
 
 def snippets_load() -> list[dict]:
