@@ -429,6 +429,228 @@ class BibleViewer(Adw.Window):
         self.close()
 
 
+# ── Bulletin Preferences ─────────────────────────────────────────────────────
+
+class BulletinPrefsWindow(Adw.Window):
+    """Standalone bulletin settings window — auto-saves on every change."""
+
+    def __init__(self, main_window=None, **kw):
+        super().__init__(title="Bulletin Settings", default_width=600, default_height=700, **kw)
+        self._main = main_window
+        self.set_modal(False)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        hdr = Adw.HeaderBar()
+        hdr.set_show_end_title_buttons(True)
+        box.append(hdr)
+
+        page = Adw.PreferencesPage()
+        page.set_vexpand(True)
+
+        # ── Church information ────────────────────────────────────────────
+        info_grp = Adw.PreferencesGroup(title="Church information")
+        page.add(info_grp)
+
+        def _entry(key, title):
+            row = Adw.EntryRow(title=title)
+            row.set_text(config.bulletin.get(key, ""))
+            def on_changed(r, k=key):
+                config.bulletin[k] = r.get_text()
+                config.save()
+                if self._main: self._main._schedule_preview_update()
+            row.connect("changed", on_changed)
+            info_grp.add(row)
+            return row
+
+        _entry("church_name",  "Church name")
+        _entry("address",      "Address")
+        _entry("service_time", "Service time")
+        _entry("website",      "Website")
+        _entry("email",        "Email")
+        _entry("phone",        "Phone")
+
+        # ── Format ────────────────────────────────────────────────────────
+        fmt_grp = Adw.PreferencesGroup(title="Default bulletin format")
+        page.add(fmt_grp)
+
+        fmt_row = Adw.ActionRow(title="Format",
+            subtitle="Print/booklet: half-letter folded · Digital/screen: full letter")
+        toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        toggle_box.add_css_class("linked"); toggle_box.set_valign(Gtk.Align.CENTER)
+        print_btn   = Gtk.ToggleButton(label="Print")
+        digital_btn = Gtk.ToggleButton(label="Digital")
+        digital_btn.set_group(print_btn)
+        if config.bulletin.get("print_mode", "booklet") == "digital":
+            digital_btn.set_active(True)
+        else:
+            print_btn.set_active(True)
+        def on_mode(btn, is_digital):
+            if btn.get_active():
+                config.bulletin["print_mode"] = "digital" if is_digital else "booklet"
+                config.save()
+                if self._main: self._main._schedule_preview_update()
+        print_btn.connect("toggled",   lambda b: on_mode(b, False))
+        digital_btn.connect("toggled", lambda b: on_mode(b, True))
+        toggle_box.append(print_btn); toggle_box.append(digital_btn)
+        fmt_row.add_suffix(toggle_box); fmt_grp.add(fmt_row)
+
+        # ── Boilerplate text ──────────────────────────────────────────────
+        text_grp = Adw.PreferencesGroup(title="Boilerplate text")
+        page.add(text_grp)
+
+        def _text_entry(key, title):
+            row = Adw.EntryRow(title=title)
+            row.set_text(config.bulletin.get(key, ""))
+            def on_changed(r, k=key):
+                config.bulletin[k] = r.get_text()
+                config.save()
+                if self._main: self._main._schedule_preview_update()
+            row.connect("changed", on_changed)
+            text_grp.add(row)
+
+        _text_entry("welcome",       "Welcome line")
+        _text_entry("accessibility", "Accessibility note")
+
+        mission_row = Adw.ActionRow(title="Mission statement")
+        text_grp.add(mission_row)
+        ms_scroll = Gtk.ScrolledWindow()
+        ms_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        ms_scroll.set_min_content_height(56); ms_scroll.add_css_class("card")
+        ms_scroll.set_margin_start(12); ms_scroll.set_margin_end(12)
+        ms_scroll.set_margin_bottom(8)
+        ms_tv = Gtk.TextView(); ms_tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        ms_tv.set_top_margin(6); ms_tv.set_bottom_margin(6)
+        ms_tv.set_left_margin(8); ms_tv.set_right_margin(8)
+        ms_tv.get_buffer().set_text(config.bulletin.get("mission", ""), -1)
+        def on_mission_changed(buf):
+            s, e = buf.get_bounds()
+            config.bulletin["mission"] = buf.get_text(s, e, False)
+            config.save()
+            if self._main: self._main._schedule_preview_update()
+        ms_tv.get_buffer().connect("changed", on_mission_changed)
+        ms_scroll.set_child(ms_tv)
+        text_grp.add(ms_scroll)
+
+        # ── Staff list ────────────────────────────────────────────────────
+        self._staff_grp = Adw.PreferencesGroup(title="Staff / contact list",
+            description="Appears in the back of the bulletin")
+        page.add(self._staff_grp)
+        self._staff_widgets: list[tuple] = []
+
+        for member in config.bulletin.get("staff", []):
+            self._add_staff_row(member.get("role",""), member.get("name",""), member.get("email",""))
+
+        add_btn = Gtk.Button(label="Add person", valign=Gtk.Align.CENTER)
+        add_btn.add_css_class("flat")
+        add_btn.connect("clicked", lambda _: self._add_staff_row("", "", ""))
+        add_row = Adw.ActionRow(title="Staff member")
+        add_row.add_suffix(add_btn); self._staff_grp.add(add_row)
+
+        # ── Announcements ─────────────────────────────────────────────────
+        self._ann_grp = Adw.PreferencesGroup(title="Announcements",
+            description="Appears in the bulletin. Set an expiry date (YYYY-MM-DD) to auto-remove.")
+        page.add(self._ann_grp)
+        self._ann_widgets: list[tuple] = []
+
+        for ann in config.bulletin.get("announcements", []):
+            self._add_announcement(ann.get("text",""), ann.get("expires",""))
+
+        add_ann_btn = Gtk.Button(label="Add announcement", valign=Gtk.Align.CENTER)
+        add_ann_btn.add_css_class("flat")
+        add_ann_btn.connect("clicked", lambda _: self._add_announcement("", ""))
+        add_ann_row = Adw.ActionRow(title="Announcement")
+        add_ann_row.add_suffix(add_ann_btn); self._ann_grp.add(add_ann_row)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_child(page)
+        box.append(scroll)
+        self.set_content(box)
+
+    def _save_staff(self):
+        config.bulletin["staff"] = [
+            {"role": r.get_text().strip(), "name": n.get_text().strip(), "email": em.get_text().strip()}
+            for r, n, em, row in self._staff_widgets
+            if row.get_visible() and r.get_text().strip()
+        ]
+        config.save()
+        if self._main: self._main._schedule_preview_update()
+
+    def _add_staff_row(self, role, name, email):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        box.set_margin_top(4); box.set_margin_bottom(4)
+        box.set_margin_start(4); box.set_margin_end(4)
+
+        role_e = Gtk.Entry(); role_e.set_placeholder_text("Role"); role_e.set_hexpand(True); role_e.set_text(role)
+        name_e = Gtk.Entry(); name_e.set_placeholder_text("Name"); name_e.set_hexpand(True); name_e.set_text(name)
+        em_e   = Gtk.Entry(); em_e.set_placeholder_text("Email (optional)"); em_e.set_hexpand(True); em_e.set_text(email)
+
+        widgets = [role_e, name_e, em_e, None]
+
+        def on_field_changed(_e, w=widgets):
+            self._save_staff()
+
+        role_e.connect("changed", on_field_changed)
+        name_e.connect("changed", on_field_changed)
+        em_e.connect("changed",   on_field_changed)
+
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic"); del_btn.add_css_class("flat")
+        del_btn.connect("clicked", lambda _b, w=widgets: (w[3].set_visible(False), self._save_staff()))
+
+        box.append(role_e); box.append(name_e); box.append(em_e); box.append(del_btn)
+        row = Adw.ActionRow(); row.set_child(box)
+        widgets[3] = row
+        self._staff_grp.add(row)
+        self._staff_widgets.append((role_e, name_e, em_e, row))
+
+    def _save_announcements(self):
+        config.bulletin["announcements"] = []
+        for tv, exp_e, row in self._ann_widgets:
+            if not row.get_visible(): continue
+            buf = tv.get_buffer(); s, e = buf.get_bounds()
+            text = buf.get_text(s, e, False).strip()
+            if text:
+                config.bulletin["announcements"].append(
+                    {"text": text, "expires": exp_e.get_text().strip()})
+        config.save()
+        if self._main: self._main._schedule_preview_update()
+
+    def _add_announcement(self, text, expires):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_top(4); box.set_margin_bottom(4)
+        box.set_margin_start(4); box.set_margin_end(4)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(48); scroll.add_css_class("card")
+        tv = Gtk.TextView(); tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        tv.set_top_margin(6); tv.set_bottom_margin(6)
+        tv.set_left_margin(8); tv.set_right_margin(8)
+        tv.get_buffer().set_text(text, -1)
+        scroll.set_child(tv); box.append(scroll)
+
+        bottom = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        exp_lbl = Gtk.Label(label="Expires:"); exp_lbl.add_css_class("caption")
+        exp_lbl.add_css_class("dim-label")
+        exp_e = Gtk.Entry(); exp_e.set_placeholder_text("YYYY-MM-DD or blank")
+        exp_e.set_width_chars(13); exp_e.set_text(expires)
+        sp = Gtk.Box(); sp.set_hexpand(True)
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic"); del_btn.add_css_class("flat")
+        bottom.append(exp_lbl); bottom.append(exp_e); bottom.append(sp); bottom.append(del_btn)
+        box.append(bottom)
+
+        row = Adw.ActionRow(); row.set_child(box)
+        widgets = (tv, exp_e, row)
+
+        tv.get_buffer().connect("changed",  lambda _b: self._save_announcements())
+        exp_e.connect("changed",            lambda _e: self._save_announcements())
+        del_btn.connect("clicked", lambda _b, w=widgets: (w[2].set_visible(False), self._save_announcements()))
+
+        self._ann_grp.add(row)
+        self._ann_widgets.append(widgets)
+
+
 # ── Preferences ───────────────────────────────────────────────────────────────
 
 class PreferencesWindow(Adw.PreferencesWindow):
@@ -441,7 +663,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._build_template(); self._build_palette()
         if _SNIP_OK and not config.simple_mode:
             self._build_snippets()
-        self._build_bulletin(); self._build_github(); self._build_scripture()
+        self._build_github(); self._build_scripture()
         self.connect("close-request", self._on_close)
 
     def _build_latex(self):
@@ -672,142 +894,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
             del self._snippets[idx]
             save_snippets(self._snippets); self._refresh_snippets_prefs()
 
-    def _build_bulletin(self):
-        """Bulletin preferences tab — church info, staff, announcements."""
-        page = Adw.PreferencesPage(title="Bulletin", icon_name="document-print-symbolic")
-        self.add(page)
-
-        # Church info
-        info_grp = Adw.PreferencesGroup(title="Church information")
-        page.add(info_grp)
-        b = config.bulletin
-        self._bul_entries = {}
-
-        def _entry_row(key, title, grp=None, subtitle=""):
-            row = Adw.EntryRow(title=title)
-            if subtitle: row.set_subtitle(subtitle)
-            row.set_text(b.get(key, ""))
-            (grp or info_grp).add(row)
-            self._bul_entries[key] = row
-
-        _entry_row("church_name",  "Church name")
-        _entry_row("address",      "Address")
-        _entry_row("service_time", "Service time")
-        _entry_row("website",      "Website")
-        _entry_row("email",        "Email")
-        _entry_row("phone",        "Phone")
-
-        # Boilerplate text
-        text_grp = Adw.PreferencesGroup(title="Boilerplate text")
-        page.add(text_grp)
-        _entry_row("welcome",       "Welcome line",       grp=text_grp)
-        _entry_row("accessibility", "Accessibility note", grp=text_grp)
-
-        def _text_row(key, title):
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            scroll.set_min_content_height(60); scroll.add_css_class("card")
-            scroll.set_margin_top(4); scroll.set_margin_bottom(4)
-            tv = Gtk.TextView(); tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            tv.set_top_margin(6); tv.set_bottom_margin(6)
-            tv.set_left_margin(8); tv.set_right_margin(8)
-            tv.get_buffer().set_text(b.get(key, ""), -1)
-            scroll.set_child(tv); text_grp.add(scroll)
-            self._bul_entries[key] = tv
-
-        _text_row("mission", "Mission statement")
-
-        # Staff list
-        self._staff_grp = Adw.PreferencesGroup(title="Staff / contact list",
-            description="Appears in the acknowledgements block at the back of the bulletin")
-        page.add(self._staff_grp)
-        self._staff_rows = []
-        self._bul_staff_widgets = []
-        for member in b.get("staff", []):
-            self._add_staff_row(member.get("role",""), member.get("name",""), member.get("email",""))
-        add_staff_row = Adw.ActionRow(title="Add staff member")
-        add_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
-        add_btn.add_css_class("flat")
-        add_btn.connect("clicked", lambda _: self._add_staff_row("", "", ""))
-        add_staff_row.add_suffix(add_btn)
-        self._staff_grp.add(add_staff_row)
-
-        # Announcements
-        self._ann_grp = Adw.PreferencesGroup(title="Announcements",
-            description="Each announcement can have an optional expiry date (YYYY-MM-DD)")
-        page.add(self._ann_grp)
-        self._bul_ann_widgets = []
-        for ann in b.get("announcements", []):
-            self._add_announcement_row(ann.get("text",""), ann.get("expires",""))
-        add_ann_row = Adw.ActionRow(title="Add announcement")
-        add_ann_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
-        add_ann_btn.add_css_class("flat")
-        add_ann_btn.connect("clicked", lambda _: self._add_announcement_row("", ""))
-        add_ann_row.add_suffix(add_ann_btn)
-        self._ann_grp.add(add_ann_row)
-
-    def _add_staff_row(self, role, name, email):
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        box.set_margin_top(4); box.set_margin_bottom(4)
-        box.set_margin_start(4); box.set_margin_end(4)
-
-        role_e = Gtk.Entry(); role_e.set_placeholder_text("Role")
-        role_e.set_hexpand(True); role_e.set_text(role)
-        name_e = Gtk.Entry(); name_e.set_placeholder_text("Name")
-        name_e.set_hexpand(True); name_e.set_text(name)
-        email_e = Gtk.Entry(); email_e.set_placeholder_text("Email (optional)")
-        email_e.set_hexpand(True); email_e.set_text(email)
-
-        del_btn = Gtk.Button(icon_name="list-remove-symbolic")
-        del_btn.add_css_class("flat")
-        widgets = [role_e, name_e, email_e, None]  # row filled in below
-        del_btn.connect("clicked", lambda _b, w=widgets: self._remove_staff_row(w))
-
-        box.append(role_e); box.append(name_e); box.append(email_e); box.append(del_btn)
-        row = Adw.ActionRow(); row.set_child(box)
-        widgets[3] = row  # fill in the ActionRow reference
-        self._staff_grp.add(row)
-        self._bul_staff_widgets.append((role_e, name_e, email_e, row))
-
-    def _remove_staff_row(self, widgets):
-        role_e, name_e, email_e, row = widgets
-        self._bul_staff_widgets = [w for w in self._bul_staff_widgets if w[0] is not role_e]
-        if row:
-            row.set_visible(False)
-
-    def _add_announcement_row(self, text, expires):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_margin_top(4); box.set_margin_bottom(4)
-        box.set_margin_start(4); box.set_margin_end(4)
-
-        # Text area
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(50); scroll.add_css_class("card")
-        tv = Gtk.TextView(); tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        tv.set_top_margin(6); tv.set_bottom_margin(6)
-        tv.set_left_margin(8); tv.set_right_margin(8)
-        tv.get_buffer().set_text(text, -1)
-        scroll.set_child(tv); box.append(scroll)
-
-        # Expires row
-        exp_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        exp_lbl = Gtk.Label(label="Expires (YYYY-MM-DD, or blank):")
-        exp_lbl.add_css_class("caption"); exp_lbl.set_xalign(0)
-        exp_e = Gtk.Entry(); exp_e.set_text(expires); exp_e.set_width_chars(14)
-        del_btn = Gtk.Button(icon_name="list-remove-symbolic")
-        del_btn.add_css_class("flat")
-        exp_box.append(exp_lbl); exp_box.append(exp_e)
-        sp = Gtk.Box(); sp.set_hexpand(True); exp_box.append(sp)
-        exp_box.append(del_btn)
-        box.append(exp_box)
-
-        row = Adw.ActionRow(); row.set_child(box)
-        widgets = (tv, exp_e, row)
-        del_btn.connect("clicked", lambda _b, w=widgets: w[2].set_visible(False))
-        self._ann_grp.add(row)
-        self._bul_ann_widgets.append((tv, exp_e, row))
-
     def _on_close(self, _):
         if hasattr(self, "_preamble_view"):
             buf = self._preamble_view.get_buffer(); s,e = buf.get_bounds()
@@ -819,27 +905,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
         win = self.get_transient_for()
         if win and hasattr(win, "_apply_simple_mode"):
             win._apply_simple_mode()
-
-        # Save bulletin config
-        b = config.bulletin
-        for key, widget in self._bul_entries.items():
-            if isinstance(widget, Gtk.TextView):
-                buf = widget.get_buffer(); s2,e2 = buf.get_bounds()
-                b[key] = buf.get_text(s2,e2,False)
-            else:
-                b[key] = widget.get_text()
-        b["staff"] = [
-            {"role": r.get_text(), "name": n.get_text(), "email": em.get_text()}
-            for r, n, em, row in self._bul_staff_widgets
-            if row.get_visible() and r.get_text().strip()
-        ]
-        b["announcements"] = []
-        for tv, exp_e, row in self._bul_ann_widgets:
-            if not row.get_visible(): continue
-            buf = tv.get_buffer(); s2,e2 = buf.get_bounds()
-            text = buf.get_text(s2,e2,False).strip()
-            if text:
-                b["announcements"].append({"text": text, "expires": exp_e.get_text().strip()})
 
         # Save scripture settings
         if hasattr(self, "_scripture_combo"):
@@ -1170,30 +1235,24 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Simple mode ───────────────────────────────────────────────────────────
 
     def _apply_simple_mode(self):
-        simple = config.simple_mode
-        self.push_btn.set_visible(not simple)
-        self.tex_btn.set_visible(not simple)
-        self.pdf_btn.set_visible(not simple)
         if hasattr(self, "_rr_btn"):
-            self._rr_btn.set_visible(not simple)
+            self._rr_btn.set_visible(not config.simple_mode)
         self._refresh_menu()
 
     def _refresh_menu(self):
         simple = config.simple_mode
         menu = Gio.Menu()
         menu.append("Preferences", "win.preferences")
+        menu.append("Bulletin settings…", "win.open-bulletin-prefs")
         menu.append("Duplicate service", "win.duplicate")
         if not simple:
             menu.append("Save order as template…", "win.save-template")
         menu.append("Save as…", "win.save-as")
 
-        export_sec = Gio.Menu()
-        export_sec.append("Export as…", "win.export-as")
-        menu.append_section("Export", export_sec)
-
-        menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
-        menu.append("Element Library… (Ctrl+Shift+K)", "win.open-library")
-        menu.append("Past Liturgies… (Ctrl+Shift+H)", "win.open-archive")
+        file_sec = Gio.Menu()
+        file_sec.append("Export as…", "win.export-as")
+        file_sec.append("Services…", "win.open-services")
+        menu.append_section(None, file_sec)
 
         if not simple:
             git_sec = Gio.Menu()
@@ -1203,18 +1262,13 @@ class MainWindow(Adw.ApplicationWindow):
 
         if not simple:
             adv_sec = Gio.Menu()
-            adv_sec.append("Responsive reading… (Ctrl+R)", "win.responsive-reading")
-            adv_sec.append("Snippets… (Ctrl+Shift+I)", "win.snippets")
+            adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
+            adv_sec.append("Responsive reading (Ctrl+R)", "win.responsive-reading")
             menu.append_section("Advanced", adv_sec)
 
-        help_sec = Gio.Menu()
-        help_sec.append("Help (F1)", "win.show-help")
-        help_sec.append("FAQ", "win.show-faq")
-        help_sec.append("What's New", "win.show-changelog")
-        help_sec.append("Welcome wizard…", "win.show-wizard")
-        help_sec.append("About Rubric", "win.show-about")
-        menu.append_section("Help", help_sec)
-        menu.append_section("Recent files", self._recent_sec)
+        menu.append("Help…", "win.open-help")
+        menu.append("Welcome wizard…", "win.show-wizard")
+        menu.append_submenu("Recent files", self._recent_sec)
 
         self._menu_btn.set_menu_model(menu)
 
@@ -1253,12 +1307,15 @@ class MainWindow(Adw.ApplicationWindow):
             ("open-planner",       self.open_planner,           "<Ctrl><Shift>l"),
             ("git-push",           self.git_push,               "<Ctrl><Shift>g"),
             ("git-pull",           self.git_pull,               None),
-            ("show-help",          lambda: self._show_doc("HELP"),       "F1"),
-            ("show-faq",           lambda: self._show_doc("FAQ"),        None),
-            ("show-changelog",     lambda: self._show_doc("CHANGELOG"),  None),
+            ("show-help",          lambda: self.open_help("help"),       "F1"),
+            ("show-faq",           lambda: self.open_help("faq"),        None),
+            ("show-changelog",     lambda: self.open_help("changelog"),  None),
             ("show-wizard",        self._show_first_launch_wizard,        None),
+            ("open-bulletin-prefs", self.open_bulletin_prefs,              None),
+            ("open-services",      self.open_services,                    None),
             ("open-library",       self.open_library,                     "<Ctrl><Shift>k"),
             ("open-archive",       self.open_archive,                     "<Ctrl><Shift>h"),
+            ("open-help",          self.open_help,                        None),
             ("show-about",         self.show_about,                       None),
             ("export-as",          self.export_as,                      None),
         ]:
@@ -1274,13 +1331,34 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _build_ui(self):
         hdr = Adw.HeaderBar()
-        for icon,tip,cb in [("document-new-symbolic","New service (Ctrl+N)",self.new_service),
-                             ("document-open-symbolic","Open… (Ctrl+O)",self.open_file)]:
-            b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.connect("clicked", lambda _,f=cb: f()); hdr.pack_start(b)
+
+        # Palette sidebar toggle — all the way at the left
+        self._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show-symbolic",
+                                             tooltip_text="Show/hide elements panel")
+        self._sidebar_btn.set_active(True)
+        self._sidebar_btn.add_css_class("flat")
+        self._sidebar_btn.connect("toggled", self._toggle_palette_sidebar)
+        hdr.pack_start(self._sidebar_btn)
+
+        # New + Open as a linked pill
+        doc_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        doc_box.add_css_class("linked")
+        for icon, tip, cb in [("document-new-symbolic", "New service (Ctrl+N)", self.new_service),
+                               ("document-open-symbolic", "Open… (Ctrl+O)", self.open_file)]:
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
+            b.connect("clicked", lambda _, f=cb: f())
+            doc_box.append(b)
+        hdr.pack_start(doc_box)
+
+        # Undo + Redo as a linked pill
+        edit_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        edit_box.add_css_class("linked")
         self.undo_btn = Gtk.Button(icon_name="edit-undo-symbolic", tooltip_text="Undo (Ctrl+Z)")
-        self.undo_btn.connect("clicked", lambda _: self.undo()); self.undo_btn.set_sensitive(False); hdr.pack_start(self.undo_btn)
+        self.undo_btn.connect("clicked", lambda _: self.undo()); self.undo_btn.set_sensitive(False)
         self.redo_btn = Gtk.Button(icon_name="edit-redo-symbolic", tooltip_text="Redo (Ctrl+Shift+Z)")
-        self.redo_btn.connect("clicked", lambda _: self.redo()); self.redo_btn.set_sensitive(False); hdr.pack_start(self.redo_btn)
+        self.redo_btn.connect("clicked", lambda _: self.redo()); self.redo_btn.set_sensitive(False)
+        edit_box.append(self.undo_btn); edit_box.append(self.redo_btn)
+        hdr.pack_start(edit_box)
 
         # Title widget lives inside a MenuButton so clicking it opens the service info popover
         self.title_widget = Adw.WindowTitle(title="Rubric", subtitle="New service")
@@ -1315,6 +1393,14 @@ class MainWindow(Adw.ApplicationWindow):
         clr.add_css_class("flat"); clr.connect("clicked", self._on_clear_date); date_row.append(clr)
         pop_box.append(date_row)
 
+        # Lectionary year/season — in popover, not the header bar
+        lect_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        lect_sep.set_margin_top(4); pop_box.append(lect_sep)
+        self._lect_label = Gtk.Label()
+        self._lect_label.add_css_class("caption"); self._lect_label.add_css_class("dim-label")
+        self._lect_label.set_xalign(0); self._lect_label.set_margin_top(2)
+        pop_box.append(self._lect_label)
+
         info_pop = Gtk.Popover(); info_pop.set_child(pop_box)
         info_pop.set_has_arrow(False); info_pop.set_position(Gtk.PositionType.BOTTOM)
 
@@ -1326,53 +1412,27 @@ class MainWindow(Adw.ApplicationWindow):
         sb = Gtk.Button(icon_name="document-save-symbolic", tooltip_text="Save (Ctrl+S)")
         sb.add_css_class("suggested-action"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
 
+        # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
+        # but not packed into the header. Use keyboard shortcuts or the hamburger menu.
         self.push_btn = Gtk.Button(icon_name="emblem-synchronizing-symbolic",
                                    tooltip_text="Push to GitHub (Ctrl+Shift+G)")
         self.push_btn.connect("clicked", lambda _: self.git_push())
-        hdr.pack_end(self.push_btn)
 
         self.tex_btn = Gtk.Button(icon_name="emblem-documents-symbolic",
                                   tooltip_text="Export to LaTeX (Ctrl+E)")
         self.tex_btn.connect("clicked", lambda _: self.quick_export_latex())
 
-        # Right-click → change linked file or unlink
-        tex_gesture = Gtk.GestureClick(); tex_gesture.set_button(3)
-        def on_tex_right(_g, _n, _x, _y):
-            tex_menu = Gio.Menu()
-            if self.tex_file:
-                tex_menu.append(f"Linked: {Path(self.tex_file).name}", "win.noop")
-                tex_menu.append("Change linked file…", "win.export-latex")
-                tex_menu.append("Unlink .tex file",    "win.unlink-tex")
-            else:
-                tex_menu.append("No linked file", "win.noop")
-                tex_menu.append("Choose file to link…", "win.export-latex")
-            pop = Gtk.PopoverMenu.new_from_model(tex_menu)
-            pop.set_parent(self.tex_btn); pop.popup()
-        tex_gesture.connect("pressed", on_tex_right)
-        self.tex_btn.add_controller(tex_gesture)
-        hdr.pack_end(self.tex_btn)
-
         self.pdf_btn = Gtk.Button(icon_name="document-print-symbolic",
                                   tooltip_text="Compile to PDF via xelatex (Ctrl+Shift+P)")
         self.pdf_btn.connect("clicked", lambda _: self.compile_pdf())
-        hdr.pack_end(self.pdf_btn)
 
-        # Lectionary year tracker — shows current RCL year and season, updates daily
-        self._lect_label = Gtk.Label()
-        self._lect_label.add_css_class("caption")
-        self._lect_label.add_css_class("dim-label")
-        self._lect_label.set_margin_start(4); self._lect_label.set_margin_end(4)
-        self._lect_label.set_valign(Gtk.Align.CENTER)
-        hdr.pack_end(self._lect_label)
         self._update_lect_label()
-        # Refresh at midnight (86400 seconds)
         GLib.timeout_add_seconds(86400, self._update_lect_label)
         self._recent_sec = Gio.Menu()
         self._rebuild_recent_menu()
         self._menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu")
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
-        # Bulletin preview toggle button (header bar, end side)
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_btn = Gtk.ToggleButton(icon_name="document-print-preview-symbolic",
@@ -1385,8 +1445,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_shrink_start_child(False); paned.set_shrink_end_child(False); paned.set_position(290)
+        paned.set_shrink_start_child(True); paned.set_shrink_end_child(False); paned.set_position(290)
         paned.set_start_child(self._build_palette_panel())
+        self._palette_paned = paned
+        self._palette_visible = True
 
         # Inner paned: order panel | bulletin preview (preview hidden by default)
         self._preview_panel = self._build_preview_panel()
@@ -1562,21 +1624,22 @@ class MainWindow(Adw.ApplicationWindow):
         vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         vsep.set_margin_start(4); vsep.set_margin_end(4); rcl_row.append(vsep)
 
-        # Reading buttons (right side, equal-width columns)
+        # Reading chips — compact pill buttons, right-aligned
         self._reading_rows: dict[str, Gtk.Button] = {}
-        for i, (key, label) in enumerate([("ot","First Reading"),("psalm","Psalm"),
-                                           ("epistle","Epistle"),("gospel","Gospel")]):
-            if i > 0:
-                sep = Gtk.Label(label="·"); sep.add_css_class("dim-label")
-                sep.set_margin_start(2); sep.set_margin_end(2); rcl_row.append(sep)
-            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-            col.set_hexpand(True)
-            lbl = Gtk.Label(label=label); lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
-            lbl.set_xalign(0.5); col.append(lbl)
-            btn = Gtk.Button(label="—"); btn.add_css_class("flat")
+        self._reading_labels = {"ot": "First Reading", "psalm": "Psalm",
+                                 "epistle": "Epistle",  "gospel": "Gospel"}
+        self._reading_abbrs  = {"ot": "OT", "psalm": "Ps", "epistle": "Ep", "gospel": "Gos"}
+        chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        chips_box.set_hexpand(True); chips_box.set_halign(Gtk.Align.END)
+        for key in ("ot", "psalm", "epistle", "gospel"):
+            btn = Gtk.Button(label=self._reading_abbrs[key])
+            btn.add_css_class("pill"); btn.add_css_class("flat")
+            btn.set_sensitive(False)
+            btn.set_tooltip_text(self._reading_labels[key])
             btn.connect("clicked", lambda _b, k=key: self._on_reading_clicked(k))
-            col.append(btn); rcl_row.append(col)
+            chips_box.append(btn)
             self._reading_rows[key] = btn
+        rcl_row.append(chips_box)
         self.readings_card.append(rcl_row)
 
         # Observances row — chips for feasts, saints, justice days, ecological seasons
@@ -2370,9 +2433,15 @@ class MainWindow(Adw.ApplicationWindow):
             )
 
         for key, btn in self._reading_rows.items():
-            ref = info[key]; btn.set_label(ref if ref and ref != "—" else "—")
-            btn.set_sensitive(bool(ref and ref != "—"))
-            btn.set_tooltip_text(f"Read {ref} (WEB)" if ref and ref != "—" else "")
+            ref = info[key]
+            full_name = self._reading_labels.get(key, key)
+            abbr = self._reading_abbrs.get(key, key)
+            if ref and ref != "—":
+                btn.set_label(ref); btn.set_sensitive(True)
+                btn.set_tooltip_text(f"{full_name}: {ref}")
+            else:
+                btn.set_label(abbr); btn.set_sensitive(False)
+                btn.set_tooltip_text(full_name)
 
         # Update hymn suggestions for this week
         self._update_hymn_suggestions(info["week"], info["season"])
@@ -2432,13 +2501,20 @@ class MainWindow(Adw.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_size_request(320, -1)
 
-        # Header
+        # Header — clickable "Bulletin Preview ▾" heading opens options popover
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        hdr.set_margin_start(10); hdr.set_margin_end(6)
+        hdr.set_margin_start(6); hdr.set_margin_end(6)
         hdr.set_margin_top(6); hdr.set_margin_bottom(6)
+
         lbl = Gtk.Label(label="Bulletin Preview")
         lbl.add_css_class("heading"); lbl.set_hexpand(True); lbl.set_xalign(0)
         hdr.append(lbl)
+
+        gear_btn = Gtk.MenuButton(icon_name="emblem-system-symbolic")
+        gear_btn.add_css_class("flat")
+        gear_btn.set_tooltip_text("Preview options — format, church name, bulletin settings")
+        gear_btn.set_popover(self._build_preview_gear_popover())
+        hdr.append(gear_btn)
 
         # Compiling indicator (hidden until xelatex is running)
         self._preview_spinner = Gtk.Spinner()
@@ -2449,13 +2525,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_compiling_lbl.add_css_class("caption")
         self._preview_compiling_lbl.set_visible(False)
         hdr.append(self._preview_compiling_lbl)
-
-        # Export options gear (print/digital mode + quick church name)
-        gear_btn = Gtk.MenuButton(icon_name="emblem-system-symbolic",
-                                  tooltip_text="Preview options")
-        gear_btn.add_css_class("flat")
-        gear_btn.set_popover(self._build_preview_gear_popover())
-        hdr.append(gear_btn)
 
         # Popout into separate window
         popout_btn = Gtk.Button(icon_name="view-restore-symbolic",
@@ -2529,15 +2598,16 @@ class MainWindow(Adw.ApplicationWindow):
 
         def on_cn_changed(e):
             config.bulletin["church_name"] = e.get_text()
+            config.save()
             self._schedule_preview_update()
 
         cn_entry.connect("changed", on_cn_changed)
         box.append(cn_entry)
 
-        full_prefs_btn = Gtk.Button(label="Bulletin preferences…")
+        full_prefs_btn = Gtk.Button(label="Bulletin settings…")
         full_prefs_btn.add_css_class("flat"); full_prefs_btn.set_margin_top(4)
         full_prefs_btn.connect("clicked", lambda _: (pop.popdown(),
-                                                     self._open_prefs_page("Bulletin")))
+                                                     self.open_bulletin_prefs()))
         box.append(full_prefs_btn)
 
         pop.set_child(box)
@@ -2548,6 +2618,14 @@ class MainWindow(Adw.ApplicationWindow):
         a = self.lookup_action("preferences")
         if a:
             a.activate(None)
+
+    def _toggle_palette_sidebar(self, btn):
+        if btn.get_active():
+            self._palette_visible = True
+            self._palette_paned.set_position(290)
+        else:
+            self._palette_visible = False
+            self._palette_paned.set_position(0)
 
     def _toggle_preview_panel(self, btn):
         visible = btn.get_active()
@@ -2578,16 +2656,11 @@ class MainWindow(Adw.ApplicationWindow):
             return False
         if self._preview_webview is None:
             return False
-        if getattr(self, "_preview_compiling", False):
-            return False  # Don't queue another compile while one is running
-        if not config.simple_mode and self._find_xelatex():
-            self._compile_preview_pdf()
-        else:
-            try:
-                html = self._build_bulletin_html()
-                self._preview_webview.load_html(html, None)
-            except Exception:
-                pass
+        try:
+            html = self._build_bulletin_html()
+            self._preview_webview.load_html(html, None)
+        except Exception:
+            pass
         return False
 
     def _find_xelatex(self) -> str | None:
@@ -2698,6 +2771,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.title_widget.set_title(
             Path(self.current_file).stem if self.current_file else svc)
         self.title_widget.set_subtitle(subtitle)
+        self.set_title(f"{svc} — Rubric" if svc != "New service" else "Rubric")
 
     def _service_data(self):
         d = {"title": self.service_title_entry.get_text(),
@@ -4905,33 +4979,564 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             elif r=="discard": self.destroy()
         dlg.connect("response", on_resp); dlg.present(); return True
 
-    def open_planner(self):
-        folder = self._repo_subdir("liturgy")
-        if not folder:
-            dlg = Gtk.FileDialog(title="Choose folder containing .liturgy files")
-            def on_chosen(d, r):
+    def open_services(self, start_tab: str = "planner"):
+        win = getattr(self, "_services_win", None)
+        if win and win.get_visible():
+            win.switch_tab(start_tab); win.present(); return
+        self._services_win = ServicesWindow(main_window=self, start_tab=start_tab, transient_for=self)
+        self._services_win.present()
+
+    def open_planner(self): self.open_services("planner")
+    def open_library(self): self.open_services("library")
+    def open_archive(self): self.open_services("archive")
+
+    def open_help(self, start_tab: str = "help"):
+        win = getattr(self, "_help_win", None)
+        if win and win.get_visible():
+            win.switch_tab(start_tab); win.present(); return
+        self._help_win = HelpWindow(main_window=self, start_tab=start_tab, transient_for=self)
+        self._help_win.present()
+
+    def open_bulletin_prefs(self):
+        win = getattr(self, "_bulletin_prefs_win", None)
+        if win and win.get_visible():
+            win.present(); return
+        self._bulletin_prefs_win = BulletinPrefsWindow(main_window=self, transient_for=self)
+        self._bulletin_prefs_win.present()
+
+
+# ── Services Window (Planner + Library + Archive) ────────────────────────────
+
+class ServicesWindow(Adw.Window):
+    """Unified Services window — Planner, Library, and Archive in one tabbed view."""
+
+    _TAB_IDX = {"planner": 0, "library": 1, "archive": 2}
+
+    def __init__(self, main_window, start_tab: str = "planner", **kw):
+        super().__init__(title="Services", default_width=700, default_height=720, **kw)
+        self._main = main_window
+        self.set_modal(False)
+        self._planner_folder: "Path | None" = None
+        self._lib_search = ""; self._lib_expanded: set = set(); self._lib_selected = None
+        self._arch_search = ""; self._arch_expanded: set = set()
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv.add_top_bar(hdr)
+
+        self._nb = Gtk.Notebook()
+        self._nb.set_show_border(False); self._nb.set_vexpand(True)
+        self._nb.append_page(self._build_planner_tab(), Gtk.Label(label="Service Planner"))
+        self._nb.append_page(self._build_library_tab(), Gtk.Label(label="Element Library"))
+        self._nb.append_page(self._build_archive_tab(), Gtk.Label(label="Past Liturgies"))
+        self._nb.set_current_page(self._TAB_IDX.get(start_tab, 0))
+
+        tv.set_content(self._nb)
+        self.set_content(tv)
+        GLib.idle_add(self._load_all)
+
+    def switch_tab(self, name: str):
+        self._nb.set_current_page(self._TAB_IDX.get(name, 0))
+
+    # ── Planner tab ───────────────────────────────────────────────────────────
+
+    def _build_planner_tab(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        top.set_margin_start(12); top.set_margin_end(12)
+        top.set_margin_top(10); top.set_margin_bottom(8)
+        self._planner_folder_lbl = Gtk.Label()
+        self._planner_folder_lbl.add_css_class("caption")
+        self._planner_folder_lbl.add_css_class("dim-label")
+        self._planner_folder_lbl.set_hexpand(True); self._planner_folder_lbl.set_xalign(0)
+        self._planner_folder_lbl.set_ellipsize(3)
+        top.append(self._planner_folder_lbl)
+        choose_btn = Gtk.Button(label="Folder…"); choose_btn.add_css_class("flat")
+        choose_btn.connect("clicked", self._on_choose_folder); top.append(choose_btn)
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
+        refresh_btn.connect("clicked", lambda _: self._load_planner()); top.append(refresh_btn)
+        box.append(top)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._planner_list = Gtk.ListBox()
+        self._planner_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._planner_list.add_css_class("boxed-list")
+        self._planner_list.set_margin_start(12); self._planner_list.set_margin_end(12)
+        self._planner_list.set_margin_top(8); self._planner_list.set_margin_bottom(12)
+        scroll.set_child(self._planner_list); box.append(scroll)
+        return box
+
+    def _init_planner_folder(self):
+        repo = config.github_repo
+        if repo:
+            folder = Path(repo) / "liturgy"
+            if folder.is_dir():
+                self._planner_folder = folder
+                self._planner_folder_lbl.set_text(str(folder)); return
+        self._planner_folder_lbl.set_text("No folder — use 'Folder…' or set up GitHub in Preferences")
+
+    def _on_choose_folder(self, _):
+        dlg = Gtk.FileDialog(title="Choose folder containing .liturgy files")
+        def on_chosen(d, r):
+            try:
+                f = d.select_folder_finish(r)
+                self._planner_folder = Path(f.get_path())
+                self._planner_folder_lbl.set_text(str(self._planner_folder))
+                self._load_planner()
+            except GLib.Error:
+                pass
+        dlg.select_folder(self, None, on_chosen)
+
+    def _load_planner(self):
+        while self._planner_list.get_first_child():
+            self._planner_list.remove(self._planner_list.get_first_child())
+        if not self._planner_folder or not self._planner_folder.is_dir():
+            self._planner_list.append(self._status_row("No folder selected")); return
+
+        from datetime import date as _date
+        today = _date.today()
+        try:
+            from rubric_package.db import (service_index_update, service_index_get_mtime,
+                service_index_all, service_index_prune)
+            _db = True
+        except ImportError:
+            _db = False
+
+        services = []; on_disk: set = set()
+        for p in self._planner_folder.glob("*.liturgy"):
+            path_str = str(p); on_disk.add(path_str)
+            try:
+                mtime = p.stat().st_mtime
+                cached = service_index_get_mtime(path_str) if _db else None
+                if _db and cached is not None and abs(cached - mtime) < 0.01: continue
+                d = json.loads(p.read_text(encoding="utf-8"))
+                if _db:
+                    service_index_update(path_str, d.get("title","") or p.stem, d.get("date",""),
+                        len([i for i in d.get("items",[]) if i.get("type") != "divider"]), mtime)
+            except Exception:
+                pass
+
+        if _db and on_disk:
+            service_index_prune(on_disk)
+            for r in service_index_all():
+                if r["path"] not in on_disk: continue
+                try: sd = _date.fromisoformat(r["date"]) if r["date"] else None
+                except ValueError: sd = None
+                services.append((sd, r["title"] or Path(r["path"]).stem, r["item_count"], Path(r["path"])))
+        elif not _db:
+            for p in self._planner_folder.glob("*.liturgy"):
                 try:
-                    f = d.select_folder_finish(r)
-                    PlannerWindow(folder=Path(f.get_path()), main_window=self, transient_for=self).present()
-                except GLib.Error:
-                    pass
-            dlg.select_folder(self, None, on_chosen)
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    try: sd = _date.fromisoformat(d.get("date","")) if d.get("date") else None
+                    except ValueError: sd = None
+                    services.append((sd, d.get("title","") or p.stem,
+                        len([i for i in d.get("items",[]) if i.get("type") != "divider"]), p))
+                except Exception: pass
+
+        if not services:
+            self._planner_list.append(self._status_row(f"No .liturgy files in {self._planner_folder}")); return
+
+        upcoming = sorted([(d,t,c,p) for d,t,c,p in services if d and d >= today], key=lambda x: x[0])
+        past     = sorted([(d,t,c,p) for d,t,c,p in services if not d or d < today],
+                          key=lambda x: x[0] or _date.min, reverse=True)
+
+        def _sep(label):
+            lbl = Gtk.Label(label=label); lbl.add_css_class("heading"); lbl.add_css_class("dim-label")
+            lbl.set_xalign(0); lbl.set_margin_start(4); lbl.set_margin_top(12); lbl.set_margin_bottom(2)
+            r = Gtk.ListBoxRow(); r.set_activatable(False); r.set_child(lbl)
+            self._planner_list.append(r)
+
+        if upcoming: _sep("Upcoming")
+        for sd, title, count, path in upcoming:
+            row = Adw.ActionRow(title=title, subtitle=f"{sd.strftime('%-d %B %Y')}  ·  {count} elements")
+            row.set_activatable(True); row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.connect("activated", lambda _r, p=str(path): self._open_service(p))
+            self._planner_list.append(row)
+        if past: _sep("Past services")
+        for sd, title, count, path in past:
+            date_label = sd.strftime("%-d %B %Y") if sd else "No date"
+            row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
+            row.set_activatable(True); row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.connect("activated", lambda _r, p=str(path): self._open_service(p))
+            self._planner_list.append(row)
+
+    # ── Library tab ───────────────────────────────────────────────────────────
+
+    def _build_library_tab(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        se = Gtk.SearchEntry(); se.set_placeholder_text("Search elements…")
+        se.set_margin_start(12); se.set_margin_end(12); se.set_margin_top(10); se.set_margin_bottom(6)
+        se.connect("search-changed", lambda e: self._lib_rebuild(e.get_text().strip()))
+        box.append(se); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self._lib_insert_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._lib_insert_bar.set_margin_start(12); self._lib_insert_bar.set_margin_end(12)
+        self._lib_insert_bar.set_margin_top(6); self._lib_insert_bar.set_margin_bottom(6)
+        self._lib_insert_bar.set_visible(False)
+        self._lib_insert_lbl = Gtk.Label(); self._lib_insert_lbl.set_hexpand(True)
+        self._lib_insert_lbl.set_xalign(0); self._lib_insert_lbl.add_css_class("caption")
+        self._lib_insert_bar.append(self._lib_insert_lbl)
+        ins_btn = Gtk.Button(label="Insert into selected element"); ins_btn.add_css_class("suggested-action")
+        ins_btn.connect("clicked", self._on_lib_insert); self._lib_insert_bar.append(ins_btn)
+        box.append(self._lib_insert_bar)
+
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._lib_list = Gtk.ListBox(); self._lib_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._lib_list.add_css_class("boxed-list")
+        self._lib_list.set_margin_start(12); self._lib_list.set_margin_end(12)
+        self._lib_list.set_margin_top(8); self._lib_list.set_margin_bottom(12)
+        self._lib_list.connect("row-selected", self._on_lib_row_selected)
+        scroll.set_child(self._lib_list); box.append(scroll)
+        return box
+
+    def _lib_rebuild(self, query: str):
+        self._lib_search = query
+        while self._lib_list.get_first_child(): self._lib_list.remove(self._lib_list.get_first_child())
+        self._lib_selected = None; self._lib_insert_bar.set_visible(False)
+        try:
+            from rubric_package.db import element_search, element_services, element_for_service
+        except ImportError:
+            self._lib_list.append(self._status_row("Database not available")); return
+
+        if query:
+            rows = element_search(query)
+            if not rows: self._lib_list.append(self._status_row("No matches found")); return
+            for r in rows: self._lib_list.append(self._lib_elem_row(r))
         else:
-            PlannerWindow(folder=folder, main_window=self, transient_for=self).present()
+            services = element_services()
+            if not services:
+                self._lib_list.append(self._status_row(
+                    "No services indexed yet — save a service to add it to the library")); return
+            for svc in services:
+                self._lib_list.append(self._lib_svc_row(svc))
+                if svc["service_path"] in self._lib_expanded:
+                    for elem in element_for_service(svc["service_path"]):
+                        self._lib_list.append(self._lib_elem_row(elem, indented=True))
 
-    def open_library(self):
-        win = getattr(self, "_library_win", None)
-        if win and win.get_visible():
-            win.present(); return
-        self._library_win = LibraryWindow(main_window=self, transient_for=self)
-        self._library_win.present()
+    def _lib_svc_row(self, svc: dict) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row._is_service = True; row._service_path = svc["service_path"]
+        expanded = svc["service_path"] in self._lib_expanded
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_margin_start(12); box.set_margin_end(8); box.set_margin_top(8); box.set_margin_bottom(8)
+        box.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
+        title_lbl = Gtk.Label(label=svc.get("service_title") or Path(svc["service_path"]).stem)
+        title_lbl.set_hexpand(True); title_lbl.set_xalign(0); box.append(title_lbl)
+        if svc.get("service_date"):
+            box.append(Gtk.Label(label=svc["service_date"], css_classes=["caption", "dim-label"]))
+        row.set_child(box); return row
 
-    def open_archive(self):
-        win = getattr(self, "_archive_win", None)
-        if win and win.get_visible():
-            win.present(); return
-        self._archive_win = ArchiveWindow(main_window=self, transient_for=self)
-        self._archive_win.present()
+    def _lib_elem_row(self, r: dict, indented: bool = False) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row._element = r; row._is_service = False
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_margin_start(32 if indented else 12); box.set_margin_end(12)
+        box.set_margin_top(6); box.set_margin_bottom(6)
+        name_lbl = Gtk.Label(label=r.get("name", "(unnamed)"))
+        name_lbl.set_xalign(0); box.append(name_lbl)
+        note = (r.get("note") or "").strip()
+        if note:
+            preview = note[:120].replace("\n", " ") + ("…" if len(note) > 120 else "")
+            note_lbl = Gtk.Label(label=preview)
+            note_lbl.set_xalign(0); note_lbl.add_css_class("caption"); note_lbl.add_css_class("dim-label")
+            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(3)
+            box.append(note_lbl)
+        if not indented and r.get("service_title"):
+            svc_lbl = Gtk.Label(label=f'{r["service_title"]}  ·  {r.get("service_date","") or ""}')
+            svc_lbl.set_xalign(0); svc_lbl.add_css_class("caption"); svc_lbl.add_css_class("dim-label")
+            box.append(svc_lbl)
+        row.set_child(box); return row
+
+    def _on_lib_row_selected(self, _lb, row):
+        if row is None: self._lib_selected = None; self._lib_insert_bar.set_visible(False); return
+        if getattr(row, "_is_service", False):
+            path = row._service_path
+            if path in self._lib_expanded: self._lib_expanded.discard(path)
+            else: self._lib_expanded.add(path)
+            GLib.idle_add(self._lib_rebuild, self._lib_search); return
+        elem = getattr(row, "_element", None)
+        if not elem or not (elem.get("note") or elem.get("bulletin_note")):
+            self._lib_insert_bar.set_visible(False); return
+        self._lib_selected = elem
+        self._lib_insert_lbl.set_label(f'"{elem.get("name","element")}" · {len(elem.get("note",""))} chars')
+        self._lib_insert_bar.set_visible(True)
+
+    def _on_lib_insert(self, _):
+        if not self._lib_selected: return
+        self._do_insert(self._lib_selected.get("note") or self._lib_selected.get("bulletin_note") or "",
+                        self._lib_selected.get("name", "element"))
+
+    # ── Archive tab ───────────────────────────────────────────────────────────
+
+    def _build_archive_tab(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        se = Gtk.SearchEntry(); se.set_placeholder_text("Search past services…")
+        se.set_margin_start(12); se.set_margin_end(12); se.set_margin_top(10); se.set_margin_bottom(6)
+        se.connect("search-changed", lambda e: self._arch_rebuild(e.get_text().strip().lower()))
+        box.append(se); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._arch_list = Gtk.ListBox(); self._arch_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._arch_list.add_css_class("boxed-list")
+        self._arch_list.set_margin_start(12); self._arch_list.set_margin_end(12)
+        self._arch_list.set_margin_top(8); self._arch_list.set_margin_bottom(12)
+        scroll.set_child(self._arch_list); box.append(scroll)
+        return box
+
+    def _arch_rebuild(self, query: str):
+        self._arch_search = query
+        while self._arch_list.get_first_child(): self._arch_list.remove(self._arch_list.get_first_child())
+        try:
+            from rubric_package.db import element_services, element_for_service
+        except ImportError:
+            self._arch_list.append(self._status_row("Database not available")); return
+
+        services = element_services(limit=500)
+        if not services:
+            self._arch_list.append(self._status_row(
+                "No services in library yet — save a service to add it here")); return
+
+        if query:
+            filtered = []
+            for svc in services:
+                title = (svc.get("service_title") or "").lower()
+                date  = (svc.get("service_date") or "").lower()
+                if query in title or query in date:
+                    filtered.append(svc)
+                else:
+                    elems = element_for_service(svc["service_path"])
+                    if any(query in (e.get("name","")).lower() or query in (e.get("note","")).lower()
+                           for e in elems):
+                        filtered.append(svc)
+            services = filtered
+            if not services: self._arch_list.append(self._status_row("No matches found")); return
+
+        for svc in services:
+            self._arch_list.append(self._arch_svc_row(svc))
+            if svc["service_path"] in self._arch_expanded:
+                try: elems = element_for_service(svc["service_path"])
+                except Exception: elems = []
+                cur_section = ""
+                for elem in elems:
+                    if elem.get("section") and elem["section"] != cur_section:
+                        cur_section = elem["section"]
+                        self._arch_list.append(self._arch_section_label(cur_section))
+                    self._arch_list.append(self._arch_elem_row(elem))
+
+    def _arch_svc_row(self, svc: dict) -> Gtk.ListBoxRow:
+        path = svc["service_path"]; expanded = path in self._arch_expanded
+        row = Gtk.ListBoxRow(); row._is_service = True; row._svc = svc
+        row.set_activatable(True)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        header.set_margin_start(12); header.set_margin_end(8)
+        header.set_margin_top(10); header.set_margin_bottom(10)
+        header.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1); info.set_hexpand(True)
+        title_lbl = Gtk.Label(label=svc.get("service_title") or Path(path).stem)
+        title_lbl.set_xalign(0); title_lbl.add_css_class("heading"); title_lbl.set_ellipsize(3)
+        info.append(title_lbl)
+        date_lbl = Gtk.Label(label=svc.get("service_date") or "No date")
+        date_lbl.set_xalign(0); date_lbl.add_css_class("caption"); date_lbl.add_css_class("dim-label")
+        info.append(date_lbl); header.append(info)
+        open_btn = Gtk.Button(label="Open in editor"); open_btn.add_css_class("flat")
+        open_btn.set_valign(Gtk.Align.CENTER)
+        open_btn.connect("clicked", lambda _b, p=path: self._open_service(p))
+        header.append(open_btn); outer.append(header); row.set_child(outer)
+        def on_activate(_r, p=path):
+            if p in self._arch_expanded: self._arch_expanded.discard(p)
+            else: self._arch_expanded.add(p)
+            GLib.idle_add(self._arch_rebuild, self._arch_search)
+        row.connect("activate", on_activate)
+        return row
+
+    def _arch_section_label(self, section: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row.set_activatable(False)
+        lbl = Gtk.Label(label=section); lbl.set_xalign(0)
+        lbl.add_css_class("caption"); lbl.add_css_class("dim-label"); lbl.add_css_class("heading")
+        lbl.set_margin_start(28); lbl.set_margin_end(12)
+        lbl.set_margin_top(8); lbl.set_margin_bottom(2)
+        row.set_child(lbl); return row
+
+    def _arch_elem_row(self, elem: dict) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row.set_activatable(False); row._element = elem
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(28); box.set_margin_end(12)
+        box.set_margin_top(6); box.set_margin_bottom(6)
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        name_lbl = Gtk.Label(label=elem.get("name",""))
+        name_lbl.set_xalign(0); name_lbl.add_css_class("body"); name_lbl.set_hexpand(True)
+        top.append(name_lbl)
+        if elem.get("leader"):
+            top.append(Gtk.Label(label=elem["leader"], css_classes=["caption", "dim-label"]))
+        note_raw = (elem.get("bulletin_note") or elem.get("note") or "").strip()
+        if note_raw:
+            ins_btn = Gtk.Button(label="Insert"); ins_btn.add_css_class("flat")
+            ins_btn.set_valign(Gtk.Align.CENTER)
+            ins_btn.connect("clicked", lambda _b, e=elem: self._do_insert(
+                e.get("note") or e.get("bulletin_note") or "", e.get("name","element")))
+            top.append(ins_btn)
+        box.append(top)
+        if note_raw:
+            clean = self._strip_latex(note_raw)
+            if clean:
+                note_lbl = Gtk.Label(label=clean); note_lbl.set_xalign(0)
+                note_lbl.set_wrap(True); note_lbl.add_css_class("caption"); note_lbl.set_selectable(True)
+                box.append(note_lbl)
+        row.set_child(box); return row
+
+    # ── Shared helpers ────────────────────────────────────────────────────────
+
+    def _load_all(self, *_):
+        self._init_planner_folder(); self._load_planner()
+        self._lib_rebuild(""); self._arch_rebuild("")
+        return False
+
+    def _open_service(self, path: str):
+        self._main._confirm_discard(lambda p=path: self._main._load_file(p))
+
+    def _do_insert(self, note: str, name: str):
+        win = self._main
+        idx = win._selected_global_idx
+        if idx < 0 or idx >= len(win.service_entries):
+            self._show_toast("Select an element in the service order first"); return
+        entry = win.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            self._show_toast("Select an element (not a section header)"); return
+        win._updating_note = True
+        entry.note = note; win.notes_view.get_buffer().set_text(note, -1)
+        win._leader_tab_btn.set_active(True)
+        win._updating_note = False; win._mark_modified()
+        self._show_toast(f'Inserted into "{entry.name}"')
+
+    def _strip_latex(self, text: str) -> str:
+        text = re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
+            lambda m: re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'\1 \2 ', m.group(1).strip()),
+            text, flags=re.DOTALL)
+        text = re.sub(r'\\(?:textbf|textit|emph|small)\{([^}]*)\}', r'\1', text)
+        text = re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
+        text = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
+        text = re.sub(r'\\[a-zA-Z@]+\*?', '', text)
+        text = re.sub(r'\{|\}', '', text)
+        return text.strip()
+
+    def _status_row(self, msg: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row.set_activatable(False)
+        lbl = Gtk.Label(label=msg); lbl.add_css_class("dim-label")
+        lbl.set_margin_top(20); lbl.set_margin_bottom(20)
+        lbl.set_margin_start(12); lbl.set_margin_end(12)
+        lbl.set_wrap(True); row.set_child(lbl); return row
+
+    def _show_toast(self, msg: str):
+        toast = Adw.Toast.new(msg); toast.set_timeout(3)
+        try: self._main._toast_overlay.add_toast(toast)
+        except Exception: pass
+
+
+# ── Help Window ───────────────────────────────────────────────────────────────
+
+class HelpWindow(Adw.Window):
+    """Tabbed help window — Help, FAQ, What's New, About."""
+
+    _TAB_IDX = {"help": 0, "faq": 1, "changelog": 2, "about": 3}
+
+    def __init__(self, main_window, start_tab: str = "help", **kw):
+        super().__init__(title="Help — Rubric", default_width=720, default_height=620, **kw)
+        self._main = main_window
+        self.set_modal(False)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv.add_top_bar(hdr)
+
+        self._nb = Gtk.Notebook()
+        self._nb.set_show_border(False); self._nb.set_vexpand(True)
+
+        app_dir = Path(__file__).parent
+        self._nb.append_page(self._doc_page(app_dir / "HELP.md"),      Gtk.Label(label="Help"))
+        self._nb.append_page(self._doc_page(app_dir / "FAQ.md"),       Gtk.Label(label="FAQ"))
+        self._nb.append_page(self._doc_page(app_dir / "CHANGELOG.md"), Gtk.Label(label="What's New"))
+        self._nb.append_page(self._about_page(),                        Gtk.Label(label="About"))
+        self._nb.set_current_page(self._TAB_IDX.get(start_tab, 0))
+
+        tv.set_content(self._nb)
+        self.set_content(tv)
+
+    def switch_tab(self, name: str):
+        self._nb.set_current_page(self._TAB_IDX.get(name, 0))
+
+    def _doc_page(self, path: Path) -> Gtk.Widget:
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        tv = Gtk.TextView(); tv.set_editable(False); tv.set_cursor_visible(False)
+        tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        tv.set_top_margin(16); tv.set_bottom_margin(16)
+        tv.set_left_margin(20); tv.set_right_margin(20)
+        buf = tv.get_buffer()
+        buf.create_tag("h1", weight=700, scale=1.4, pixels_above_lines=12, pixels_below_lines=4)
+        buf.create_tag("h2", weight=700, scale=1.15, pixels_above_lines=10, pixels_below_lines=2)
+        buf.create_tag("h3", weight=700, scale=1.0,  pixels_above_lines=8,  pixels_below_lines=2)
+        buf.create_tag("bold",   weight=700)
+        buf.create_tag("code",   family="monospace", background="#f0f0f0")
+        buf.create_tag("hr",     strikethrough=True, foreground="#888888")
+        buf.create_tag("bullet", left_margin=24)
+        if not path.exists():
+            buf.set_text(f"File not found: {path}", -1)
+            scroll.set_child(tv); return scroll
+        it = buf.get_end_iter(); in_code = False
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.rstrip()
+            if line.startswith("```"):
+                in_code = not in_code; buf.insert(it, "\n"); continue
+            if in_code:
+                buf.insert_with_tags_by_name(it, line + "\n", "code"); continue
+            if re.match(r'^---+$', line):
+                buf.insert_with_tags_by_name(it, "─" * 40 + "\n", "hr"); continue
+            m = re.match(r'^(#{1,3})\s+(.*)', line)
+            if m:
+                buf.insert_with_tags_by_name(it, m.group(2) + "\n", ["h1","h2","h3"][min(len(m.group(1))-1,2)]); continue
+            m = re.match(r'^[-*]\s+(.*)', line)
+            if m:
+                buf.insert_with_tags_by_name(it, "  • " + m.group(1) + "\n", "bullet"); continue
+            if re.match(r'^\|[-| :]+\|$', line): continue
+            if line.startswith("|"):
+                buf.insert_with_tags_by_name(it, line + "\n", "code"); continue
+            if not line: buf.insert(it, "\n"); continue
+            for part in re.split(r'(\*\*[^*]+\*\*|`[^`]+`)', line):
+                if part.startswith("**") and part.endswith("**"):
+                    buf.insert_with_tags_by_name(it, part[2:-2], "bold")
+                elif part.startswith("`") and part.endswith("`"):
+                    buf.insert_with_tags_by_name(it, part[1:-1], "code")
+                else:
+                    buf.insert(it, part)
+            buf.insert(it, "\n")
+        scroll.set_child(tv)
+        return scroll
+
+    def _about_page(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        box.set_margin_top(40); box.set_margin_bottom(40)
+        box.set_margin_start(40); box.set_margin_end(40)
+        box.set_valign(Gtk.Align.CENTER)
+        icon = Gtk.Image(icon_name="io.github.calstfrancis.rubric"); icon.set_pixel_size(64)
+        box.append(icon)
+        box.append(Gtk.Label(label="Rubric", css_classes=["title-1"]))
+        ver = APP_VERSION
+        box.append(Gtk.Label(label=f"Version {ver}", css_classes=["dim-label"]))
+        box.append(Gtk.Label(label="Worship service planning for United Church of Canada ministry",
+                             css_classes=["body"]))
+        box.append(Gtk.Label(label="© Cal St Francis · GPL-3.0",
+                             css_classes=["caption", "dim-label"]))
+        gh_btn = Gtk.Button(label="GitHub — calstfrancis/rubric")
+        gh_btn.add_css_class("flat"); gh_btn.set_halign(Gtk.Align.CENTER)
+        gh_btn.connect("clicked", lambda _: Gtk.show_uri(self, "https://github.com/calstfrancis/rubric", 0))
+        box.append(gh_btn)
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_child(box); return scroll
 
 
 # ── Service Planner ───────────────────────────────────────────────────────────
