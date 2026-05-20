@@ -27,13 +27,41 @@ print('  GTK4 + libadwaita: OK')
     exit 1
 }
 
+# Optional: xelatex + memoir for leader-sheet PDF export
+if command -v xelatex &>/dev/null; then
+    echo "  xelatex: OK"
+    # Check for memoir package (required for bulletin PDF)
+    if ! kpsewhich memoir.cls &>/dev/null; then
+        echo ""
+        echo "  NOTE: 'memoir' TeX package not found — bulletin PDF export will fail."
+        echo "  Install it with:  tlmgr install memoir"
+        echo ""
+    fi
+else
+    echo "  xelatex: not found (PDF export unavailable)"
+    echo "  Install TeX Live with:  sudo zypper install texlive-xetex texlive-memoir"
+fi
+
 # ── App files ─────────────────────────────────────────────────────────────────
 echo "==> Installing app to $APP_DIR"
 mkdir -p "$APP_DIR"
-cp "$SCRIPT_DIR/rubric.py"  "$APP_DIR/"
-cp "$SCRIPT_DIR/rcl_data.py"         "$APP_DIR/"
 
-# Optional modules — copy if present
+# Core Python modules (always required)
+cp "$SCRIPT_DIR/rubric.py"      "$APP_DIR/"
+cp "$SCRIPT_DIR/rcl_data.py"    "$APP_DIR/"
+cp "$SCRIPT_DIR/observances.py" "$APP_DIR/"
+
+# rubric_package — SQLite layer, models, utilities (required)
+if [ -d "$SCRIPT_DIR/rubric_package" ]; then
+    cp -r "$SCRIPT_DIR/rubric_package" "$APP_DIR/"
+    # Remove compiled bytecode — it's machine/version-specific
+    find "$APP_DIR/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$APP_DIR/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
+else
+    echo "  WARNING: rubric_package/ not found — SQLite features will be unavailable"
+fi
+
+# Optional root-level modules — copy if present
 for f in hymn_lookup.py hymn_suggestions.py bible_api.py snippets.py; do
     [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$APP_DIR/"
 done

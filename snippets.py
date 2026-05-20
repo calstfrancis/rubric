@@ -1,12 +1,18 @@
 """
 snippets.py — Named text snippet storage for Rubric.
-Stored in ~/.config/rubric/snippets.json.
+Stored in ~/.local/share/rubric/rubric.db (snippets table).
 """
 
-import json
 from pathlib import Path
 
-SNIPPETS_PATH = Path.home() / ".config/rubric/snippets.json"
+try:
+    from rubric_package.db import snippets_load as _db_load, snippets_save as _db_save, snippets_has_data
+    _DB_OK = True
+except ImportError:
+    _DB_OK = False
+
+# Fallback JSON path (legacy; used only if SQLite is unavailable)
+_LEGACY_PATH = Path.home() / ".config/rubric/snippets.json"
 
 DEFAULT_SNIPPETS = [
     {
@@ -152,17 +158,31 @@ this day and always.""",
 
 
 def load_snippets() -> list[dict]:
-    if SNIPPETS_PATH.exists():
+    if _DB_OK:
+        if not snippets_has_data():
+            # Seed defaults on a brand-new install (migration from JSON handled by db.migrate_from_json)
+            _db_save(list(DEFAULT_SNIPPETS))
+        return _db_load()
+
+    # Legacy JSON fallback (no SQLite)
+    import json
+    if _LEGACY_PATH.exists():
         try:
-            return json.loads(SNIPPETS_PATH.read_text(encoding="utf-8"))
+            return json.loads(_LEGACY_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
     return list(DEFAULT_SNIPPETS)
 
 
-def save_snippets(snippets: list[dict]):
-    SNIPPETS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SNIPPETS_PATH.write_text(
+def save_snippets(snippets: list[dict]) -> None:
+    if _DB_OK:
+        _db_save(snippets)
+        return
+
+    # Legacy JSON fallback
+    import json
+    _LEGACY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _LEGACY_PATH.write_text(
         json.dumps(snippets, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )

@@ -20,9 +20,15 @@ PAYLOAD="$WORK/payload"
 APP="$PAYLOAD/usr/share/rubric"
 mkdir -p "$APP"
 
-cp rubric.py bible_api.py hymn_lookup.py hymn_suggestions.py rcl_data.py snippets.py "$APP/"
+cp rubric.py bible_api.py hymn_lookup.py hymn_suggestions.py rcl_data.py snippets.py observances.py "$APP/"
 cp -r data "$APP/"
+
+# rubric_package — strip __pycache__ so bundled .pyc files don't conflict
+# with the Python version on the target machine
 cp -r rubric_package "$APP/"
+find "$APP/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$APP/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
+
 for f in HELP.md FAQ.md CHANGELOG.md; do
     [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$APP/"
 done

@@ -6,6 +6,22 @@ Rubric is a GNOME-native application for planning worship services for the Unite
 
 ---
 
+## First Launch
+
+The first time Rubric opens, a welcome wizard appears with three choices:
+
+- **Start with today's lectionary** — pre-fills a complete four-movement order (Gathering, Word, Response, Sending) with standard element names and injects this Sunday's RCL reading references into the relevant notes. The readings card, hymn suggestions, and observances row are all populated automatically.
+- **Blank service** — opens a clean document so you can build from scratch.
+- **Show me around** — opens the Help guide and starts the quickstart tip strip.
+
+The wizard only appears once. Afterward, Rubric opens to whatever you last had open.
+
+### Quickstart tip strip
+
+After the wizard (or on "Show me around"), a dismissible banner appears below the readings card. It cycles through six short tips. Click **Next tip →** to advance; click **✕** to dismiss permanently. You can restart it any time from the hamburger menu → Help → Quickstart tips.
+
+---
+
 ## Simple Mode vs. Advanced Mode
 
 Rubric launches in **Simple mode** by default. This keeps the interface clean for everyday planning use — no LaTeX knowledge required.
@@ -89,9 +105,28 @@ When a date is set, shows:
 - **Colour bar** — liturgical season colour
 - **Season and week** (e.g. "Proper 12, Year A") alongside four reading buttons
 - **Four reading buttons** — First Reading · Psalm · Epistle · Gospel. Click to open the Bible Viewer.
+- **Observances row** — a compact row of labelled badges for feasts, commemorations, and seasonal observances relevant to the service date (see below).
 
 ### Weekday services
 Weekday dates default to the next Sunday's readings with a ← → stepper. Useful for Thursday chapels.
+
+### Observances row
+
+The observances row appears automatically when there is something worth noting for the service date. Each badge shows a coloured type label and the observance name:
+
+| Badge colour | Category | Examples |
+|---|---|---|
+| Gold | Feast | All Saints, Christmas, Easter Vigil |
+| Violet | Saint | feast days of named saints |
+| Teal | Ecumenical | Week of Prayer for Christian Unity, World Day of Prayer |
+| Amber | Indigenous | Indigenous Sunday, Orange Shirt Day |
+| Rose | Social Justice | International Women's Day, World AIDS Day, 16 Days of Activism |
+| Green | Ecological | Earth Day, Earth Sunday, Season of Creation |
+| Rainbow | Pride | Pride Month, Pride Sunday |
+| Grey-blue | Remembrance | Remembrance Day, Remembrance Sunday |
+| Purple | UCC | UCC-specific commemorations |
+
+When the service date is a Sunday, observances falling on weekdays within that same week appear with a proximity note (e.g. "Orange Shirt Day · *this Wednesday*"). This helps you decide whether to acknowledge the observance on the preceding Sunday.
 
 ---
 
@@ -110,16 +145,32 @@ Suggestions are specific to the Proper (Propers 4–29) or season.
 
 ## Item Toolbar
 
-Appears when any service element is selected:
+Appears when any service element is selected. The toolbar has two rows:
+
+**Row 1 — Assignment and bulletin**
 
 | Field | Purpose |
 |-------|---------|
-| Leader: | Name/role — exports right-aligned italic in headings |
-| Scripture: | Type any reference (e.g. `Ps 23`) and press Enter to open the Bible Viewer |
-| Hymn #: | Type `VU 16` and press Enter to look up and inject the title |
-| ✂ | Insert a snippet (Ctrl+Shift+I) — advanced mode |
-| ℟ | Open the Responsive Reading builder (Ctrl+R) — advanced mode |
-| 📋 | Toggle whether this element appears in the bulletin |
+| Leader | Name or role — exports right-aligned italic in headings |
+| Bulletin | Toggle whether this element appears in the bulletin |
+
+**Row 2 — Content actions**
+
+| Field | Purpose |
+|-------|---------|
+| Scripture | Type any reference (e.g. `Ps 23`) and press Enter to open the Bible Viewer |
+| Hymn | Type `VU 16` and press Enter to look up and inject the title (appears only for hymn-type elements) |
+| Snippet | Insert a snippet (Ctrl+Shift+I) — advanced mode |
+| Reading | Open the Responsive Reading builder (Ctrl+R) — advanced mode |
+
+### Notes panel — Leader notes / Bulletin text
+
+Below the toolbar, two tabs hold separate text areas:
+
+- **Leader notes** — free-form text that exports to the leader copy (LaTeX/HTML). RCL reading references injected from a loaded file appear here. This is where you type sermon notes, prayers, responsive reading text, etc.
+- **Bulletin text** — separate text that appears in the congregational bulletin in place of the leader notes (optional). Leave blank to use leader notes content in the bulletin.
+
+Rubric always switches to **Leader notes** when you select an item, so injected content is never hidden.
 
 ---
 

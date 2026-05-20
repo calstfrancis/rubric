@@ -6,21 +6,23 @@ Supported hymnals:
   MV  — More Voices (United Church of Canada, 2007)
   LUS — Let Us Sing! (United Church of Canada supplement)
 
-Results are cached in ~/.local/share/rubric/hymn_cache.json.
+Results are cached in the Rubric SQLite database (~/.local/share/rubric/rubric.db).
 """
 
 import threading
 import urllib.request
 import urllib.error
 import re
-import json
-from pathlib import Path
 
 import gi
 gi.require_version("GLib", "2.0")
 from gi.repository import GLib
 
-CACHE_PATH = Path.home() / ".local/share/rubric" / "hymn_cache.json"
+try:
+    from rubric_package.db import hymn_get, hymn_set
+    _DB_OK = True
+except ImportError:
+    _DB_OK = False
 
 # Hymnary.org book identifiers
 HYMNALS: dict[str, tuple[str, str]] = {
@@ -45,27 +47,6 @@ def parse_hymn_ref(text: str) -> tuple[str, int] | None:
     return prefix, number
 
 
-def _load_cache() -> dict:
-    if CACHE_PATH.exists():
-        try:
-            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {}
-
-
-def _save_cache(cache: dict, key: str, title: str):
-    cache[key] = title
-    try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(
-            json.dumps(cache, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
-
-
 def lookup_hymn(prefix: str, number: int, callback):
     """
     Asynchronously look up a hymn title on Hymnary.org.
@@ -74,12 +55,13 @@ def lookup_hymn(prefix: str, number: int, callback):
     GLib main loop when the result is ready.
     """
     def fetch():
-        cache = _load_cache()
         key = f"{prefix}{number}"
 
-        if key in cache:
-            GLib.idle_add(callback, cache[key], None)
-            return
+        if _DB_OK:
+            cached = hymn_get(key)
+            if cached is not None:
+                GLib.idle_add(callback, cached, None)
+                return
 
         hymnal_id, hymnal_name = HYMNALS.get(prefix, (None, None))
         if not hymnal_id:
@@ -107,7 +89,8 @@ def lookup_hymn(prefix: str, number: int, callback):
                 if clean:
                     title = clean.group(1).strip()
                 if title and "hymnary" not in title.lower() and len(title) > 2:
-                    _save_cache(cache, key, title)
+                    if _DB_OK:
+                        hymn_set(key, title)
                     GLib.idle_add(callback, title, None)
                     return
 

@@ -67,6 +67,8 @@ class Config:
         self.last_seen_version: str = ""
         self.bulletin: dict[str, Any] = self._default_bulletin()
         self.github_repo: str = ""
+        self.first_launch_completed: bool = False
+        self.quickstart_dismissed: bool = False
         self._load()
 
     @staticmethod
@@ -105,6 +107,8 @@ class Config:
                 self.github_repo = d.get("github_repo", "")
                 self.default_template = d.get("default_template", "")
                 self.templates = d.get("templates", {})
+                self.first_launch_completed = d.get("first_launch_completed", False)
+                self.quickstart_dismissed = d.get("quickstart_dismissed", False)
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -132,6 +136,8 @@ class Config:
             "last_seen_version": self.last_seen_version,
             "bulletin": self.bulletin,
             "github_repo": self.github_repo,
+            "first_launch_completed": self.first_launch_completed,
+            "quickstart_dismissed": self.quickstart_dismissed,
         }
         if self.palette is not None:
             p["palette"] = self.palette

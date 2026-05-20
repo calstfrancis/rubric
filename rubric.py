@@ -1163,6 +1163,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.push_btn.set_visible(not simple)
         self.tex_btn.set_visible(not simple)
         self.pdf_btn.set_visible(not simple)
+        if hasattr(self, "_rr_btn"):
+            self._rr_btn.set_visible(not simple)
         self._refresh_menu()
 
     def _refresh_menu(self):
@@ -1353,12 +1355,32 @@ class MainWindow(Adw.ApplicationWindow):
         self._menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu")
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
+        # Bulletin preview toggle button (header bar, end side)
+        self._preview_visible = False
+        self._preview_pending_id = None
+        self._preview_btn = Gtk.ToggleButton(icon_name="document-print-preview-symbolic",
+                                             tooltip_text="Toggle live bulletin preview")
+        self._preview_btn.connect("toggled", self._toggle_preview_panel)
+        hdr.pack_end(self._preview_btn)
+
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
         self._toast_overlay = Adw.ToastOverlay()
+
+        # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         paned.set_shrink_start_child(False); paned.set_shrink_end_child(False); paned.set_position(290)
         paned.set_start_child(self._build_palette_panel())
-        paned.set_end_child(self._build_order_panel())
+
+        # Inner paned: order panel | bulletin preview (preview hidden by default)
+        self._preview_panel = self._build_preview_panel()
+        self._preview_panel.set_visible(False)
+        self._preview_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self._preview_paned.set_shrink_start_child(False)
+        self._preview_paned.set_shrink_end_child(False)
+        self._preview_paned.set_start_child(self._build_order_panel())
+        self._preview_paned.set_end_child(self._preview_panel)
+        paned.set_end_child(self._preview_paned)
+
         self._toast_overlay.set_child(paned)
         tv.set_content(self._toast_overlay)
         self.set_content(tv)
@@ -1371,7 +1393,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Search entry
         self._palette_search = Gtk.SearchEntry()
         self._palette_search.set_placeholder_text("Search elements…")
-        self._palette_search.set_margin_start(10); self._palette_search.set_margin_end(10)
+        self._palette_search.set_margin_start(12); self._palette_search.set_margin_end(12)
         self._palette_search.set_margin_top(8); self._palette_search.set_margin_bottom(4)
         self._palette_search.connect("search-changed", self._on_palette_search_changed)
         box.append(self._palette_search)
@@ -1380,9 +1402,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._palette_inner.set_margin_top(4); self._palette_inner.set_margin_bottom(8)
         self._palette_listboxes: dict[str,Gtk.ListBox] = {}; self._fill_palette_inner()
         scroll.set_child(self._palette_inner); box.append(scroll)
-        ab = Gtk.Button(label="Add to service ↓")
-        ab.set_margin_start(14); ab.set_margin_end(14); ab.set_margin_top(8); ab.set_margin_bottom(12)
-        ab.connect("clicked", lambda _: self._add_selected_palette_item()); box.append(ab)
         return box
 
     def _on_palette_search_changed(self, entry):
@@ -1404,10 +1423,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._palette_listboxes.clear()
         for sname, items in get_palette():
             lbl = Gtk.Label(label=sname); lbl.add_css_class("heading"); lbl.set_xalign(0)
-            lbl.set_margin_start(14); lbl.set_margin_end(14); lbl.set_margin_top(14); lbl.set_margin_bottom(4)
+            lbl.set_margin_start(12); lbl.set_margin_end(12); lbl.set_margin_top(12); lbl.set_margin_bottom(4)
             self._palette_inner.append(lbl)
             lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            lb.add_css_class("boxed-list"); lb.set_margin_start(14); lb.set_margin_end(14); lb.set_margin_bottom(4)
+            lb.add_css_class("boxed-list"); lb.set_margin_start(12); lb.set_margin_end(12); lb.set_margin_bottom(4)
             lb.connect("row-activated", self._on_palette_row_activated)
             for iname in items:
                 row = Adw.ActionRow(title=iname); row.set_activatable(True)
@@ -1466,6 +1485,19 @@ class MainWindow(Adw.ApplicationWindow):
             self._reading_rows[key] = btn
         self.readings_card.append(rcl_row)
 
+        # Observances row — chips for feasts, saints, justice days, ecological seasons
+        self._obs_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self._obs_sep.set_visible(False)
+        self.readings_card.append(self._obs_sep)
+        self._obs_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._obs_row.set_margin_start(8); self._obs_row.set_margin_end(8)
+        self._obs_row.set_margin_top(3); self._obs_row.set_margin_bottom(4)
+        self._obs_row.set_visible(False)
+        self._obs_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._obs_inner.set_hexpand(True)
+        self._obs_row.append(self._obs_inner)
+        self.readings_card.append(self._obs_row)
+
         # Weekday notice + Sunday stepper (shown when selected date is not Sunday/special)
         self._sunday_stepper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self._sunday_stepper.set_margin_start(8); self._sunday_stepper.set_margin_end(8)
@@ -1504,6 +1536,9 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(self.readings_card)
         self._current_readings = {}
 
+        # ── Quick-start banner (hidden until first launch wizard activates it) ─
+        box.append(self._build_quickstart_banner())
+
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         hpaned.set_shrink_start_child(False); hpaned.set_shrink_end_child(False)
@@ -1541,14 +1576,16 @@ class MainWindow(Adw.ApplicationWindow):
         # Order pane button bar
         bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         bb.set_margin_start(8); bb.set_margin_end(8); bb.set_margin_top(4); bb.set_margin_bottom(8)
-        add_elem_btn = Gtk.Button(label="+ Element", tooltip_text="Add custom element (Ctrl+Shift+N)")
+        add_elem_btn = Gtk.Button(label="Element", tooltip_text="Add custom element (Ctrl+Shift+N)")
+        add_elem_btn.add_css_class("flat")
         add_elem_btn.connect("clicked", lambda _: self.add_custom()); bb.append(add_elem_btn)
-        add_sec_btn = Gtk.Button(label="+ Section", tooltip_text="Add section divider (Ctrl+D)")
+        add_sec_btn = Gtk.Button(label="Section", tooltip_text="Add section divider (Ctrl+D)")
+        add_sec_btn.add_css_class("flat")
         add_sec_btn.connect("clicked", lambda _: self.add_divider()); bb.append(add_sec_btn)
         sp = Gtk.Box(); sp.set_hexpand(True); bb.append(sp)
         for icon, tip, cb in [("go-up-symbolic","Move up (Ctrl+↑)",self.move_up),
                                ("go-down-symbolic","Move down (Ctrl+↓)",self.move_down)]:
-            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
+            b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.add_css_class("flat")
             b.connect("clicked", lambda _, f=cb: f()); bb.append(b)
         rm = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text="Remove selected (Delete)")
         rm.add_css_class("destructive-action"); rm.connect("clicked", lambda _: self.remove_item()); bb.append(rm)
@@ -1564,95 +1601,89 @@ class MainWindow(Adw.ApplicationWindow):
         self.item_toolbar_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.item_toolbar_revealer.set_transition_duration(150)
 
-        itb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        itb.set_margin_start(12); itb.set_margin_end(12)
-        itb.set_margin_top(6); itb.set_margin_bottom(6)
+        # ── Row 1: Leader name + Bulletin toggle (primary, always-visible) ──
+        itb_rows = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Leader segment
-        ll = Gtk.Label(label="Leader:"); ll.add_css_class("dim-label")
-        ll.set_margin_end(4); itb.append(ll)
+        row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row1.set_margin_start(12); row1.set_margin_end(12)
+        row1.set_margin_top(8); row1.set_margin_bottom(4)
+
+        ldr_lbl = Gtk.Label(label="Leader"); ldr_lbl.add_css_class("dim-label")
+        row1.append(ldr_lbl)
         self.leader_entry = Gtk.Entry()
         self.leader_entry.set_placeholder_text("Name or role")
-        self.leader_entry.set_width_chars(12)
+        self.leader_entry.set_hexpand(True)
         self.leader_entry.connect("changed", self._on_leader_changed)
-        itb.append(self.leader_entry)
+        row1.append(self.leader_entry)
 
-        sep1 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep1.set_margin_start(8); sep1.set_margin_end(8); itb.append(sep1)
-
-        # Scripture segment
-        sl = Gtk.Label(label="Scripture:"); sl.add_css_class("dim-label")
-        sl.set_margin_end(4); itb.append(sl)
-        self.scripture_entry = Gtk.Entry()
-        self.scripture_entry.set_placeholder_text("e.g. Ps 23")
-        self.scripture_entry.set_width_chars(12)
-        self.scripture_entry.connect("activate", lambda _: self._do_scripture_search())
-        itb.append(self.scripture_entry)
-        ss_fetch = Gtk.Button(icon_name="system-search-symbolic", tooltip_text="Fetch passage")
-        ss_fetch.add_css_class("flat"); ss_fetch.set_margin_start(2)
-        ss_fetch.connect("clicked", lambda _: self._do_scripture_search())
-        itb.append(ss_fetch)
-
-        # Hymn segment (only shown for hymn-type elements)
-        sep_hymn = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep_hymn.set_margin_start(8); sep_hymn.set_margin_end(8); itb.append(sep_hymn)
-        hl = Gtk.Label(label="Hymn #:"); hl.add_css_class("dim-label")
-        hl.set_margin_end(4); itb.append(hl)
-        self.hymn_entry = Gtk.Entry()
-        self.hymn_entry.set_placeholder_text("VU 16 / MV 120")
-        self.hymn_entry.set_width_chars(10)
-        self.hymn_entry.connect("activate", lambda _: self._do_hymn_lookup())
-        itb.append(self.hymn_entry)
-        hlb = Gtk.Button(label="↵", tooltip_text="Look up hymn")
-        hlb.add_css_class("flat"); hlb.set_margin_start(2)
-        hlb.connect("clicked", lambda _: self._do_hymn_lookup()); itb.append(hlb)
-        self.hymn_status = Gtk.Label(); self.hymn_status.add_css_class("dim-label")
-        self.hymn_status.set_max_width_chars(18); self.hymn_status.set_ellipsize(3)
-        self.hymn_status.set_margin_start(4)
-        self._hymn_toolbar_widgets = [sep_hymn, hl, self.hymn_entry, hlb, self.hymn_status]
-        itb.append(self.hymn_status)
-
-        # Snippets and Responsive reading
-        sep3 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep3.set_margin_start(8); sep3.set_margin_end(4); itb.append(sep3)
-        snip_btn = Gtk.Button(label="✂", tooltip_text="Insert snippet (Ctrl+Shift+I)")
-        snip_btn.add_css_class("flat"); snip_btn.set_margin_end(2)
-        snip_btn.connect("clicked", lambda _: self.open_snippets()); itb.append(snip_btn)
-        rr_btn = Gtk.Button(label="℟", tooltip_text="Responsive reading builder (Ctrl+R)")
-        rr_btn.add_css_class("flat")
-        rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); itb.append(rr_btn)
-
-        # Bulletin toggle
-        sep4 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep4.set_margin_start(8); sep4.set_margin_end(4); itb.append(sep4)
-        self.bulletin_toggle = Gtk.ToggleButton(label="📋")
+        self.bulletin_toggle = Gtk.ToggleButton(label="Bulletin")
         self.bulletin_toggle.set_tooltip_text("Include in congregational bulletin")
         self.bulletin_toggle.add_css_class("flat")
         self.bulletin_toggle.set_active(True)
         self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
-        itb.append(self.bulletin_toggle)
+        row1.append(self.bulletin_toggle)
+        itb_rows.append(row1)
 
-        itb_scroll = Gtk.ScrolledWindow()
-        itb_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        itb_scroll.set_min_content_height(46)
-        itb_scroll.set_child(itb)
-        self.item_toolbar_revealer.set_child(itb_scroll)
+        # ── Row 2: Scripture · Hymn (contextual) · Snippets / Reading ────
+        row2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row2.set_margin_start(12); row2.set_margin_end(12)
+        row2.set_margin_top(0); row2.set_margin_bottom(8)
+
+        scr_lbl = Gtk.Label(label="Scripture"); scr_lbl.add_css_class("dim-label")
+        scr_lbl.set_margin_end(4); row2.append(scr_lbl)
+        self.scripture_entry = Gtk.Entry()
+        self.scripture_entry.set_placeholder_text("Ps 23")
+        self.scripture_entry.set_width_chars(10)
+        self.scripture_entry.connect("activate", lambda _: self._do_scripture_search())
+        row2.append(self.scripture_entry)
+        ss_fetch = Gtk.Button(icon_name="system-search-symbolic", tooltip_text="Fetch passage (Enter)")
+        ss_fetch.add_css_class("flat")
+        ss_fetch.connect("clicked", lambda _: self._do_scripture_search())
+        row2.append(ss_fetch)
+
+        # Hymn sub-segment — only shown for hymn-type elements
+        sep_hymn = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        sep_hymn.set_margin_start(6); sep_hymn.set_margin_end(6); row2.append(sep_hymn)
+        hl = Gtk.Label(label="Hymn"); hl.add_css_class("dim-label")
+        hl.set_margin_end(4); row2.append(hl)
+        self.hymn_entry = Gtk.Entry()
+        self.hymn_entry.set_placeholder_text("VU 16")
+        self.hymn_entry.set_width_chars(8)
+        self.hymn_entry.connect("activate", lambda _: self._do_hymn_lookup())
+        row2.append(self.hymn_entry)
+        hlb = Gtk.Button(label="↵", tooltip_text="Look up hymn (Enter)")
+        hlb.add_css_class("flat")
+        hlb.connect("clicked", lambda _: self._do_hymn_lookup()); row2.append(hlb)
+        self.hymn_status = Gtk.Label(); self.hymn_status.add_css_class("dim-label")
+        self.hymn_status.set_max_width_chars(20); self.hymn_status.set_ellipsize(3)
+        self.hymn_status.set_hexpand(True)
+        row2.append(self.hymn_status)
+        self._hymn_toolbar_widgets = [sep_hymn, hl, self.hymn_entry, hlb, self.hymn_status]
+
+        # Action buttons
+        sep_act = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        sep_act.set_margin_start(6); sep_act.set_margin_end(2); row2.append(sep_act)
+        snip_btn = Gtk.Button(label="Snippet", tooltip_text="Insert snippet (Ctrl+Shift+I)")
+        snip_btn.add_css_class("flat")
+        snip_btn.connect("clicked", lambda _: self.open_snippets()); row2.append(snip_btn)
+        self._rr_btn = Gtk.Button(label="Reading", tooltip_text="Responsive reading builder (Ctrl+R)")
+        self._rr_btn.add_css_class("flat")
+        self._rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); row2.append(self._rr_btn)
+        itb_rows.append(row2)
+
+        self.item_toolbar_revealer.set_child(itb_rows)
         notes_box.append(self.item_toolbar_revealer)
         self.hymn_revealer = self.item_toolbar_revealer
         self.leader_revealer = self.item_toolbar_revealer
 
-        # Notes header: label + Leader/Bulletin tab toggle buttons
+        # Notes header: tab switcher (Leader / Bulletin content)
         notes_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         notes_header.set_margin_start(12); notes_header.set_margin_end(12)
-        notes_header.set_margin_top(6); notes_header.set_margin_bottom(2)
-        notes_lbl = Gtk.Label(label="Notes / content")
-        notes_lbl.add_css_class("dim-label"); notes_lbl.add_css_class("caption")
-        notes_header.append(notes_lbl)
-        tab_spacer = Gtk.Box(); tab_spacer.set_hexpand(True); notes_header.append(tab_spacer)
+        notes_header.set_margin_top(4); notes_header.set_margin_bottom(2)
         tab_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        self._leader_tab_btn = Gtk.ToggleButton(label="Leader")
+        self._leader_tab_btn = Gtk.ToggleButton(label="Leader notes")
         self._leader_tab_btn.add_css_class("flat"); self._leader_tab_btn.set_active(True)
-        self._bulletin_tab_btn = Gtk.ToggleButton(label="Bulletin")
+        self._bulletin_tab_btn = Gtk.ToggleButton(label="Bulletin text")
         self._bulletin_tab_btn.add_css_class("flat")
         self._bulletin_tab_btn.set_group(self._leader_tab_btn)
         def on_leader_tab(btn):
@@ -1942,13 +1973,13 @@ class MainWindow(Adw.ApplicationWindow):
             except ValueError: self._selected_global_idx = -1
             buf.set_text(si.note, -1)
             buf_bul.set_text(si.bulletin_note, -1)
+            # Always land on Leader tab so the user sees the leader notes
+            self._leader_tab_btn.set_active(True)
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
             # Bulletin toggle — set state without triggering handler
-            self._updating_note = True
             self.bulletin_toggle.set_active(si.show_in_bulletin)
-            self._updating_note = False
             # Show/hide hymn segment based on element type
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
@@ -2240,6 +2271,45 @@ class MainWindow(Adw.ApplicationWindow):
         # Update hymn suggestions for this week
         self._update_hymn_suggestions(info["week"], info["season"])
 
+        # Update observances row
+        self._refresh_observances_row(self._readings_sunday or d)
+
+    def _refresh_observances_row(self, d) -> None:
+        """Rebuild the observances row for the given date."""
+        try:
+            from observances import get_observances, TYPES
+        except ImportError:
+            return
+        obs_list = get_observances(d)
+        while True:
+            ch = self._obs_inner.get_first_child()
+            if ch is None: break
+            self._obs_inner.remove(ch)
+        if not obs_list:
+            self._obs_sep.set_visible(False)
+            self._obs_row.set_visible(False)
+            return
+        self._obs_sep.set_visible(True)
+        self._obs_row.set_visible(True)
+        parts = []
+        for obs in obs_list:
+            ti = TYPES.get(obs.get("type", ""), {})
+            colour = ti.get("colour", "#6B7280")
+            tlabel = ti.get("label", "")
+            name = GLib.markup_escape_text(obs["name"])
+            if obs.get("proximity"):
+                name += f" <span alpha='70%'>({GLib.markup_escape_text(obs['proximity'])})</span>"
+            if tlabel:
+                parts.append(f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> {name}')
+            else:
+                parts.append(name)
+        lbl = Gtk.Label()
+        lbl.set_markup("   ·   ".join(parts))
+        lbl.add_css_class("caption")
+        lbl.set_wrap(True)
+        lbl.set_xalign(0)
+        self._obs_inner.append(lbl)
+
     def _step_sunday(self, direction: int):
         """Move the readings display to the prev (-1) or next (+1) Sunday."""
         from datetime import timedelta
@@ -2249,7 +2319,84 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── State ─────────────────────────────────────────────────────────────────
 
-    def _mark_modified(self): self.modified=True; self._update_title()
+    # ── Live bulletin preview ─────────────────────────────────────────────────
+
+    def _build_preview_panel(self) -> Gtk.Box:
+        """Return the bulletin preview side-panel (WebKit or fallback status page)."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        box.set_size_request(320, -1)
+
+        # Thin header strip
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        hdr.set_margin_start(10); hdr.set_margin_end(6)
+        hdr.set_margin_top(6); hdr.set_margin_bottom(6)
+        lbl = Gtk.Label(label="Bulletin Preview")
+        lbl.add_css_class("heading"); lbl.set_hexpand(True); lbl.set_xalign(0)
+        hdr.append(lbl)
+
+        open_btn = Gtk.Button(icon_name="web-browser-symbolic",
+                              tooltip_text="Open in browser")
+        open_btn.add_css_class("flat")
+        open_btn.connect("clicked", lambda _: self._export_bulletin_html())
+        hdr.append(open_btn)
+        box.append(hdr)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        if _WEBKIT_OK:
+            self._preview_webview = _WebKit.WebView()
+            self._preview_webview.set_vexpand(True)
+            self._preview_webview.set_hexpand(True)
+            box.append(self._preview_webview)
+        else:
+            self._preview_webview = None
+            status = Adw.StatusPage(
+                title="WebKit not available",
+                description="Install python3-webkit2gtk (or typelib-1_0-WebKit2-4_1) "
+                            "to enable live bulletin preview.",
+                icon_name="web-browser-symbolic",
+            )
+            status.set_vexpand(True)
+            box.append(status)
+
+        return box
+
+    def _toggle_preview_panel(self, btn):
+        visible = btn.get_active()
+        self._preview_panel.set_visible(visible)
+        self._preview_visible = visible
+        if visible:
+            # Position the pane so preview gets ~40% of content width
+            total = self._preview_paned.get_allocated_width()
+            pos = max(400, int(total * 0.6)) if total > 200 else 600
+            self._preview_paned.set_position(pos)
+            self._do_preview_update()
+        else:
+            if getattr(self, "_preview_pending_id", None) is not None:
+                GLib.source_remove(self._preview_pending_id)
+                self._preview_pending_id = None
+
+    def _schedule_preview_update(self):
+        if not getattr(self, "_preview_visible", False):
+            return
+        existing = getattr(self, "_preview_pending_id", None)
+        if existing is not None:
+            GLib.source_remove(existing)
+        self._preview_pending_id = GLib.timeout_add(700, self._do_preview_update)
+
+    def _do_preview_update(self):
+        self._preview_pending_id = None
+        if not getattr(self, "_preview_visible", False):
+            return False
+        if self._preview_webview is None:
+            return False
+        try:
+            html = self._build_bulletin_html()
+            self._preview_webview.load_html(html, None)
+        except Exception:
+            pass
+        return False
+
+    def _mark_modified(self): self.modified=True; self._update_title(); self._schedule_preview_update()
 
     def _update_title(self):
         svc = self.service_title_entry.get_text() or "New service"
@@ -2279,9 +2426,234 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Autosave ──────────────────────────────────────────────────────────────
 
     def _check_welcome(self) -> bool:
-        if config.last_seen_version != APP_VERSION:
+        if not config.first_launch_completed:
+            self._show_first_launch_wizard()
+        elif config.last_seen_version != APP_VERSION:
             self._show_welcome(is_new_version=bool(config.last_seen_version))
         return False
+
+    # ── Quick-start banner ────────────────────────────────────────────────────
+
+    _QUICKSTART_TIPS = [
+        "Double-click any element in the left palette to add it to your service order.",
+        "Click the window title to set your service date — RCL readings load automatically.",
+        "Select an element to reveal the item toolbar: leader name, scripture, hymn lookup.",
+        "Type in the Notes area to add content for each element. Leader notes go to the PDF; "
+            "Bulletin text appears in the congregational bulletin.",
+        "Save (Ctrl+S) often. Use Menu → Save as template to reuse this order every week.",
+        "Ctrl+E exports to LaTeX; Ctrl+Shift+P compiles a PDF. "
+            "Open Preferences (Ctrl+,) to customise your palette and bulletin.",
+    ]
+
+    def _build_quickstart_banner(self) -> Gtk.Revealer:
+        self._quickstart_tip_idx = 0
+        self._quickstart_revealer = Gtk.Revealer()
+        self._quickstart_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._quickstart_revealer.set_transition_duration(200)
+        self._quickstart_revealer.set_reveal_child(False)
+
+        banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        banner.set_margin_start(12); banner.set_margin_end(12)
+        banner.set_margin_top(6); banner.set_margin_bottom(6)
+        banner.add_css_class("card")
+
+        hint_icon = Gtk.Image(icon_name="dialog-information-symbolic")
+        hint_icon.add_css_class("dim-label"); banner.append(hint_icon)
+
+        self._quickstart_lbl = Gtk.Label(label=self._QUICKSTART_TIPS[0])
+        self._quickstart_lbl.add_css_class("caption")
+        self._quickstart_lbl.set_wrap(True); self._quickstart_lbl.set_xalign(0)
+        self._quickstart_lbl.set_hexpand(True)
+        banner.append(self._quickstart_lbl)
+
+        self._quickstart_next_btn = Gtk.Button(label="Next →")
+        self._quickstart_next_btn.add_css_class("flat")
+        self._quickstart_next_btn.add_css_class("caption")
+        self._quickstart_next_btn.connect("clicked", self._on_quickstart_next)
+        banner.append(self._quickstart_next_btn)
+
+        dismiss_btn = Gtk.Button(icon_name="window-close-symbolic",
+                                 tooltip_text="Dismiss tips")
+        dismiss_btn.add_css_class("flat")
+        dismiss_btn.connect("clicked", lambda _: self._dismiss_quickstart())
+        banner.append(dismiss_btn)
+
+        self._quickstart_revealer.set_child(banner)
+        return self._quickstart_revealer
+
+    def _show_quickstart_banner(self):
+        if not config.quickstart_dismissed:
+            self._quickstart_tip_idx = 0
+            self._quickstart_lbl.set_label(self._QUICKSTART_TIPS[0])
+            self._quickstart_next_btn.set_label("Next →")
+            self._quickstart_revealer.set_reveal_child(True)
+
+    def _on_quickstart_next(self, _btn):
+        self._quickstart_tip_idx += 1
+        if self._quickstart_tip_idx >= len(self._QUICKSTART_TIPS):
+            self._dismiss_quickstart(); return
+        self._quickstart_lbl.set_label(self._QUICKSTART_TIPS[self._quickstart_tip_idx])
+        if self._quickstart_tip_idx == len(self._QUICKSTART_TIPS) - 1:
+            self._quickstart_next_btn.set_label("Done ✓")
+
+    def _dismiss_quickstart(self):
+        self._quickstart_revealer.set_reveal_child(False)
+        config.quickstart_dismissed = True
+        config.save()
+
+    # ── First-launch wizard ───────────────────────────────────────────────────
+
+    def _show_first_launch_wizard(self):
+        from datetime import date as pydate
+        today = pydate.today()
+        try:
+            info = get_liturgical_info(today)
+            # If today is a weekday, step to next Sunday for the subtitle
+            from datetime import timedelta
+            if today.weekday() != 6:
+                days = (6 - today.weekday()) % 7 or 7
+                info = get_liturgical_info(today + timedelta(days=days))
+            week_label = info.get("week", "this Sunday's readings")
+        except Exception:
+            info = {}; week_label = "this Sunday's readings"
+
+        win = Adw.Window(transient_for=self, modal=True)
+        win.set_title("Welcome to Rubric")
+        win.set_default_size(500, 0)
+        win.set_resizable(False)
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar(); hdr.set_show_end_title_buttons(False)
+        win.set_content(tv); tv.add_top_bar(hdr)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_start(24); outer.set_margin_end(24)
+        outer.set_margin_top(20); outer.set_margin_bottom(24)
+
+        # Hero
+        hero_icon = Gtk.Image(icon_name="rubric-symbolic")
+        hero_icon.set_pixel_size(48); hero_icon.set_margin_bottom(10)
+        outer.append(hero_icon)
+        title_lbl = Gtk.Label(label="Welcome to Rubric")
+        title_lbl.add_css_class("title-1"); title_lbl.set_margin_bottom(4)
+        outer.append(title_lbl)
+        sub_lbl = Gtk.Label(label="How would you like to start today's service?")
+        sub_lbl.add_css_class("dim-label"); sub_lbl.set_margin_bottom(20)
+        outer.append(sub_lbl)
+
+        # Choice cards
+        lb = Gtk.ListBox()
+        lb.set_selection_mode(Gtk.SelectionMode.NONE)
+        lb.add_css_class("boxed-list")
+
+        def _choice_row(icon_name, title_text, subtitle_text):
+            row = Adw.ActionRow(title=title_text, subtitle=subtitle_text)
+            row.set_activatable(True)
+            img = Gtk.Image(icon_name=icon_name); img.set_pixel_size(28)
+            row.add_prefix(img)
+            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+            lb.append(row); return row
+
+        lect_subtitle = f"{week_label} — readings and standard order pre-filled"
+        lect_row   = _choice_row("x-office-calendar-symbolic",
+                                  "Start with today's lectionary", lect_subtitle)
+        blank_row  = _choice_row("document-new-symbolic",
+                                  "Blank service",
+                                  "Build your order from scratch")
+        tour_row   = _choice_row("help-about-symbolic",
+                                  "Show me around",
+                                  "Open the quick-start guide and tip strip")
+        outer.append(lb)
+
+        skip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        skip_row.set_margin_top(14)
+        sp = Gtk.Box(); sp.set_hexpand(True); skip_row.append(sp)
+        skip_btn = Gtk.Button(label="Skip for now")
+        skip_btn.add_css_class("flat"); skip_row.append(skip_btn)
+        sp2 = Gtk.Box(); sp2.set_hexpand(True); skip_row.append(sp2)
+        outer.append(skip_row)
+
+        tv.set_content(outer)
+
+        def _finish(choice: str):
+            config.first_launch_completed = True
+            config.last_seen_version = APP_VERSION
+            config.save()
+            win.close()
+            if choice == "lect":
+                self._seed_lectionary_service(today, info)
+                self._show_quickstart_banner()
+            elif choice == "tour":
+                self._show_welcome(is_new_version=False)
+                self._show_quickstart_banner()
+            else:
+                self._show_quickstart_banner()
+
+        lect_row.connect("activated",  lambda _: _finish("lect"))
+        blank_row.connect("activated", lambda _: _finish("blank"))
+        tour_row.connect("activated",  lambda _: _finish("tour"))
+        skip_btn.connect("clicked",    lambda _: _finish("blank"))
+        win.present()
+
+    # ── Lectionary service seeding ────────────────────────────────────────────
+
+    def _seed_lectionary_service(self, today, info: dict):
+        """Reset state and pre-fill a standard Sunday order using today's RCL readings."""
+        self._reset_state()
+
+        # Set date
+        self.selected_date = today
+        self.date_button.set_label(today.strftime("%-d %B %Y"))
+
+        # Service title = liturgical week label
+        week = info.get("week", "")
+        if week:
+            self.service_title_entry.set_text(week)
+
+        def _si(name, section, note=""):
+            return ServiceItem(name, section, note=note)
+
+        def _ref(key):
+            v = info.get(key, "")
+            return v if v and v != "—" else ""
+
+        items = [
+            SectionDivider("Gathering"),
+            _si("Prelude",              "Gathering"),
+            _si("Welcome",              "Gathering"),
+            _si("Land acknowledgement", "Gathering"),
+            _si("Call to worship",      "Gathering"),
+            _si("Opening hymn",         "Gathering"),
+            _si("Prayer of approach",   "Gathering"),
+            SectionDivider("Word"),
+        ]
+        for name, key in [("Hebrew Bible reading", "ot"),
+                           ("Psalm / sung psalm",   "psalm"),
+                           ("Epistle reading",       "epistle"),
+                           ("Gospel reading",        "gospel")]:
+            ref = _ref(key)
+            items.append(_si(name, "Word", note=ref))
+        items += [
+            _si("Sermon / reflection",  "Word"),
+            SectionDivider("Response"),
+            _si("Hymn",                 "Response"),
+            _si("Prayers of the people","Response"),
+            _si("Lord's prayer",        "Response"),
+            _si("Offering / dedication","Response"),
+            SectionDivider("Sending"),
+            _si("Closing hymn",         "Sending"),
+            _si("Benediction",          "Sending"),
+            _si("Postlude",             "Sending"),
+        ]
+
+        for item in items:
+            self.service_entries.append(item)
+
+        self._refresh_order_list()
+        self._update_readings(today)
+        self.modified = False          # seeded service starts clean
+        self._update_title()
+        self._show_toast(f"Service pre-filled for {week or today.strftime('%-d %B %Y')}",
+                         timeout=5)
 
     def _show_welcome(self, is_new_version: bool = False):
         win = Adw.Window(transient_for=self, modal=True)
@@ -2496,10 +2868,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
         self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
         self.service_title_entry.set_text("")
+        self._updating_note = True
         self.notes_view.get_buffer().set_text("", -1)
         self.bulletin_notes_view.get_buffer().set_text("", -1)
+        self._updating_note = False
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
+        self._obs_sep.set_visible(False); self._obs_row.set_visible(False)
         self.current_file=None; self.tex_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
 
@@ -2714,9 +3089,12 @@ class MainWindow(Adw.ApplicationWindow):
         dlg.connect("response", on_resp)
         dlg.present()
 
-    def _export_bulletin_html(self):
-        """Simple-mode bulletin: build HTML and open in browser for printing."""
-        import tempfile, re as _re
+    def _build_bulletin_html(self) -> str:
+        """Build and return the bulletin as an HTML string.
+
+        Called by both the export action (open in browser) and the live preview panel.
+        """
+        import re as _re
         from datetime import date as _date
 
         b = config.bulletin
@@ -2823,8 +3201,9 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                                if si.leader else "")
                 lines.append(f"<div class='el'>"
                              f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
-                if si.note:
-                    clean = strip_latex(si.note)
+                note_src = si.bulletin_note if si.bulletin_note else si.note
+                if note_src:
+                    clean = strip_latex(note_src)
                     lines.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
                 lines.append("</div>")
@@ -2852,12 +3231,16 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             lines.append("<hr><div class='back'>" + "\n".join(back) + "</div>")
 
         lines.append("</body></html>")
+        return "\n".join(lines)
 
+    def _export_bulletin_html(self):
+        """Simple-mode bulletin: build HTML and open in browser for printing."""
+        import tempfile
+        html = self._build_bulletin_html()
         with tempfile.NamedTemporaryFile(
                 mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-            f.write("\n".join(lines))
+            f.write(html)
             tmp = f.name
-
         Gtk.show_uri(None, GLib.filename_to_uri(tmp, None), 0)
         self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
@@ -4239,25 +4622,78 @@ class PlannerWindow(Adw.Window):
             self._list.remove(child)
 
         from datetime import date as _date
+        import os
         today = _date.today()
 
+        try:
+            from rubric_package.db import (
+                service_index_update, service_index_get_mtime,
+                service_index_all, service_index_prune,
+            )
+            _db_index = True
+        except ImportError:
+            _db_index = False
+
         services = []
+        on_disk: set[str] = set()
         try:
             for p in self._folder.glob("*.liturgy"):
+                path_str = str(p)
+                on_disk.add(path_str)
+                try:
+                    mtime = p.stat().st_mtime
+                except OSError:
+                    continue
+
+                cached_mtime = service_index_get_mtime(path_str) if _db_index else None
+                if _db_index and cached_mtime is not None and abs(cached_mtime - mtime) < 0.01:
+                    # Cache hit — no need to read the file
+                    continue
+
+                # Cache miss: read the file and update the index
                 try:
                     d = json.loads(p.read_text(encoding="utf-8"))
                     title = d.get("title", "") or p.stem
                     date_str = d.get("date", "")
                     item_count = len([i for i in d.get("items", []) if i.get("type") != "divider"])
-                    try:
-                        svc_date = _date.fromisoformat(date_str) if date_str else None
-                    except ValueError:
-                        svc_date = None
-                    services.append((svc_date, title, item_count, p))
+                    if _db_index:
+                        service_index_update(path_str, title, date_str, item_count, mtime)
                 except Exception:
                     pass
         except Exception:
             pass
+
+        # Build service list from the index (covers both hits and newly updated entries)
+        if _db_index and on_disk:
+            service_index_prune(on_disk)
+            for row in service_index_all():
+                if row["path"] not in on_disk:
+                    continue
+                p = Path(row["path"])
+                date_str = row["date"]
+                try:
+                    svc_date = _date.fromisoformat(date_str) if date_str else None
+                except ValueError:
+                    svc_date = None
+                services.append((svc_date, row["title"] or p.stem, row["item_count"], p))
+        elif not _db_index:
+            # Fallback: re-read all files without index
+            try:
+                for p in self._folder.glob("*.liturgy"):
+                    try:
+                        d = json.loads(p.read_text(encoding="utf-8"))
+                        title = d.get("title", "") or p.stem
+                        date_str = d.get("date", "")
+                        item_count = len([i for i in d.get("items", []) if i.get("type") != "divider"])
+                        try:
+                            svc_date = _date.fromisoformat(date_str) if date_str else None
+                        except ValueError:
+                            svc_date = None
+                        services.append((svc_date, title, item_count, p))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
         upcoming = sorted([(d, t, c, p) for d, t, c, p in services if d and d >= today], key=lambda x: x[0])
         past = sorted([(d, t, c, p) for d, t, c, p in services if not d or d < today], key=lambda x: (x[0] or _date.min), reverse=True)
@@ -4316,7 +4752,16 @@ class PlannerWindow(Adw.Window):
 class LiturgyPlannerApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="io.github.calstfrancis.rubric", flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
-        self.connect("activate", lambda app: MainWindow(application=app).present())
+        self.connect("activate", self._on_activate)
+
+    def _on_activate(self, app):
+        try:
+            from rubric_package.db import init_db, migrate_from_json
+            init_db()
+            migrate_from_json()
+        except Exception:
+            pass
+        MainWindow(application=app).present()
 
 def main():
     GLib.set_prgname("rubric")
