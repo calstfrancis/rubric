@@ -365,8 +365,9 @@ def _is_hymn_element(name): return any(k in name.lower() for k in _HYMN_KW)
 # ── Backward compatibility aliases ────────────────────────────────────────────
 
 # If package is available, create underscore aliases for existing code
+# Note: _entry_from_dict is NOT overridden here — it must use the inline
+# ServiceItem/SectionDivider classes so that isinstance() checks elsewhere match.
 if _PACKAGE_OK:
-    _entry_from_dict = entry_from_dict
     _latex_escape = latex_escape
     _note_for_latex = note_for_latex
     _passage_to_latex = passage_to_latex
@@ -1154,6 +1155,7 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(AUTOSAVE_SECS, self._do_autosave)
         GLib.idle_add(self._check_autosave)
         GLib.idle_add(self._check_welcome)
+        threading.Thread(target=self._background_index_scan, daemon=True).start()
 
     # ── Repo helpers ──────────────────────────────────────────────────────────
 
@@ -1190,6 +1192,8 @@ class MainWindow(Adw.ApplicationWindow):
         menu.append_section("Export", export_sec)
 
         menu.append("Service Planner… (Ctrl+Shift+L)", "win.open-planner")
+        menu.append("Element Library… (Ctrl+Shift+K)", "win.open-library")
+        menu.append("Past Liturgies… (Ctrl+Shift+H)", "win.open-archive")
 
         if not simple:
             git_sec = Gio.Menu()
@@ -1252,8 +1256,10 @@ class MainWindow(Adw.ApplicationWindow):
             ("show-help",          lambda: self._show_doc("HELP"),       "F1"),
             ("show-faq",           lambda: self._show_doc("FAQ"),        None),
             ("show-changelog",     lambda: self._show_doc("CHANGELOG"),  None),
-            ("show-wizard",        self._show_first_launch_wizard,       None),
-            ("show-about",         self.show_about,                      None),
+            ("show-wizard",        self._show_first_launch_wizard,        None),
+            ("open-library",       self.open_library,                     "<Ctrl><Shift>k"),
+            ("open-archive",       self.open_archive,                     "<Ctrl><Shift>h"),
+            ("show-about",         self.show_about,                       None),
             ("export-as",          self.export_as,                      None),
         ]:
             a = Gio.SimpleAction.new(name, None)
@@ -3259,6 +3265,7 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self.current_file=path; self.modified=False
                 config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
+                self._index_service(path, data)
             self._update_title()
         except Exception as e: self._error("Error opening file",str(e))
 
@@ -3284,13 +3291,56 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _write(self, path):
         try:
-            with open(path,"w",encoding="utf-8") as f: json.dump(self._service_data(),f,indent=2,ensure_ascii=False)
+            data = self._service_data()
+            with open(path,"w",encoding="utf-8") as f: json.dump(data,f,indent=2,ensure_ascii=False)
             self.modified=False; self._update_title(); self._clear_autosave()
             config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
+            self._index_service(path, data)
             if getattr(self, "_close_after_save", False):
                 self._close_after_save = False
                 self.destroy()
         except Exception as e: self._error("Error saving",str(e))
+
+    def _index_service(self, path: str, data: dict | None = None):
+        """Index service elements into the library DB (runs in background thread)."""
+        try:
+            from rubric_package.db import element_index_service as _eidx
+        except ImportError:
+            return
+        if data is None:
+            try:
+                import json as _json
+                data = _json.loads(Path(path).read_text(encoding="utf-8"))
+            except Exception:
+                return
+        title = data.get("title", "")
+        date  = data.get("date", "")
+        items = data.get("items", [])
+        threading.Thread(
+            target=_eidx, args=(path, title, date, items), daemon=True
+        ).start()
+
+    def _background_index_scan(self):
+        """Scan repo liturgy folder and index any unindexed or stale services."""
+        try:
+            from rubric_package.db import element_index_service as _eidx, element_services as _esvc
+        except ImportError:
+            return
+        folders = []
+        liturgy_dir = self._repo_subdir("liturgy")
+        if liturgy_dir and liturgy_dir.is_dir():
+            folders.append(liturgy_dir)
+        for folder in folders:
+            already = {s["service_path"] for s in _esvc(limit=5000)}
+            for p in folder.glob("**/*.liturgy"):
+                path_str = str(p)
+                if path_str in already:
+                    continue
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                    _eidx(path_str, data.get("title",""), data.get("date",""), data.get("items",[]))
+                except Exception:
+                    pass
 
     # ── Recent files ──────────────────────────────────────────────────────────
 
@@ -4869,6 +4919,20 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         else:
             PlannerWindow(folder=folder, main_window=self, transient_for=self).present()
 
+    def open_library(self):
+        win = getattr(self, "_library_win", None)
+        if win and win.get_visible():
+            win.present(); return
+        self._library_win = LibraryWindow(main_window=self, transient_for=self)
+        self._library_win.present()
+
+    def open_archive(self):
+        win = getattr(self, "_archive_win", None)
+        if win and win.get_visible():
+            win.present(); return
+        self._archive_win = ArchiveWindow(main_window=self, transient_for=self)
+        self._archive_win.present()
+
 
 # ── Service Planner ───────────────────────────────────────────────────────────
 
@@ -5038,6 +5102,462 @@ class PlannerWindow(Adw.Window):
         dlg.set_response_appearance("new", Adw.ResponseAppearance.SUGGESTED)
         dlg.connect("response", lambda d, r: self._main.new_service() if r == "new" else None)
         dlg.present()
+
+
+# ── Element Library ───────────────────────────────────────────────────────────
+
+class LibraryWindow(Adw.Window):
+    """Searchable library of every element from every saved service."""
+
+    def __init__(self, main_window, **kw):
+        super().__init__(title="Element Library", default_width=560, default_height=700, **kw)
+        self._main = main_window
+        self._search_text = ""
+        self._expanded: set[str] = set()
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Header bar
+        hdr = Adw.HeaderBar()
+        hdr.set_show_end_title_buttons(True)
+        self._search_entry = Gtk.SearchEntry()
+        self._search_entry.set_placeholder_text("Search elements…")
+        self._search_entry.set_hexpand(True)
+        self._search_entry.connect("search-changed", self._on_search)
+        hdr.set_title_widget(self._search_entry)
+        box.append(hdr)
+
+        # Insert button (shown when something is selected)
+        self._insert_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._insert_bar.set_margin_start(12); self._insert_bar.set_margin_end(12)
+        self._insert_bar.set_margin_top(6); self._insert_bar.set_margin_bottom(6)
+        self._insert_bar.set_visible(False)
+        self._insert_label = Gtk.Label()
+        self._insert_label.set_hexpand(True); self._insert_label.set_xalign(0)
+        self._insert_label.add_css_class("caption")
+        self._insert_bar.append(self._insert_label)
+        insert_btn = Gtk.Button(label="Insert into selected element")
+        insert_btn.add_css_class("suggested-action")
+        insert_btn.connect("clicked", self._on_insert)
+        self._insert_bar.append(insert_btn)
+        box.append(self._insert_bar)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._list_box = Gtk.ListBox()
+        self._list_box.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._list_box.add_css_class("boxed-list")
+        self._list_box.set_margin_start(12); self._list_box.set_margin_end(12)
+        self._list_box.set_margin_top(8); self._list_box.set_margin_bottom(12)
+        self._list_box.connect("row-selected", self._on_row_selected)
+        scroll.set_child(self._list_box)
+        box.append(scroll)
+
+        self.set_content(box)
+        self._selected_element: dict | None = None
+        GLib.idle_add(self._populate)
+
+    def _populate(self, *_):
+        self._rebuild(self._search_text)
+        return False
+
+    def _on_search(self, entry):
+        self._search_text = entry.get_text().strip()
+        self._rebuild(self._search_text)
+
+    def _rebuild(self, query: str):
+        # Clear list
+        while self._list_box.get_first_child():
+            self._list_box.remove(self._list_box.get_first_child())
+        self._selected_element = None
+        self._insert_bar.set_visible(False)
+
+        try:
+            from rubric_package.db import element_search, element_services, element_for_service
+        except ImportError:
+            self._list_box.append(self._status_row("Database not available"))
+            return
+
+        if query:
+            rows = element_search(query)
+            if not rows:
+                self._list_box.append(self._status_row("No matches found"))
+                return
+            for r in rows:
+                self._list_box.append(self._element_row(r))
+        else:
+            services = element_services()
+            if not services:
+                self._list_box.append(self._status_row(
+                    "No services indexed yet — save a service to add it to the library"))
+                return
+            for svc in services:
+                self._list_box.append(self._service_header_row(svc))
+                if svc["service_path"] in self._expanded:
+                    for elem in element_for_service(svc["service_path"]):
+                        self._list_box.append(self._element_row(elem, indented=True))
+
+    def _service_header_row(self, svc: dict) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row._is_service = True
+        row._service_path = svc["service_path"]
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_margin_start(12); box.set_margin_end(8)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+
+        arrow = Gtk.Label(label="▶" if svc["service_path"] not in self._expanded else "▼")
+        arrow.add_css_class("dim-label"); arrow.add_css_class("caption")
+        box.append(arrow)
+
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        info.set_hexpand(True)
+        title_lbl = Gtk.Label(label=svc["service_title"] or Path(svc["service_path"]).stem)
+        title_lbl.set_xalign(0); title_lbl.add_css_class("heading")
+        info.append(title_lbl)
+        sub = Gtk.Label(label=f'{svc["service_date"] or "no date"}  ·  {svc["n"]} elements')
+        sub.set_xalign(0); sub.add_css_class("caption"); sub.add_css_class("dim-label")
+        info.append(sub)
+        box.append(info)
+
+        row._arrow_lbl = arrow
+        row.set_child(box)
+        return row
+
+    def _element_row(self, elem: dict, indented: bool = False) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row._is_service = False
+        row._element = elem
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        ms = 28 if indented else 12
+        box.set_margin_start(ms); box.set_margin_end(12)
+        box.set_margin_top(6); box.set_margin_bottom(6)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        name_lbl = Gtk.Label(label=elem["name"])
+        name_lbl.set_xalign(0); name_lbl.add_css_class("body")
+        header.append(name_lbl)
+        if elem.get("section"):
+            sec_lbl = Gtk.Label(label=elem["section"])
+            sec_lbl.add_css_class("caption"); sec_lbl.add_css_class("dim-label")
+            header.append(sec_lbl)
+        box.append(header)
+
+        note = (elem.get("note") or "").strip()
+        if note:
+            preview = note[:120].replace("\n", " ") + ("…" if len(note) > 120 else "")
+            note_lbl = Gtk.Label(label=preview)
+            note_lbl.set_xalign(0); note_lbl.add_css_class("caption")
+            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(3)
+            box.append(note_lbl)
+
+        if not indented and elem.get("service_title"):
+            svc_lbl = Gtk.Label(label=f'{elem["service_title"]}  ·  {elem["service_date"] or ""}')
+            svc_lbl.set_xalign(0); svc_lbl.add_css_class("caption"); svc_lbl.add_css_class("dim-label")
+            box.append(svc_lbl)
+
+        row.set_child(box)
+        return row
+
+    def _status_row(self, msg: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row._is_service = False; row._element = None
+        lbl = Gtk.Label(label=msg)
+        lbl.set_margin_top(16); lbl.set_margin_bottom(16)
+        lbl.add_css_class("dim-label"); lbl.set_wrap(True)
+        row.set_child(lbl); return row
+
+    def _on_row_selected(self, _lb, row):
+        if row is None:
+            self._insert_bar.set_visible(False); return
+        if getattr(row, "_is_service", False):
+            # Toggle expand/collapse
+            path = row._service_path
+            if path in self._expanded:
+                self._expanded.discard(path)
+            else:
+                self._expanded.add(path)
+            GLib.idle_add(self._rebuild, self._search_text)
+            return
+        elem = getattr(row, "_element", None)
+        if not elem or not (elem.get("note") or elem.get("bulletin_note")):
+            self._insert_bar.set_visible(False); return
+        self._selected_element = elem
+        self._insert_label.set_label(f'"{elem["name"]}" · {len(elem.get("note",""))} chars')
+        self._insert_bar.set_visible(True)
+
+    def _on_insert(self, _btn):
+        elem = self._selected_element
+        if not elem:
+            return
+        note = elem.get("note") or elem.get("bulletin_note") or ""
+        win = self._main
+        # Find selected service item and set its note
+        idx = win._selected_global_idx
+        if idx < 0 or idx >= len(win.service_entries):
+            self._show_toast("Select an element in the service order first")
+            return
+        entry = win.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            self._show_toast("Select an element (not a section header)")
+            return
+        win._updating_note = True
+        entry.note = note
+        win.notes_view.get_buffer().set_text(note, -1)
+        win._leader_tab_btn.set_active(True)
+        win._updating_note = False
+        win._mark_modified()
+        self._show_toast(f'Inserted into “{entry.name}”')
+
+    def _show_toast(self, msg: str):
+        toast = Adw.Toast.new(msg); toast.set_timeout(3)
+        # We don't have a toast overlay in this window, so use main window's
+        try:
+            self._main._toast_overlay.add_toast(toast)
+        except Exception:
+            pass
+
+
+# ── Past Liturgies Archive ────────────────────────────────────────────────────
+
+class ArchiveWindow(Adw.Window):
+    """Full-service reader for past liturgies. Shows elements with complete notes."""
+
+    def __init__(self, main_window, **kw):
+        super().__init__(title="Past Liturgies", default_width=680, default_height=740, **kw)
+        self._main = main_window
+        self._expanded: set[str] = set()
+        self._search_text = ""
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        hdr = Adw.HeaderBar()
+        hdr.set_show_end_title_buttons(True)
+        self._search_entry = Gtk.SearchEntry()
+        self._search_entry.set_placeholder_text("Search past services…")
+        self._search_entry.set_hexpand(True)
+        self._search_entry.connect("search-changed", self._on_search)
+        hdr.set_title_widget(self._search_entry)
+        box.append(hdr)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._list_box = Gtk.ListBox()
+        self._list_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._list_box.add_css_class("boxed-list")
+        self._list_box.set_margin_start(12); self._list_box.set_margin_end(12)
+        self._list_box.set_margin_top(8); self._list_box.set_margin_bottom(12)
+        scroll.set_child(self._list_box)
+        box.append(scroll)
+
+        self.set_content(box)
+        GLib.idle_add(self._populate)
+
+    def _populate(self, *_):
+        self._rebuild(self._search_text)
+        return False
+
+    def _on_search(self, entry):
+        self._search_text = entry.get_text().strip().lower()
+        self._rebuild(self._search_text)
+
+    def _strip_latex(self, text: str) -> str:
+        import re as _re
+        text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
+            lambda m: _re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'\1 \2 ', m.group(1).strip()),
+            text, flags=_re.DOTALL)
+        text = _re.sub(r'\\(?:textbf|textit|emph|small)\{([^}]*)\}', r'\1', text)
+        text = _re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
+        text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
+        text = _re.sub(r'\\[a-zA-Z@]+\*?', '', text)
+        text = _re.sub(r'\{|\}', '', text)
+        text = _re.sub(r'%[^\n]*', '', text)
+        return text.strip()
+
+    def _rebuild(self, query: str):
+        while self._list_box.get_first_child():
+            self._list_box.remove(self._list_box.get_first_child())
+
+        try:
+            from rubric_package.db import element_services, element_for_service
+        except ImportError:
+            self._list_box.append(self._status_row("Database not available"))
+            return
+
+        services = element_services(limit=500)
+        if not services:
+            self._list_box.append(self._status_row(
+                "No services in library yet — save a service to add it here"))
+            return
+
+        # Filter by query (match against service title, date, or element content)
+        if query:
+            filtered = []
+            for svc in services:
+                title = (svc.get("service_title") or "").lower()
+                date = (svc.get("service_date") or "").lower()
+                if query in title or query in date:
+                    filtered.append(svc)
+                else:
+                    elems = element_for_service(svc["service_path"])
+                    if any(query in (e.get("name","")).lower() or
+                           query in (e.get("note","")).lower() or
+                           query in (e.get("leader","")).lower()
+                           for e in elems):
+                        filtered.append(svc)
+            services = filtered
+            if not services:
+                self._list_box.append(self._status_row("No matches found"))
+                return
+
+        for svc in services:
+            self._list_box.append(self._service_row(svc))
+            if svc["service_path"] in self._expanded:
+                try:
+                    from rubric_package.db import element_for_service as _efs
+                    elems = _efs(svc["service_path"])
+                except ImportError:
+                    elems = []
+                cur_section = ""
+                for elem in elems:
+                    if elem.get("section") and elem["section"] != cur_section:
+                        cur_section = elem["section"]
+                        self._list_box.append(self._section_label_row(cur_section))
+                    self._list_box.append(self._element_row(elem))
+
+    def _service_row(self, svc: dict) -> Gtk.ListBoxRow:
+        path = svc["service_path"]
+        is_open = path in self._expanded
+
+        row = Gtk.ListBoxRow()
+        row._is_service = True
+        row._service_path = path
+        row._svc = svc
+        row.set_activatable(True)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        header.set_margin_start(12); header.set_margin_end(8)
+        header.set_margin_top(10); header.set_margin_bottom(10)
+
+        arrow = Gtk.Label(label="▼" if is_open else "▶")
+        arrow.add_css_class("caption"); arrow.add_css_class("dim-label")
+        row._arrow_lbl = arrow
+        header.append(arrow)
+
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        info.set_hexpand(True)
+        title = svc.get("service_title") or Path(path).stem
+        title_lbl = Gtk.Label(label=title)
+        title_lbl.set_xalign(0); title_lbl.add_css_class("heading")
+        title_lbl.set_ellipsize(3); info.append(title_lbl)
+        date_lbl = Gtk.Label(label=svc.get("service_date") or "No date")
+        date_lbl.set_xalign(0); date_lbl.add_css_class("caption")
+        date_lbl.add_css_class("dim-label"); info.append(date_lbl)
+        header.append(info)
+
+        open_btn = Gtk.Button(label="Open in editor")
+        open_btn.add_css_class("flat"); open_btn.set_valign(Gtk.Align.CENTER)
+        open_btn.connect("clicked", lambda _b, p=path: self._open_service(p))
+        header.append(open_btn)
+
+        outer.append(header)
+        row.set_child(outer)
+
+        def on_activate(_row, p=path, r=row):
+            if p in self._expanded:
+                self._expanded.discard(p)
+            else:
+                self._expanded.add(p)
+            GLib.idle_add(self._rebuild, self._search_text)
+
+        row.connect("activate", on_activate)
+        return row
+
+    def _section_label_row(self, section: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row.set_activatable(False)
+        lbl = Gtk.Label(label=section)
+        lbl.set_xalign(0); lbl.add_css_class("caption")
+        lbl.add_css_class("dim-label"); lbl.add_css_class("heading")
+        lbl.set_margin_start(28); lbl.set_margin_end(12)
+        lbl.set_margin_top(8); lbl.set_margin_bottom(2)
+        row.set_child(lbl); return row
+
+    def _element_row(self, elem: dict) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row.set_activatable(False)
+        row._element = elem
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_start(28); box.set_margin_end(12)
+        box.set_margin_top(6); box.set_margin_bottom(6)
+
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        name_lbl = Gtk.Label(label=elem.get("name", ""))
+        name_lbl.set_xalign(0); name_lbl.add_css_class("body")
+        name_lbl.set_hexpand(True); top.append(name_lbl)
+        if elem.get("leader"):
+            ldr_lbl = Gtk.Label(label=elem["leader"])
+            ldr_lbl.add_css_class("caption"); ldr_lbl.add_css_class("dim-label")
+            top.append(ldr_lbl)
+
+        note_raw = (elem.get("bulletin_note") or elem.get("note") or "").strip()
+        if note_raw:
+            insert_btn = Gtk.Button(label="Insert")
+            insert_btn.add_css_class("flat"); insert_btn.set_valign(Gtk.Align.CENTER)
+            insert_btn.connect("clicked", lambda _b, e=elem: self._on_insert(e))
+            top.append(insert_btn)
+
+        box.append(top)
+
+        if note_raw:
+            clean = self._strip_latex(note_raw)
+            if clean:
+                note_lbl = Gtk.Label(label=clean)
+                note_lbl.set_xalign(0); note_lbl.set_wrap(True)
+                note_lbl.add_css_class("caption"); note_lbl.set_selectable(True)
+                box.append(note_lbl)
+
+        row.set_child(box)
+        return row
+
+    def _status_row(self, msg: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row.set_activatable(False)
+        lbl = Gtk.Label(label=msg)
+        lbl.set_margin_top(20); lbl.set_margin_bottom(20)
+        lbl.add_css_class("dim-label"); lbl.set_wrap(True)
+        row.set_child(lbl); return row
+
+    def _open_service(self, path: str):
+        self._main._confirm_discard(lambda p=path: self._main._load_file(p))
+
+    def _on_insert(self, elem: dict):
+        note = elem.get("note") or elem.get("bulletin_note") or ""
+        win = self._main
+        idx = win._selected_global_idx
+        if idx < 0 or idx >= len(win.service_entries):
+            self._show_toast("Select an element in the service order first")
+            return
+        entry = win.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            self._show_toast("Select an element (not a section header)")
+            return
+        win._updating_note = True
+        entry.note = note
+        win.notes_view.get_buffer().set_text(note, -1)
+        win._leader_tab_btn.set_active(True)
+        win._updating_note = False
+        win._mark_modified()
+        self._show_toast(f'Inserted into "{entry.name}"')
+
+    def _show_toast(self, msg: str):
+        toast = Adw.Toast.new(msg); toast.set_timeout(3)
+        try:
+            self._main._toast_overlay.add_toast(toast)
+        except Exception:
+            pass
 
 
 # ── Application ───────────────────────────────────────────────────────────────

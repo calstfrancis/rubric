@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS service_index (
     item_count INTEGER NOT NULL DEFAULT 0,
     mtime      REAL  NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS element_index (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_path    TEXT    NOT NULL,
+    service_title   TEXT    NOT NULL DEFAULT '',
+    service_date    TEXT    NOT NULL DEFAULT '',
+    section         TEXT    NOT NULL DEFAULT '',
+    name            TEXT    NOT NULL DEFAULT '',
+    leader          TEXT    NOT NULL DEFAULT '',
+    note            TEXT    NOT NULL DEFAULT '',
+    bulletin_note   TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_elem_service ON element_index(service_path);
+CREATE INDEX IF NOT EXISTS idx_elem_date    ON element_index(service_date DESC);
+CREATE INDEX IF NOT EXISTS idx_elem_name    ON element_index(name);
 """
 
 
@@ -192,6 +208,96 @@ def service_index_prune(keep_paths: set[str]) -> None:
         }
         for stale in indexed - keep_paths:
             con.execute("DELETE FROM service_index WHERE path = ?", (stale,))
+        con.commit()
+    finally:
+        con.close()
+
+
+# ── Element library ───────────────────────────────────────────────────────────
+
+def element_index_service(path: str, title: str, date: str, items: list[dict]) -> None:
+    """Replace all indexed elements for a service path."""
+    con = _open()
+    try:
+        con.execute("DELETE FROM element_index WHERE service_path = ?", (path,))
+        section = ""
+        rows = []
+        for item in items:
+            if item.get("type") == "divider":
+                section = item.get("title", "")
+            elif item.get("type") == "item":
+                note = (item.get("note") or "").strip()
+                bul  = (item.get("bulletin_note") or "").strip()
+                name = (item.get("name") or "").strip()
+                if not name:
+                    continue
+                rows.append((path, title, date, section, name,
+                             item.get("leader", ""), note, bul))
+        if rows:
+            con.executemany(
+                "INSERT INTO element_index "
+                "(service_path, service_title, service_date, section, name, "
+                " leader, note, bulletin_note) VALUES (?,?,?,?,?,?,?,?)",
+                rows,
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
+def element_search(query: str, limit: int = 80) -> list[dict]:
+    """Return elements whose name or note contains query, newest first."""
+    con = _open()
+    try:
+        q = f"%{query}%"
+        rows = con.execute(
+            "SELECT * FROM element_index "
+            "WHERE name LIKE ? OR note LIKE ? OR leader LIKE ? "
+            "ORDER BY service_date DESC, id LIMIT ?",
+            (q, q, q, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def element_services(limit: int = 200) -> list[dict]:
+    """Return distinct services that have indexed elements, newest first."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT service_path, service_title, service_date, COUNT(*) AS n "
+            "FROM element_index "
+            "GROUP BY service_path "
+            "ORDER BY service_date DESC, service_title LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def element_for_service(path: str) -> list[dict]:
+    """Return all elements for a given service path, in order."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT * FROM element_index WHERE service_path = ? ORDER BY id",
+            (path,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def element_prune(keep_paths: set[str]) -> None:
+    """Remove element index entries for services no longer on disk."""
+    con = _open()
+    try:
+        indexed = {r[0] for r in con.execute(
+            "SELECT DISTINCT service_path FROM element_index").fetchall()}
+        for stale in indexed - keep_paths:
+            con.execute("DELETE FROM element_index WHERE service_path = ?", (stale,))
         con.commit()
     finally:
         con.close()
