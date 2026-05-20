@@ -200,12 +200,23 @@ The HTML export includes:
 
 ---
 
+## Bulletin Preview Panel
+
+Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit.
+
+- **Simple mode** — renders the bulletin as HTML.
+- **Advanced mode with xelatex** — compiles a real PDF in the background. A spinner appears while compiling.
+- **⚙ gear icon** in the preview header — quick access to Print/Digital mode toggle and the church name field without opening the full preferences dialog.
+- **Popout button** — opens the preview in a separate floating window so you can see it alongside your editing.
+
+---
+
 ## Bulletin Export
 
 ### Simple mode (default)
 **Export Bulletin** (Ctrl+Shift+B) generates an HTML bulletin and opens it in your browser. Includes:
 - Church name, service details, welcome line
-- Order of service (bulletin-visible elements only — controlled by the 📋 button)
+- Order of service (bulletin-visible elements only — controlled by the Bulletin toggle in the item toolbar)
 - Active announcements (expired ones are filtered automatically)
 - Staff list, mission statement, accessibility note
 
@@ -229,6 +240,32 @@ Hamburger menu → **Service Planner** (Ctrl+Shift+L). Scans the `liturgy/` subf
 Click any row to open that service. Use **Refresh** to rescan after adding or moving files.
 
 If no repository is configured, the planner asks you to choose a folder on first use.
+
+---
+
+## Past Liturgies
+
+Hamburger menu → **Past Liturgies** (Ctrl+Shift+H). A read-only browser of every service you have saved and indexed. Use this to look back at past services without replacing what you're working on.
+
+- Services are listed newest-first. Click any service row to expand it and read the full content.
+- Each expanded service shows its elements grouped by section, with the full leader notes displayed in plain text (LaTeX formatting stripped for readability).
+- **Open in editor** button on each service loads it into the main window (you will be asked to save or discard the current service first).
+- **Insert** button on any element copies that element's notes into whichever element is currently selected in the service order.
+- The **search bar** filters by service title, date, or element content across all indexed services.
+
+Services are indexed automatically in the background when you save or open them. No manual indexing is required.
+
+---
+
+## Element Library
+
+Hamburger menu → **Element Library** (Ctrl+Shift+K). A searchable database of every individual element from every service in your library.
+
+- **Empty search** — browse by service. Click a service row to expand it and see its elements.
+- **Type to search** — finds elements by name, notes, or leader across all services. Results are sorted newest-first.
+- **Insert** button copies that element's leader notes into the currently selected element in the service order.
+
+The Element Library and Past Liturgies are complementary: use Element Library when you remember what an element was called and want to pull its text; use Past Liturgies when you want to read through a whole service.
 
 ---
 
@@ -327,12 +364,13 @@ Hamburger menu → Help section: **Help** (F1), **FAQ**, **What's New**.
 | Save as | Ctrl+Shift+S |
 | Undo | Ctrl+Z |
 | Redo | Ctrl+Shift+Z |
-| Export HTML | Ctrl+Shift+H |
 | Export LaTeX | Ctrl+E |
 | Compile PDF | Ctrl+Shift+P |
 | Export Bulletin | Ctrl+Shift+B |
 | GitHub sync (push) | Ctrl+Shift+G |
 | Service Planner | Ctrl+Shift+L |
+| Past Liturgies | Ctrl+Shift+H |
+| Element Library | Ctrl+Shift+K |
 | Add custom element | Ctrl+Shift+N |
 | Add divider | Ctrl+D |
 | Move item up | Ctrl+↑ |

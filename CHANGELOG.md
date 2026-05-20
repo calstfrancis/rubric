@@ -4,10 +4,17 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.12 — GitHub sync, planner, simple mode, redo, HTML export
+## 0.12 — Service archive, element library, bulletin preview, UX polish
 
 ### Added (this release)
 
+- **Past Liturgies archive** (Ctrl+Shift+H) — dedicated browser window for all your saved services. Shows services newest-first; click any row to expand and read every element with its full leader notes. Notes are displayed in plain text (LaTeX stripped). Each service has an **Open in editor** button; each element has an **Insert** button to copy its text into the currently selected element. Search bar filters by service title, date, or element content.
+- **Element Library** (Ctrl+Shift+K) — searchable library of every element from every saved service. Browse by service (click to expand) or type to filter by element name, notes, or leader. Insert any past element's notes into the current service with one click.
+- **Bulletin preview panel** — a live preview panel (toggle in the header bar) shows the congregational bulletin as it will print. In simple mode shows HTML; in advanced mode with xelatex compiles a real PDF in the background with a spinner. A **⚙ gear icon** in the preview header offers quick access to print/digital mode and church name without opening the full preferences dialog. A **popout button** opens the preview in its own floating window.
+- **Welcome wizard re-trigger** — hamburger menu → Help → **Welcome wizard…** re-opens the first-launch wizard at any time.
+- **Recently-used palette section** — elements you've added appear in a "Recently used" group at the top of the palette for quick access. Tracks the 6 most recent.
+- **Palette section expanders** — each section in the palette is collapsible. All sections expand automatically when you type in the search box.
+- **Hymn cache status bar** — shows how many hymn titles are cached ("📚 N hymns cached") with a **Clear** button.
 - **First-launch wizard** — on first open, a full-screen modal offers three clear choices: *Start with today's lectionary* (pre-fills a standard Sunday order with RCL readings for today), *Blank service* (opens a clean document), or *Show me around* (opens the Help guide and tip strip). Completed flag is saved to config so the wizard does not repeat.
 - **Lectionary seeding** — "Start with today's lectionary" builds a complete four-movement order (Gathering → Word → Response → Sending) with standard element names and injects the current week's RCL reading references directly into the relevant notes fields.
 - **Quickstart tip strip** — a dismissible banner below the readings card cycles through six short tips covering core features. Advances with "Next tip →"; permanently dismissed with ✕. Dismissed state persists in config.
@@ -22,9 +29,10 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **Notes not appearing when opening a saved file** — the root cause was a Python class identity mismatch: when the refactored package is present, service items loaded from files were being created as *package* `ServiceItem` instances, while `isinstance()` checks throughout the UI were testing against the *inline* `ServiceItem` class. The isinstance tests silently failed, causing the notes buffer to always be cleared instead of populated. Fixed by not overriding `_entry_from_dict` in the compatibility alias block.
+- **Bulletin text not propagating to the preview** — the same isinstance mismatch prevented `_on_bulletin_notes_changed` from writing typed text back to the entry object, so the preview never reflected what was typed. Fixed as above.
+- **Bulletin preview LaTeX escape artifacts** — `\hspace*{1em}as` was rendering as `1emas` because the generic argument-stripping regex ran before the spacing-command stripper. Fixed by pre-stripping `\hspace` and `\vspace` before the generic pass.
 - **Bulletin preview "URL can't be shown"** — WebKit `load_html` was called with `"about:bulletin"` as the base URI; changed to `None`.
-- **Scripture notes from loaded files not appearing** — the notes panel auto-switches to the Leader notes tab on item selection, so notes that were previously visible only after manually switching tabs now appear immediately.
-- **Notes edits not exporting to xelatex** — same root cause as above; typing in the Bulletin text tab updated `bulletin_note` not `note`. Auto-switching to Leader notes on selection prevents the mismatch.
 - **`_reset_state` note clear firing spurious `changed` signal** — buffer clears in `_reset_state` are now wrapped in the `_updating_note` guard.
 
 ### Added
