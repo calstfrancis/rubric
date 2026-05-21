@@ -395,7 +395,7 @@ def get_liturgical_info(d: date) -> dict:
 
     Returns a dict with keys:
       season      (str)  — display name of liturgical season
-      week        (str)  — e.g. "Advent 2", "Lent 4", "Proper 12"
+      week        (str)  — e.g. "Advent 2", "Lent 4", "Ordinary 12"
       year        (str)  — 'A', 'B', or 'C'
       colour      (str)  — colour name
       colour_hex  (str)  — hex colour code
@@ -575,7 +575,7 @@ def get_liturgical_info(d: date) -> dict:
     if trinity < d < adv:
         proper = _proper_for_date(d)
         if proper:
-            label = "Christ the King" if proper == 29 else f"Proper {proper}"
+            label = "Christ the King" if proper == 29 else f"Ordinary {proper}"
             sid = f"Proper{proper}"
             return _result("Ordinary", f"{label}, Year {lec_year}", sid)
 
@@ -585,7 +585,7 @@ def get_liturgical_info(d: date) -> dict:
                                    if d.month < 6 else d)
         prev_year = lectionary_year(d)
         if proper:
-            return _result("Ordinary", f"Proper {proper}, Year {prev_year}",
+            return _result("Ordinary", f"Ordinary {proper}, Year {prev_year}",
                            f"Proper{proper}", prev_year)
 
     # Fallback

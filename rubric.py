@@ -225,6 +225,44 @@ class Config:
 
 config = Config()
 
+# Default UCC Sunday service template — injected on first use if no templates exist
+_UCC_DEFAULT_TEMPLATE: list[dict] = [
+    {"type": "divider", "title": "Gathering"},
+    {"type": "item", "name": "Prelude",                    "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Welcome & Announcements",    "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Land Acknowledgement",       "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Birthday & Anniversary Prayer", "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Christ Candle",              "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Opening Hymn",               "section": "Gathering", "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Call to Worship",            "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Opening Prayer",             "section": "Gathering", "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Second Hymn",                "section": "Gathering", "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "divider", "title": "Word"},
+    {"type": "item", "name": "Scripture",                  "section": "Word",      "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Sung Psalm",                 "section": "Word",      "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Ministry of Music",          "section": "Word",      "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Growing in Faith",           "section": "Word",      "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Sermon / Message",           "section": "Word",      "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Practice",                   "section": "Word",      "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Hymn",                       "section": "Word",      "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "divider", "title": "Response"},
+    {"type": "item", "name": "Prayers of the People",      "section": "Response",  "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Lord's Prayer",              "section": "Response",  "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Presentation of Our Offering", "section": "Response","note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Offertory",                  "section": "Response",  "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Sung Response",              "section": "Response",  "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Prayer of Dedication",       "section": "Response",  "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "divider", "title": "Sending"},
+    {"type": "item", "name": "Rainbow Candle",             "section": "Sending",   "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Closing Hymn",               "section": "Sending",   "note": "", "leader": "All", "show_in_bulletin": True, "bulletin_note": ""},
+    {"type": "item", "name": "Commissioning",              "section": "Sending",   "note": "", "leader": "", "show_in_bulletin": True, "bulletin_note": ""},
+]
+
+if not config.templates:
+    config.templates["UCC Sunday"] = _UCC_DEFAULT_TEMPLATE
+    config.default_template = "UCC Sunday"
+    config.save()
+
 
 def get_palette() -> list[tuple[str, list[str]]]:
     if config.palette: return [(d["section"], d["items"]) for d in config.palette]
@@ -1155,6 +1193,25 @@ class PreferencesWindow(Adw.PreferencesWindow):
         page = Adw.PreferencesPage(title="GitHub", icon_name="network-server-symbolic")
         self.add(page)
 
+        # ── Setup wizard shortcut ──────────────────────────────────────────
+        wizard_grp = Adw.PreferencesGroup(
+            title="First-time setup",
+            description="Run the setup wizard to configure your folder, download hymn titles, and connect to GitHub."
+        )
+        page.add(wizard_grp)
+        wizard_row = Adw.ActionRow(title="Initialize Rubric",
+                                   subtitle="Walk through folder, hymn download, and GitHub setup")
+        wizard_btn = Gtk.Button(label="Run wizard", valign=Gtk.Align.CENTER)
+        wizard_btn.add_css_class("suggested-action")
+        def _run_wizard(_b):
+            main = self.get_transient_for()
+            self.close()
+            if main and hasattr(main, "_show_setup_wizard"):
+                GLib.idle_add(main._show_setup_wizard)
+        wizard_btn.connect("clicked", _run_wizard)
+        wizard_row.add_suffix(wizard_btn)
+        wizard_grp.add(wizard_row)
+
         # ── Repository folder ──────────────────────────────────────────────
         loc_grp = Adw.PreferencesGroup(
             title="Repository folder",
@@ -1507,7 +1564,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("show-help",          lambda: self.open_help("help"),       "F1"),
             ("show-faq",           lambda: self.open_help("faq"),        None),
             ("show-changelog",     lambda: self.open_help("changelog"),  None),
-            ("show-wizard",        self._show_first_launch_wizard,        None),
+            ("show-wizard",        lambda: self._show_setup_wizard(),      None),
             ("open-bulletin-prefs", self.open_bulletin_prefs,              None),
             ("open-services",      self.open_services,                    None),
             ("open-library",       self.open_library,                     "<Ctrl><Shift>k"),
@@ -3261,6 +3318,9 @@ class MainWindow(Adw.ApplicationWindow):
             return
         win = Adw.Window(title="Bulletin Preview", transient_for=self)
         win.set_default_size(720, 960)
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv.add_top_bar(hdr)
         wv = _WebKit.WebView()
         wv.set_vexpand(True); wv.set_hexpand(True)
         pdf_path = getattr(self, "_preview_pdf_path", None)
@@ -3271,9 +3331,8 @@ class MainWindow(Adw.ApplicationWindow):
                 wv.load_html(self._build_bulletin_html(), None)
             except Exception:
                 pass
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.set_vexpand(True); box.append(wv)
-        win.set_content(box)
+        tv.set_content(wv)
+        win.set_content(tv)
         self._preview_popout_win = win  # prevent GC
         win.present()
 
@@ -3311,10 +3370,227 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _check_welcome(self) -> bool:
         if not config.first_launch_completed:
-            self._show_first_launch_wizard()
+            self._show_setup_wizard(on_done=self._show_first_launch_wizard)
         elif config.last_seen_version != APP_VERSION:
             self._show_welcome(is_new_version=bool(config.last_seen_version))
         return False
+
+    # ── Setup wizard ─────────────────────────────────────────────────────────
+
+    def _show_setup_wizard(self, on_done=None):
+        """Multi-step initialization wizard: folder setup → hymn downloads → GitHub."""
+        win = Adw.Window(transient_for=self, modal=True)
+        win.set_title("Set Up Rubric")
+        win.set_default_size(520, 0)
+        win.set_resizable(False)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar(); hdr.set_show_end_title_buttons(False)
+        step_lbl = Gtk.Label(); step_lbl.add_css_class("caption"); step_lbl.add_css_class("dim-label")
+        hdr.set_title_widget(step_lbl)
+        tv.add_top_bar(hdr)
+        win.set_content(tv)
+
+        stack = Gtk.Stack()
+        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        stack.set_transition_duration(200)
+
+        # ── Step 1: Folder ────────────────────────────────────────────────────
+        p1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        p1.set_margin_start(24); p1.set_margin_end(24)
+        p1.set_margin_top(20); p1.set_margin_bottom(20)
+
+        icon1 = Gtk.Image(icon_name="folder-symbolic"); icon1.set_pixel_size(48); icon1.set_margin_bottom(6)
+        p1.append(icon1)
+        lbl1 = Gtk.Label(label="Choose a folder for your files")
+        lbl1.add_css_class("title-2"); lbl1.set_margin_bottom(2)
+        p1.append(lbl1)
+        sub1 = Gtk.Label(label="Rubric will store your liturgy files, LaTeX, and PDFs here.\n"
+                                "Choose an empty folder — it will become your liturgy repository.")
+        sub1.set_wrap(True); sub1.set_justify(Gtk.Justification.CENTER)
+        sub1.add_css_class("dim-label"); sub1.set_margin_bottom(10)
+        p1.append(sub1)
+
+        folder_grp = Adw.PreferencesGroup()
+        p1_path_row = Adw.ActionRow(title="Folder", subtitle=config.github_repo or "Not chosen yet")
+        browse1_btn = Gtk.Button(label="Browse…", valign=Gtk.Align.CENTER)
+        browse1_btn.add_css_class("flat")
+        p1_path_row.add_suffix(browse1_btn)
+        folder_grp.add(p1_path_row)
+        setup1_row = Adw.ActionRow(title="Create subfolders & initialise git",
+                                   subtitle="Creates liturgy/, tex/, pdf/, bulletins/ inside chosen folder")
+        setup1_btn = Gtk.Button(label="Set up", valign=Gtk.Align.CENTER)
+        setup1_btn.add_css_class("suggested-action")
+        setup1_row.add_suffix(setup1_btn)
+        folder_grp.add(setup1_row)
+        p1.append(folder_grp)
+
+        p1_status = Gtk.Label(label="")
+        p1_status.add_css_class("caption"); p1_status.add_css_class("dim-label")
+        p1_status.set_wrap(True); p1_status.set_margin_top(4)
+        p1.append(p1_status)
+        stack.add_named(p1, "folder")
+
+        def _on_browse1(_b):
+            dlg = Gtk.FileDialog(title="Choose folder for liturgy files")
+            dlg.select_folder(win, None, _on_folder_chosen)
+        def _on_folder_chosen(dlg, result):
+            try: f = dlg.select_folder_finish(result)
+            except GLib.Error: return
+            config.github_repo = f.get_path(); config.save()
+            p1_path_row.set_subtitle(config.github_repo)
+            p1_status.set_label(f"Folder: {config.github_repo}")
+        def _on_setup1(_b):
+            if not config.github_repo:
+                p1_status.set_label("Please choose a folder first."); return
+            from pathlib import Path as _P
+            rp = _P(config.github_repo); errors = []
+            for sub in ("liturgy", "tex", "pdf", "bulletins"):
+                try: (rp / sub).mkdir(parents=True, exist_ok=True)
+                except OSError as e: errors.append(str(e))
+            gi_path = rp / ".gitignore"
+            if not gi_path.exists():
+                try: gi_path.write_text("*.aux\n*.log\n*.out\n*.fls\n*.fdb_latexmk\n*.synctex.gz\n*.toc\n*.dvi\n", encoding="utf-8")
+                except OSError as e: errors.append(str(e))
+            try:
+                r = subprocess.run(["git", "-C", str(rp), "init"], capture_output=True, text=True, timeout=10)
+                if r.returncode != 0: errors.append(r.stderr.strip())
+            except Exception as e: errors.append(str(e))
+            if errors: p1_status.set_label("Errors: " + "; ".join(errors))
+            else: p1_status.set_label("✓ Folder ready — subfolders and git initialised")
+        browse1_btn.connect("clicked", _on_browse1)
+        setup1_btn.connect("clicked", _on_setup1)
+
+        # ── Step 2: Hymn downloads ─────────────────────────────────────────────
+        p2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        p2.set_margin_start(24); p2.set_margin_end(24)
+        p2.set_margin_top(20); p2.set_margin_bottom(20)
+
+        icon2 = Gtk.Image(icon_name="audio-x-generic-symbolic"); icon2.set_pixel_size(48); icon2.set_margin_bottom(6)
+        p2.append(icon2)
+        lbl2 = Gtk.Label(label="Download hymn titles (optional)")
+        lbl2.add_css_class("title-2"); lbl2.set_margin_bottom(2)
+        p2.append(lbl2)
+        sub2 = Gtk.Label(label="Cache hymn titles from Hymnary.org for faster offline lookup.\n"
+                                "This downloads titles only — no audio. You can skip this and do it later in Preferences.")
+        sub2.set_wrap(True); sub2.set_justify(Gtk.Justification.CENTER)
+        sub2.add_css_class("dim-label"); sub2.set_margin_bottom(10)
+        p2.append(sub2)
+
+        hymn_grp = Adw.PreferencesGroup()
+        p2_dl_bar = Gtk.ProgressBar(); p2_dl_bar.set_visible(False)
+        p2_dl_status = Gtk.Label(label=""); p2_dl_status.add_css_class("caption"); p2_dl_status.add_css_class("dim-label")
+        for bk, bk_label, max_n in [("VU","Voices United (VU)",961),("MV","More Voices (MV)",217),("LUS","Let Us Sing (LUS)",150)]:
+            dl_row = Adw.ActionRow(title=f"Download {bk_label}")
+            dl_btn = Gtk.Button(label="Download", valign=Gtk.Align.CENTER); dl_btn.add_css_class("flat")
+            def _start_dl(_b, book=bk, n=max_n):
+                p2_dl_bar.set_visible(True); p2_dl_bar.set_fraction(0)
+                p2_dl_status.set_label(f"Downloading {book}…")
+                def _prog(done, total):
+                    p2_dl_bar.set_fraction(done / total); p2_dl_bar.set_text(f"{book} {done}/{total}"); return False
+                def _done(added):
+                    p2_dl_bar.set_visible(False); p2_dl_status.set_label(f"✓ {added} titles cached from {book}"); return False
+                prefetch_hymnal(book, on_progress=_prog, on_done=_done)
+            dl_btn.connect("clicked", _start_dl)
+            dl_row.add_suffix(dl_btn); hymn_grp.add(dl_row)
+        p2.append(hymn_grp)
+        p2.append(p2_dl_bar); p2.append(p2_dl_status)
+        stack.add_named(p2, "hymns")
+
+        # ── Step 3: GitHub ────────────────────────────────────────────────────
+        p3 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        p3.set_margin_start(24); p3.set_margin_end(24)
+        p3.set_margin_top(20); p3.set_margin_bottom(20)
+
+        icon3 = Gtk.Image(icon_name="network-server-symbolic"); icon3.set_pixel_size(48); icon3.set_margin_bottom(6)
+        p3.append(icon3)
+        lbl3 = Gtk.Label(label="Connect to GitHub (optional)")
+        lbl3.add_css_class("title-2"); lbl3.set_margin_bottom(2)
+        p3.append(lbl3)
+        sub3 = Gtk.Label(label="Back up and sync your liturgy files with a private GitHub repository.\n"
+                                "Create a free account at github.com, then paste your repository URL below. You can skip this and connect later in Preferences.")
+        sub3.set_wrap(True); sub3.set_justify(Gtk.Justification.CENTER)
+        sub3.add_css_class("dim-label"); sub3.set_margin_bottom(10)
+        p3.append(sub3)
+
+        gh_grp = Adw.PreferencesGroup()
+        gh_entry = Adw.EntryRow(title="GitHub repository URL (https://…)")
+        gh_entry.set_text(config.github_repo and self._detect_github_remote() or "")
+        gh_grp.add(gh_entry)
+        connect_row = Adw.ActionRow(title="Save and connect")
+        connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER); connect_btn.add_css_class("suggested-action")
+        connect_row.add_suffix(connect_btn); gh_grp.add(connect_row)
+        p3.append(gh_grp)
+        p3_status = Gtk.Label(label="")
+        p3_status.add_css_class("caption"); p3_status.add_css_class("dim-label")
+        p3_status.set_wrap(True); p3_status.set_margin_top(4)
+        p3.append(p3_status)
+
+        def _on_connect3(_b):
+            repo = config.github_repo; url = gh_entry.get_text().strip()
+            if not repo: p3_status.set_label("Set up a folder (step 1) first."); return
+            if not url: p3_status.set_label("Paste your GitHub repository URL first."); return
+            try:
+                chk = subprocess.run(["git","-C",repo,"remote","get-url","origin"], capture_output=True, text=True, timeout=5)
+                cmd = ["git","-C",repo,"remote","set-url" if chk.returncode==0 else "add","origin",url]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                if r.returncode != 0: p3_status.set_label(f"Error: {r.stderr.strip()}")
+                else: p3_status.set_label(f"✓ Connected to {url}")
+            except Exception as e: p3_status.set_label(str(e))
+        connect_btn.connect("clicked", _on_connect3)
+        stack.add_named(p3, "github")
+
+        # ── Navigation bar ────────────────────────────────────────────────────
+        pages = ["folder", "hymns", "github"]
+        page_titles = ["Step 1 of 3 — Folder", "Step 2 of 3 — Hymn Titles", "Step 3 of 3 — GitHub"]
+        _cur = [0]
+
+        nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        nav.set_margin_start(24); nav.set_margin_end(24)
+        nav.set_margin_top(8); nav.set_margin_bottom(20)
+        skip_btn = Gtk.Button(label="Skip"); skip_btn.add_css_class("flat")
+        back_btn = Gtk.Button(label="← Back"); back_btn.add_css_class("flat"); back_btn.set_sensitive(False)
+        sp = Gtk.Box(); sp.set_hexpand(True)
+        next_btn = Gtk.Button(label="Next →"); next_btn.add_css_class("suggested-action")
+        nav.append(skip_btn); nav.append(back_btn); nav.append(sp); nav.append(next_btn)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.append(stack); outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)); outer.append(nav)
+        tv.set_content(outer)
+
+        def _go(idx):
+            _cur[0] = idx
+            stack.set_visible_child_name(pages[idx])
+            step_lbl.set_label(page_titles[idx])
+            back_btn.set_sensitive(idx > 0)
+            next_btn.set_label("Done" if idx == len(pages) - 1 else "Next →")
+
+        def _on_next(_b):
+            if _cur[0] < len(pages) - 1: _go(_cur[0] + 1)
+            else: _close()
+        def _on_back(_b):
+            if _cur[0] > 0: _go(_cur[0] - 1)
+        def _on_skip(_b):
+            if _cur[0] < len(pages) - 1: _go(_cur[0] + 1)
+            else: _close()
+        def _close():
+            win.close()
+            if on_done: GLib.idle_add(on_done)
+
+        next_btn.connect("clicked", _on_next)
+        back_btn.connect("clicked", _on_back)
+        skip_btn.connect("clicked", _on_skip)
+        win.connect("close-request", lambda _w: (GLib.idle_add(on_done) if on_done else None) or False)
+        _go(0)
+        win.present()
+
+    def _detect_github_remote(self) -> str:
+        repo = config.github_repo
+        if not repo: return ""
+        try:
+            r = subprocess.run(["git","-C",repo,"remote","get-url","origin"], capture_output=True, text=True, timeout=5)
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except Exception: return ""
 
     # ── Quick-start banner ────────────────────────────────────────────────────
 
@@ -3481,7 +3757,7 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Lectionary service seeding ────────────────────────────────────────────
 
     def _seed_lectionary_service(self, today, info: dict):
-        """Reset state and pre-fill a standard Sunday order using today's RCL readings."""
+        """Reset state and pre-fill the UCC Sunday order using today's RCL readings."""
         self._reset_state()
 
         # Set date
@@ -3493,8 +3769,8 @@ class MainWindow(Adw.ApplicationWindow):
         if week:
             self.service_title_entry.set_text(week)
 
-        def _si(name, section, note=""):
-            return ServiceItem(name, section, note=note)
+        def _si(name, section, note="", leader=""):
+            return ServiceItem(name, section, note=note, leader=leader)
 
         def _ref(key):
             v = info.get(key, "")
@@ -3502,31 +3778,34 @@ class MainWindow(Adw.ApplicationWindow):
 
         items = [
             SectionDivider("Gathering"),
-            _si("Prelude",              "Gathering"),
-            _si("Welcome",              "Gathering"),
-            _si("Land acknowledgement", "Gathering"),
-            _si("Call to worship",      "Gathering"),
-            _si("Opening hymn",         "Gathering"),
-            _si("Prayer of approach",   "Gathering"),
+            _si("Prelude",                      "Gathering"),
+            _si("Welcome & Announcements",       "Gathering"),
+            _si("Land Acknowledgement",          "Gathering"),
+            _si("Birthday & Anniversary Prayer", "Gathering"),
+            _si("Christ Candle",                 "Gathering"),
+            _si("Opening Hymn",                  "Gathering", leader="All"),
+            _si("Call to Worship",               "Gathering"),
+            _si("Opening Prayer",                "Gathering"),
+            _si("Second Hymn",                   "Gathering", leader="All"),
             SectionDivider("Word"),
-        ]
-        for name, key in [("Hebrew Bible reading", "ot"),
-                           ("Psalm / sung psalm",   "psalm"),
-                           ("Epistle reading",       "epistle"),
-                           ("Gospel reading",        "gospel")]:
-            ref = _ref(key)
-            items.append(_si(name, "Word", note=ref))
-        items += [
-            _si("Sermon / reflection",  "Word"),
+            _si("Scripture",       "Word", note=_ref("gospel") or _ref("epistle") or _ref("ot")),
+            _si("Sung Psalm",      "Word", note=_ref("psalm"), leader="All"),
+            _si("Ministry of Music",  "Word"),
+            _si("Growing in Faith",   "Word"),
+            _si("Sermon / Message",   "Word"),
+            _si("Practice",           "Word", leader="All"),
+            _si("Hymn",               "Word", leader="All"),
             SectionDivider("Response"),
-            _si("Hymn",                 "Response"),
-            _si("Prayers of the people","Response"),
-            _si("Lord's prayer",        "Response"),
-            _si("Offering / dedication","Response"),
+            _si("Prayers of the People",      "Response"),
+            _si("Lord's Prayer",              "Response", leader="All"),
+            _si("Presentation of Our Offering","Response"),
+            _si("Offertory",                   "Response"),
+            _si("Sung Response",               "Response", leader="All"),
+            _si("Prayer of Dedication",        "Response"),
             SectionDivider("Sending"),
-            _si("Closing hymn",         "Sending"),
-            _si("Benediction",          "Sending"),
-            _si("Postlude",             "Sending"),
+            _si("Rainbow Candle",    "Sending"),
+            _si("Closing Hymn",      "Sending", leader="All"),
+            _si("Commissioning",     "Sending"),
         ]
 
         for item in items:
@@ -3888,10 +4167,29 @@ class MainWindow(Adw.ApplicationWindow):
         if self.current_file: self._write(self.current_file)
         else: self.save_file_as()
 
+    def _suggest_filename(self) -> str:
+        """Build a smart filename from the selected date and liturgical info."""
+        if self.selected_date:
+            try:
+                info = get_liturgical_info(self.selected_date)
+                week = info.get("week", "")
+                yr = self.selected_date.year
+                if week:
+                    clean = re.sub(r"[^\w\s\-]", "", week).strip()
+                    clean = re.sub(r"\s+", " ", clean)
+                    return f"{clean} {yr}.liturgy"
+            except Exception:
+                pass
+        title = self.service_title_entry.get_text().strip()
+        if title:
+            clean = re.sub(r"[^\w\s\-]", "", title).strip()
+            return f"{clean}.liturgy"
+        return "service.liturgy"
+
     def save_file_as(self):
         liturgy_dir = self._repo_subdir("liturgy")
         initial = str(liturgy_dir) if liturgy_dir else config.last_dir
-        dlg = Gtk.FileDialog(title="Save service", initial_name="service.liturgy")
+        dlg = Gtk.FileDialog(title="Save service", initial_name=self._suggest_filename())
         dlg.set_initial_folder(Gio.File.new_for_path(initial))
         filters = Gio.ListStore.new(Gtk.FileFilter); f = Gtk.FileFilter()
         f.set_name("Liturgy files (*.liturgy)"); f.add_pattern("*.liturgy"); filters.append(f); dlg.set_filters(filters)
@@ -4992,7 +5290,8 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             import urllib.parse
             yt_query = urllib.parse.quote(f"{prefix} {number} {title}")
             yt_url = f"https://www.youtube.com/results?search_query={yt_query}"
-            yt_btn = Gtk.Button(label="▶", tooltip_text=f"Search YouTube: {prefix} {number}")
+            yt_btn = Gtk.Button(label="▶ YouTube",
+                                tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
             yt_btn.add_css_class("flat")
             yt_btn.set_valign(Gtk.Align.CENTER)
             yt_btn.connect("clicked", lambda _b, u=yt_url: Gtk.show_uri(None, u, 0))

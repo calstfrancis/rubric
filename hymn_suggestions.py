@@ -60,8 +60,8 @@ def get_suggestions(week: str, season: str) -> list[tuple[str, int, str]]:
         if key.lower() in week.lower():
             return list(hymns[:8])
 
-    # 2. Proper-specific (Ordinary Time)
-    m = re.search(r"Proper\s+(\d+)", week, re.IGNORECASE)
+    # 2. Ordinary/Proper-specific (Ordinary Time)
+    m = re.search(r"(?:Ordinary|Proper)\s+(\d+)", week, re.IGNORECASE)
     if m:
         proper_num = int(m.group(1))
         proper_hymns = data["propers"].get(proper_num, [])
