@@ -19,10 +19,11 @@ gi.require_version("GLib", "2.0")
 from gi.repository import GLib
 
 try:
-    from rubric_package.db import hymn_get, hymn_set
+    from rubric_package.db import hymn_get, hymn_set, hymn_search as _hymn_search
     _DB_OK = True
 except ImportError:
     _DB_OK = False
+    def _hymn_search(q, limit=30): return []
 
 # Hymnary.org book identifiers
 HYMNALS: dict[str, tuple[str, str]] = {
@@ -106,3 +107,71 @@ def lookup_hymn(prefix: str, number: int, callback):
             GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
 
     threading.Thread(target=fetch, daemon=True).start()
+
+
+def search_hymns(query: str) -> list[dict]:
+    """Search cached hymn titles by keyword. Returns [{book, number, title}]."""
+    results = _hymn_search(query)
+    out = []
+    for r in results:
+        key = r["key"]
+        for prefix in HYMNALS:
+            if key.startswith(prefix):
+                out.append({"book": prefix, "number": key[len(prefix):], "title": r["title"]})
+                break
+    return out
+
+
+# Maximum hymn numbers per book (Hymnary-based)
+_BOOK_MAX = {"VU": 961, "MV": 217, "LUS": 150}
+
+
+def prefetch_hymnal(book: str, on_progress=None, on_done=None):
+    """Background-fetch all hymn titles for one book and cache them.
+
+    on_progress(n, total) — called on GLib main thread after each hymn
+    on_done(n_added)      — called when the fetch is complete
+    """
+    book = book.upper()
+    max_n = _BOOK_MAX.get(book, 200)
+    hymnal_id = HYMNALS.get(book, (None, None))[0]
+    if not hymnal_id:
+        if on_done:
+            GLib.idle_add(on_done, 0)
+        return
+
+    def run():
+        added = 0
+        for n in range(1, max_n + 1):
+            key = f"{book}{n}"
+            if _DB_OK and hymn_get(key) is not None:
+                if on_progress:
+                    GLib.idle_add(on_progress, n, max_n)
+                continue
+            url = f"https://hymnary.org/hymn/{hymnal_id}/{n}"
+            try:
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0 LiturgyPlanner/1.0"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    html = resp.read().decode("utf-8", errors="replace")
+                m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+                if m:
+                    raw = m.group(1).strip()
+                    title = raw.split("|")[0].strip()
+                    clean = re.match(r"^.*?\d+\.\s+(.+)$", title)
+                    if clean:
+                        title = clean.group(1).strip()
+                    hymnal_name = HYMNALS[book][1]
+                    if title and "hymnary" not in title.lower() and len(title) > 2:
+                        if _DB_OK:
+                            hymn_set(key, title)
+                        added += 1
+            except Exception:
+                pass
+            if on_progress:
+                GLib.idle_add(on_progress, n, max_n)
+        if on_done:
+            GLib.idle_add(on_done, added)
+
+    threading.Thread(target=run, daemon=True).start()

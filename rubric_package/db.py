@@ -118,6 +118,21 @@ def hymn_clear() -> None:
         con.close()
 
 
+def hymn_search(query: str, limit: int = 30) -> list[dict]:
+    """Return cached hymns whose title or key contains query."""
+    con = _open()
+    try:
+        q = f"%{query}%"
+        rows = con.execute(
+            "SELECT key, title FROM hymn_cache WHERE title LIKE ? OR key LIKE ? "
+            "ORDER BY key LIMIT ?",
+            (q, q, limit),
+        ).fetchall()
+        return [{"key": r["key"], "title": r["title"]} for r in rows]
+    finally:
+        con.close()
+
+
 # ── Snippets ──────────────────────────────────────────────────────────────────
 
 def snippets_load() -> list[dict]:
