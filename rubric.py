@@ -142,6 +142,7 @@ class Config:
         self.recently_used          : list[str] = []
         self.compact_mode           : bool = False
         self.recurring_elements     : list[str] = []
+        self.element_defaults       : dict[str, str] = {}
         self._load()
 
     # backward-compat: old "template_items" key becomes template named "Default"
@@ -162,6 +163,7 @@ class Config:
             "print_mode":     "booklet",   # "booklet" or "digital"
             "include_scripture": True,
             "include_announcements": True,
+            "cover_image": "",
         }
 
     def _load(self):
@@ -187,6 +189,7 @@ class Config:
                 self.recently_used           = d.get("recently_used", [])
                 self.compact_mode            = d.get("compact_mode", False)
                 self.recurring_elements      = d.get("recurring_elements", [])
+                self.element_defaults        = d.get("element_defaults", {})
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -219,6 +222,7 @@ class Config:
             "recently_used":          self.recently_used,
             "compact_mode":           self.compact_mode,
             "recurring_elements":     self.recurring_elements,
+            "element_defaults":       self.element_defaults,
         }
         if self.palette is not None: p["palette"] = self.palette
         CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -281,22 +285,27 @@ class SectionDivider:
 class ServiceItem:
     is_divider = False
     def __init__(self, name, section, note="", leader="",
-                 show_in_bulletin=True, bulletin_note=""):
+                 show_in_bulletin=True, bulletin_note="", prep_note="", duration=0):
         self.name = name; self.section = section
         self.note = note; self.leader = leader
-        self.show_in_bulletin = show_in_bulletin  # whether element appears in bulletin
-        self.bulletin_note = bulletin_note         # congregation-facing text (overrides note)
+        self.show_in_bulletin = show_in_bulletin
+        self.bulletin_note = bulletin_note
+        self.prep_note = prep_note
+        self.duration = duration
     def to_dict(self):
-        return {"type": "item", "name": self.name, "section": self.section,
-                "note": self.note, "leader": self.leader,
-                "show_in_bulletin": self.show_in_bulletin,
-                "bulletin_note": self.bulletin_note}
+        d = {"type": "item", "name": self.name, "section": self.section,
+             "note": self.note, "leader": self.leader,
+             "show_in_bulletin": self.show_in_bulletin,
+             "bulletin_note": self.bulletin_note}
+        if self.prep_note: d["prep_note"] = self.prep_note
+        if self.duration:  d["duration"]  = self.duration
+        return d
     @classmethod
     def from_dict(cls, d):
         return cls(d["name"], d.get("section", ""), d.get("note", ""),
-                   d.get("leader", ""),
-                   d.get("show_in_bulletin", True),
-                   d.get("bulletin_note", ""))
+                   d.get("leader", ""), d.get("show_in_bulletin", True),
+                   d.get("bulletin_note", ""), d.get("prep_note", ""),
+                   d.get("duration", 0))
 
 def _entry_from_dict(d):
     return SectionDivider.from_dict(d) if d.get("type")=="divider" else ServiceItem.from_dict(d)
@@ -576,6 +585,50 @@ class BulletinPrefsWindow(Adw.Window):
         ms_tv.get_buffer().connect("changed", on_mission_changed)
         ms_scroll.set_child(ms_tv)
         text_grp.add(ms_scroll)
+
+        # ── Cover image ───────────────────────────────────────────────────────
+        cover_grp = Adw.PreferencesGroup(title="Cover image",
+            description="Optional image shown at the top of the bulletin (print and digital). "
+                        "Use a PNG or JPEG file.")
+        page.add(cover_grp)
+
+        cover_row = Adw.ActionRow(title="Image file",
+            subtitle=config.bulletin.get("cover_image", "") or "None selected")
+        self._cover_row = cover_row
+
+        def _clear_cover(_btn):
+            config.bulletin["cover_image"] = ""
+            config.save()
+            cover_row.set_subtitle("None selected")
+            if self._main: self._main._schedule_preview_update()
+
+        def _pick_cover(_btn):
+            dlg = Gtk.FileDialog(title="Choose cover image")
+            ff = Gtk.FileFilter(); ff.set_name("Images (PNG, JPEG)")
+            ff.add_mime_type("image/png"); ff.add_mime_type("image/jpeg")
+            filters = Gio.ListStore.new(Gtk.FileFilter)
+            filters.append(ff); dlg.set_filters(filters)
+            def _done(d, res):
+                try:
+                    f = d.open_finish(res)
+                except GLib.Error:
+                    return
+                path = f.get_path()
+                config.bulletin["cover_image"] = path
+                config.save()
+                cover_row.set_subtitle(Path(path).name)
+                if self._main: self._main._schedule_preview_update()
+            dlg.open(self, None, _done)
+
+        pick_btn = Gtk.Button(label="Choose…", valign=Gtk.Align.CENTER)
+        pick_btn.add_css_class("flat")
+        pick_btn.connect("clicked", _pick_cover)
+        clear_btn = Gtk.Button(icon_name="edit-clear-symbolic", valign=Gtk.Align.CENTER,
+                               tooltip_text="Remove cover image")
+        clear_btn.add_css_class("flat")
+        clear_btn.connect("clicked", _clear_cover)
+        cover_row.add_suffix(pick_btn); cover_row.add_suffix(clear_btn)
+        cover_grp.add(cover_row)
 
         # ── Staff list ────────────────────────────────────────────────────
         self._staff_grp = Adw.PreferencesGroup(title="Staff / contact list",
@@ -882,6 +935,37 @@ class PreferencesWindow(Adw.PreferencesWindow):
         rec_grp.add(add_rec_row)
         self._recurring_group = rec_grp
 
+        # ── Element defaults ──────────────────────────────────────────────
+        def_grp = Adw.PreferencesGroup(title="Element defaults",
+            description="Default note content auto-filled when an element is added by name. "
+                        "Useful for recurring prayers, responses, or instructions.")
+        page.add(def_grp)
+        self._element_default_rows: list[tuple] = []  # (name_entry, note_entry, row)
+
+        for ename, enote in config.element_defaults.items():
+            self._add_element_default_row(def_grp, ename, enote)
+
+        add_def_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                              margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+        add_def_name = Gtk.Entry(placeholder_text="Element name", hexpand=True)
+        add_def_note = Gtk.Entry(placeholder_text="Default note content", hexpand=True)
+        add_def_btn  = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
+        add_def_btn.add_css_class("flat")
+        def _do_add_default(_btn=None, grp=def_grp):
+            name = add_def_name.get_text().strip()
+            note = add_def_note.get_text().strip()
+            if name:
+                self._add_element_default_row(grp, name, note)
+                add_def_name.set_text(""); add_def_note.set_text("")
+        add_def_btn.connect("clicked", _do_add_default)
+        add_def_name.connect("activate", _do_add_default)
+        add_def_note.connect("activate", _do_add_default)
+        add_def_box.append(add_def_name); add_def_box.append(add_def_note)
+        add_def_box.append(add_def_btn)
+        add_def_row = Adw.ActionRow(title="Add default"); add_def_row.set_child(add_def_box)
+        def_grp.add(add_def_row)
+        self._element_defaults_group = def_grp
+
     def _add_recurring_row(self, grp, name: str):
         row = Adw.ActionRow(title=name)
         del_btn = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER)
@@ -893,6 +977,24 @@ class PreferencesWindow(Adw.PreferencesWindow):
         row.add_suffix(del_btn)
         grp.add(row)
         self._recurring_rows.append((row, name))
+
+    def _add_element_default_row(self, grp, name: str, note: str):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6,
+                      margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+        name_e = Gtk.Entry(placeholder_text="Element name", hexpand=True); name_e.set_text(name)
+        note_e = Gtk.Entry(placeholder_text="Default note", hexpand=True); note_e.set_text(note)
+        widgets: list = [name_e, note_e, None]  # row set below
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER)
+        del_btn.add_css_class("flat")
+        def _del(_b, w=widgets):
+            w[2].set_visible(False)
+            self._element_default_rows = [(ne, noe, r) for ne, noe, r in self._element_default_rows if r is not w[2]]
+        del_btn.connect("clicked", _del)
+        box.append(name_e); box.append(note_e); box.append(del_btn)
+        row = Adw.ActionRow(); row.set_child(box)
+        widgets[2] = row
+        grp.add(row)
+        self._element_default_rows.append((name_e, note_e, row))
 
     def _compact_mode_active(self) -> bool:
         if hasattr(self, "_compact_row") and self._compact_row:
@@ -1074,6 +1176,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
         config.compact_mode = self._compact_mode_active()
         if hasattr(self, "_recurring_rows"):
             config.recurring_elements = [n for _r, n in self._recurring_rows]
+        if hasattr(self, "_element_default_rows"):
+            config.element_defaults = {
+                ne.get_text().strip(): noe.get_text().strip()
+                for ne, noe, r in self._element_default_rows
+                if r.get_visible() and ne.get_text().strip()
+            }
         win = self.get_transient_for()
         if win and hasattr(win, "_apply_simple_mode"):
             win._apply_simple_mode()
@@ -1572,6 +1680,8 @@ class MainWindow(Adw.ApplicationWindow):
             ("open-help",          self.open_help,                        None),
             ("show-about",         self.show_about,                       None),
             ("export-as",          self.export_as,                      None),
+            ("export-av-sheet",    self.export_av_sheet,                None),
+            ("export-minister-pdf", self.export_minister_pdf,           None),
             ("focus-mode",         self._toggle_focus_mode,             None),
             ("copy-as-text",       self._copy_as_text,                  "<Ctrl><Shift>t"),
             ("toggle-bulletin-edit", self._toggle_bulletin_edit,        None),
@@ -1817,7 +1927,7 @@ class MainWindow(Adw.ApplicationWindow):
             rec_lb.set_margin_start(12); rec_lb.set_margin_end(12); rec_lb.set_margin_bottom(4)
             rec_lb.connect("row-activated", self._on_palette_row_activated)
             for rname in config.recently_used[:6]:
-                row = Adw.ActionRow(title=rname); row.set_activatable(True)
+                row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
                 row._item_name = rname; row._section_name = self._section_for_item(rname)
                 rec_lb.append(row)
             self._palette_inner.append(rec_lb)
@@ -1834,7 +1944,7 @@ class MainWindow(Adw.ApplicationWindow):
             lb.add_css_class("boxed-list"); lb.set_margin_bottom(4)
             lb.connect("row-activated", self._on_palette_row_activated)
             for iname in items:
-                row = Adw.ActionRow(title=iname); row.set_activatable(True)
+                row = Adw.ActionRow(title=GLib.markup_escape_text(iname)); row.set_activatable(True)
                 row._item_name = iname; row._section_name = sname; lb.append(row)
             exp.set_child(lb)
             self._palette_inner.append(exp)
@@ -1848,7 +1958,7 @@ class MainWindow(Adw.ApplicationWindow):
         while lb.get_first_child():
             lb.remove(lb.get_first_child())
         for rname in config.recently_used[:6]:
-            row = Adw.ActionRow(title=rname); row.set_activatable(True)
+            row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
             row._item_name = rname; row._section_name = self._section_for_item(rname)
             lb.append(row)
 
@@ -1993,6 +2103,15 @@ class MainWindow(Adw.ApplicationWindow):
         self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
         order_box.append(self._view_stack)
 
+        # Time total bar
+        self._time_bar = Gtk.Label()
+        self._time_bar.set_xalign(1.0)
+        self._time_bar.set_margin_start(12); self._time_bar.set_margin_end(12)
+        self._time_bar.set_margin_top(2); self._time_bar.set_margin_bottom(0)
+        self._time_bar.add_css_class("dim-label")
+        self._time_bar.set_visible(False)
+        order_box.append(self._time_bar)
+
         # Order pane button bar
         bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         bb.set_margin_start(8); bb.set_margin_end(8); bb.set_margin_top(4); bb.set_margin_bottom(8)
@@ -2056,6 +2175,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.leader_entry.set_hexpand(True)
         self.leader_entry.connect("changed", self._on_leader_changed)
         row1.append(self.leader_entry)
+
+        dur_lbl = Gtk.Label(label="min"); dur_lbl.add_css_class("dim-label")
+        dur_lbl.set_margin_start(6); row1.append(dur_lbl)
+        dur_adj = Gtk.Adjustment(value=0, lower=0, upper=120, step_increment=1)
+        self.duration_spin = Gtk.SpinButton(adjustment=dur_adj, numeric=True)
+        self.duration_spin.set_width_chars(3)
+        self.duration_spin.set_tooltip_text("Estimated duration in minutes (0 = unset)")
+        self.duration_spin.connect("value-changed", self._on_duration_changed)
+        row1.append(self.duration_spin)
 
         self.bulletin_toggle = Gtk.ToggleButton(label="Bulletin")
         self.bulletin_toggle.set_tooltip_text("Include in congregational bulletin")
@@ -2135,13 +2263,21 @@ class MainWindow(Adw.ApplicationWindow):
         self._bulletin_tab_btn = Gtk.ToggleButton(label="Bulletin text")
         self._bulletin_tab_btn.add_css_class("flat")
         self._bulletin_tab_btn.set_group(self._leader_tab_btn)
+        self._prep_tab_btn = Gtk.ToggleButton(label="Prep notes")
+        self._prep_tab_btn.add_css_class("flat")
+        self._prep_tab_btn.set_group(self._leader_tab_btn)
+        self._prep_tab_btn.set_tooltip_text("Private sermon/prep notes — never exported to PDF or bulletin")
         def on_leader_tab(btn):
             if btn.get_active(): self._notes_stack.set_visible_child_name("leader")
         def on_bulletin_tab(btn):
             if btn.get_active(): self._notes_stack.set_visible_child_name("bulletin")
+        def on_prep_tab(btn):
+            if btn.get_active(): self._notes_stack.set_visible_child_name("prep")
         self._leader_tab_btn.connect("toggled", on_leader_tab)
         self._bulletin_tab_btn.connect("toggled", on_bulletin_tab)
+        self._prep_tab_btn.connect("toggled", on_prep_tab)
         tab_box.append(self._leader_tab_btn); tab_box.append(self._bulletin_tab_btn)
+        tab_box.append(self._prep_tab_btn)
         notes_header.append(tab_box)
         notes_box.append(notes_header)
         notes_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
@@ -2172,6 +2308,18 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_notes_view.get_buffer().connect("changed", self._on_bulletin_notes_changed)
         bns.set_child(self.bulletin_notes_view)
         self._notes_stack.add_named(bns, "bulletin")
+
+        pns = Gtk.ScrolledWindow()
+        pns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); pns.set_vexpand(True)
+        pns.set_margin_start(12); pns.set_margin_end(12); pns.set_margin_top(8); pns.set_margin_bottom(8)
+        self.prep_notes_view = Gtk.TextView()
+        self.prep_notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.prep_notes_view.add_css_class("card")
+        self.prep_notes_view.set_top_margin(8); self.prep_notes_view.set_bottom_margin(8)
+        self.prep_notes_view.set_left_margin(10); self.prep_notes_view.set_right_margin(10)
+        self.prep_notes_view.get_buffer().connect("changed", self._on_prep_notes_changed)
+        pns.set_child(self.prep_notes_view)
+        self._notes_stack.add_named(pns, "prep")
 
         notes_box.append(self._notes_stack)
 
@@ -2237,7 +2385,7 @@ class MainWindow(Adw.ApplicationWindow):
                 first_line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first_line).strip()
             words = first_line.split()
             preview = ' '.join(words[:5]) + ('…' if len(words) > 5 else '')
-        row = Adw.ActionRow(title=si.name, subtitle=preview)
+        row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(preview))
         row.set_subtitle_lines(1); row._entry = si
         colour = _section_colour(si.section)
         dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
@@ -2335,7 +2483,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         gesture.connect("pressed", on_right_click)
         box.add_controller(gesture)
-        box.show()
         return box
 
     def _delete_section(self, div: SectionDivider):
@@ -2417,6 +2564,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._view_stack.set_visible_child_name("tabs"); self._refresh_tabs(select_index)
         else:
             self._view_stack.set_visible_child_name("list"); self._refresh_flat(select_index)
+        self._update_time_total()
 
     def _apply_tab_mode(self):
         """Called after preferences close to apply tab mode change."""
@@ -2438,12 +2586,14 @@ class MainWindow(Adw.ApplicationWindow):
         self._updating_note = True
         buf = self.notes_view.get_buffer()
         buf_bul = self.bulletin_notes_view.get_buffer()
+        buf_prep = self.prep_notes_view.get_buffer()
         if row and hasattr(row,"_entry") and isinstance(row._entry, ServiceItem):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
             buf.set_text(si.note, -1)
             buf_bul.set_text(si.bulletin_note, -1)
+            buf_prep.set_text(getattr(si, "prep_note", ""), -1)
             # Always land on Leader tab so the user sees the leader notes
             self._leader_tab_btn.set_active(True)
             # Show the combined toolbar
@@ -2451,6 +2601,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.leader_entry.set_text(si.leader)
             # Bulletin toggle — set state without triggering handler
             self.bulletin_toggle.set_active(si.show_in_bulletin)
+            self.duration_spin.set_value(getattr(si, "duration", 0))
             # Show/hide hymn segment based on element type
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
@@ -2462,14 +2613,20 @@ class MainWindow(Adw.ApplicationWindow):
             self._selected_global_idx = -1
             buf.set_text("", -1)
             buf_bul.set_text("", -1)
+            buf_prep.set_text("", -1)
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
+            self.duration_spin.set_value(0)
         self._updating_note = False
 
     # ── Palette actions ───────────────────────────────────────────────────────
 
     def _on_palette_row_activated(self, _lb, row):
-        self._push_undo(); self._add_entry(ServiceItem(row._item_name, row._section_name))
+        item = ServiceItem(row._item_name, row._section_name)
+        default_note = config.element_defaults.get(row._item_name, "")
+        if default_note and not item.note:
+            item.note = default_note
+        self._push_undo(); self._add_entry(item)
         name = row._item_name
         was_empty = not config.recently_used
         if name in config.recently_used:
@@ -2768,6 +2925,16 @@ class MainWindow(Adw.ApplicationWindow):
         if not isinstance(entry, ServiceItem): return
         s, e = buf.get_bounds()
         entry.bulletin_note = buf.get_text(s, e, False)
+        self._mark_modified()
+
+    def _on_prep_notes_changed(self, buf):
+        if self._updating_note: return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)): return
+        entry = self.service_entries[idx]
+        if not isinstance(entry, ServiceItem): return
+        s, e = buf.get_bounds()
+        entry.prep_note = buf.get_text(s, e, False)
         self._mark_modified()
 
     # ── Calendar / readings ───────────────────────────────────────────────────
@@ -3357,6 +3524,10 @@ class MainWindow(Adw.ApplicationWindow):
             d["tex_file"] = self.tex_file
         if getattr(self, "service_bulletin_text", ""):
             d["bulletin_text"] = self.service_bulletin_text
+        if getattr(self, "service_attendance", 0):
+            d["attendance"] = self.service_attendance
+        if getattr(self, "service_debrief", ""):
+            d["debrief"] = self.service_debrief
         return d
 
     def _confirm_discard(self, proceed):
@@ -4034,6 +4205,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._updating_note = True
         self.notes_view.get_buffer().set_text("", -1)
         self.bulletin_notes_view.get_buffer().set_text("", -1)
+        self.prep_notes_view.get_buffer().set_text("", -1)
         self._updating_note = False
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
@@ -4041,6 +4213,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.current_file=None; self.tex_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
         self.service_bulletin_text = ""
+        self.service_attendance = 0
+        self.service_debrief = ""
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             self._bulletin_edit_btn.set_active(False)
 
@@ -4060,7 +4234,11 @@ class MainWindow(Adw.ApplicationWindow):
                           if isinstance(e, ServiceItem)}
         for name in config.recurring_elements:
             if name.strip().lower() not in existing_names:
-                self.service_entries.append(ServiceItem(name, ""))
+                item = ServiceItem(name, "")
+                default_note = config.element_defaults.get(name, "")
+                if default_note:
+                    item.note = default_note
+                self.service_entries.append(item)
 
     def new_service(self):
         def do_new():
@@ -4155,6 +4333,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self.tex_file = saved_tex
             self._update_tex_btn()
             self.service_bulletin_text = data.get("bulletin_text", "")
+            self.service_attendance = data.get("attendance", 0)
+            self.service_debrief    = data.get("debrief", "")
             if mark_unsaved: self.current_file=None; self.modified=True
             else:
                 self.current_file=path; self.modified=False
@@ -4456,6 +4636,16 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         if welcome:
             lines.append(f"<div class='church-sub' style='margin-top:6px;font-style:italic'>{esc(welcome)}</div>")
 
+        cover_img = b.get("cover_image", "").strip()
+        if cover_img and Path(cover_img).is_file():
+            img_uri = GLib.filename_to_uri(cover_img, None)
+            lines.append(
+                f"<div style='text-align:center;margin:12px 0'>"
+                f"<img src='{img_uri}' alt='Cover image' "
+                f"style='max-width:100%;max-height:220px;object-fit:contain'>"
+                f"</div>"
+            )
+
         lines.append(f"<div class='title'>{esc(title)}</div>")
         if date_str:
             lines.append(f"<div class='date'>{esc(date_str)}</div>")
@@ -4634,10 +4824,75 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             except OSError:
                 pass
         if pdf.exists():
-            self._show_toast(f"✓ {pdf.name}", timeout=4)
+            toast = Adw.Toast.new(f"✓ {pdf.name}")
+            toast.set_timeout(6)
+            toast.set_button_label("Send by email…")
+            toast.connect("button-clicked", lambda _: self._show_send_bulletin_dialog(pdf))
+            self._toast_overlay.add_toast(toast)
             Gtk.show_uri(None, pdf.as_uri(), 0)
         else:
             self._show_toast("Compiled — PDF not found.", timeout=6)
+
+    def _show_send_bulletin_dialog(self, pdf_path=None):
+        """Show a helper dialog for emailing the bulletin."""
+        import urllib.parse
+        b = config.bulletin
+        church_email = b.get("email", "").strip()
+        svc_title = self.service_title_entry.get_text().strip() or "Order of Service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+        default_subject = f"Sunday Bulletin — {svc_title}" + (f" ({date_str})" if date_str else "")
+
+        win = Adw.Window(transient_for=self, modal=True, title="Send Bulletin by Email")
+        win.set_default_size(440, 0); win.set_resizable(False)
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar(); hdr.set_show_end_title_buttons(False)
+        tv.add_top_bar(hdr); win.set_content(tv)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box.set_margin_start(20); box.set_margin_end(20)
+        box.set_margin_top(16); box.set_margin_bottom(20)
+
+        grp = Adw.PreferencesGroup()
+        to_row = Adw.EntryRow(title="To")
+        to_row.set_text(church_email)
+        subject_row = Adw.EntryRow(title="Subject")
+        subject_row.set_text(default_subject)
+        grp.add(to_row); grp.add(subject_row)
+        box.append(grp)
+
+        if pdf_path and pdf_path.exists():
+            file_lbl = Gtk.Label(label=f"Attachment: {pdf_path.name}")
+            file_lbl.add_css_class("caption"); file_lbl.add_css_class("dim-label")
+            file_lbl.set_xalign(0)
+            box.append(file_lbl)
+            note = Gtk.Label(label="Your mail client will open — attach the PDF manually from the folder that opens.")
+            note.set_wrap(True); note.add_css_class("dim-label"); note.set_xalign(0)
+            box.append(note)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        if pdf_path and pdf_path.exists():
+            folder_btn = Gtk.Button(label="Show PDF folder")
+            folder_btn.add_css_class("flat")
+            folder_btn.connect("clicked", lambda _: Gtk.show_uri(None, pdf_path.parent.as_uri(), 0))
+            btn_row.append(folder_btn)
+        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
+        cancel_btn = Gtk.Button(label="Cancel"); cancel_btn.add_css_class("flat")
+        cancel_btn.connect("clicked", lambda _: win.close())
+        btn_row.append(cancel_btn)
+        open_btn = Gtk.Button(label="Open mail client")
+        open_btn.add_css_class("suggested-action")
+        def _open_mail(_b):
+            to = to_row.get_text().strip()
+            subj = urllib.parse.quote(subject_row.get_text().strip())
+            mailto = f"mailto:{to}?subject={subj}"
+            Gtk.show_uri(None, mailto, 0)
+            win.close()
+        open_btn.connect("clicked", _open_mail)
+        btn_row.append(open_btn)
+        box.append(btn_row)
+
+        tv.set_content(box)
+        win.present()
 
     def _build_bulletin_latex(self, digital: bool = False) -> list[str]:
         """Build complete LaTeX for the congregational bulletin.
@@ -4672,6 +4927,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 r"\usepackage{parskip,microtype,titlesec,multicol}",
                 r"\usepackage[dvipsnames]{xcolor}",
                 r"\usepackage{hyperref}",
+                r"\usepackage{graphicx}",
                 r"\hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue}",
                 r"",
                 r"% Section headings: centred small-caps",
@@ -4689,6 +4945,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 r"\usepackage{parskip,microtype,multicol}",
                 r"\usepackage[dvipsnames]{xcolor}",
                 r"\usepackage{hyperref}",
+                r"\usepackage{graphicx}",
                 r"\hypersetup{hidelinks}",
                 r"",
                 r"% Memoir layout: half-letter, fold for saddle-stitch booklet",
@@ -4732,11 +4989,18 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         lines += [r"\begin{document}", r"\pagestyle{empty}", r""]
 
         # ── Cover page ────────────────────────────────────────────────────────
+        cover_img = b.get("cover_image", "").strip()
         lines += [
             r"\begin{center}",
             r"\vspace*{1.5cm}",
-            r"{\Large\bfseries\scshape " + church + r"}\\[0.4em]",
         ]
+        if cover_img and Path(cover_img).is_file():
+            safe_path = cover_img.replace("\\", "/")
+            lines.append(
+                r"\includegraphics[width=0.7\textwidth,height=5cm,keepaspectratio]{"
+                + safe_path + r"}\\[0.6em]"
+            )
+        lines.append(r"{\Large\bfseries\scshape " + church + r"}\\[0.4em]")
         if address:
             lines.append(r"{\small " + address + r"}\\[0.2em]")
         lines += [
@@ -5170,7 +5434,11 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             except OSError:
                 pass
         if pdf_path.exists():
-            self._show_toast(f"✓ {pdf_path.name}", timeout=4)
+            toast = Adw.Toast.new(f"✓ {pdf_path.name}")
+            toast.set_timeout(6)
+            toast.set_button_label("Send by email…")
+            toast.connect("button-clicked", lambda _: self._show_send_bulletin_dialog(pdf_path))
+            self._toast_overlay.add_toast(toast)
             Gtk.show_uri(None, pdf_path.as_uri(), 0)
         else:
             self._show_toast("Compiled but PDF not found.", timeout=6)
@@ -5233,6 +5501,33 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             row.set_opacity(1.0 if btn.get_active() else 0.45)
         self._mark_modified()
 
+    def _on_duration_changed(self, spin):
+        if self._updating_note: return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)): return
+        e = self.service_entries[idx]
+        if not isinstance(e, ServiceItem): return
+        e.duration = int(spin.get_value())
+        self._update_time_total()
+        self._mark_modified()
+
+    def _update_time_total(self):
+        items = [e for e in self.service_entries if isinstance(e, ServiceItem)]
+        timed = [e for e in items if getattr(e, "duration", 0) > 0]
+        if not timed:
+            self._time_bar.set_visible(False)
+            return
+        total = sum(e.duration for e in timed)
+        self._time_bar.set_visible(True)
+        # Simple over-time warning: assume ~75 min typical service
+        TARGET = 75
+        if total > TARGET:
+            self._time_bar.set_markup(
+                f'<span color="#B91C1C">~{total} min total</span>'
+                f'<span color="#B91C1C" size="small">  ({total - TARGET} over)</span>')
+        else:
+            self._time_bar.set_markup(f'<span color="#15803D">~{total} min total</span>')
+
     # ── Hymn suggestions ──────────────────────────────────────────────────────
 
     def _update_hymn_suggestions(self, week: str, season: str):
@@ -5286,14 +5581,21 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             chip.add_controller(rg)
             chip_box.append(chip)
 
-            # YouTube search button
+            # YouTube search button — logo icon with fallback
             import urllib.parse
             yt_query = urllib.parse.quote(f"{prefix} {number} {title}")
             yt_url = f"https://www.youtube.com/results?search_query={yt_query}"
-            yt_btn = Gtk.Button(label="▶ YouTube",
-                                tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
-            yt_btn.add_css_class("flat")
-            yt_btn.set_valign(Gtk.Align.CENTER)
+            yt_btn = Gtk.Button(tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
+            yt_btn.add_css_class("flat"); yt_btn.set_valign(Gtk.Align.CENTER)
+            _yt_svg = Path(__file__).parent / "data" / "youtube.svg"
+            try:
+                from gi.repository import GdkPixbuf
+                import gi as _gi
+                _gi.require_version("GdkPixbuf", "2.0")
+                _yt_pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(_yt_svg), 22, 16, True)
+                yt_btn.set_child(Gtk.Image.new_from_pixbuf(_yt_pb))
+            except Exception:
+                yt_btn.set_child(Gtk.Label(label="▶"))
             yt_btn.connect("clicked", lambda _b, u=yt_url: Gtk.show_uri(None, u, 0))
             chip_box.append(yt_btn)
 
@@ -5417,6 +5719,15 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
         cancel_btn = Gtk.Button(label="Cancel"); cancel_btn.connect("clicked", lambda _: dlg.close())
         btn_row.append(cancel_btn)
+        cards_btn = Gtk.Button(label="Print cards…")
+        cards_btn.set_tooltip_text(
+            "Generate printable role cards: leader's script, people's insert, and full pew card")
+
+        def on_cards(_b):
+            s, e = buf.get_bounds()
+            self._export_reading_cards(buf.get_text(s, e, False))
+
+        cards_btn.connect("clicked", on_cards); btn_row.append(cards_btn)
         insert_btn = Gtk.Button(label="Insert as LaTeX"); insert_btn.add_css_class("suggested-action")
 
         def on_insert(_b):
@@ -5459,6 +5770,323 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         latex_lines.append("\\end{verse}")
         return "\n".join(latex_lines)
 
+    def _export_reading_cards(self, raw: str):
+        """Generate printable HTML role cards from the responsive reading text."""
+        import tempfile
+
+        title = self.service_title_entry.get_text() or "Responsive Reading"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+        header = f"{title}" + (f" — {date_str}" if date_str else "")
+
+        lines = raw.strip().splitlines()
+        parsed: list[tuple[str, str]] = []  # (role, text)
+        auto_leader = True
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.lower().startswith("l:"):
+                parsed.append(("L", line[2:].strip()))
+                auto_leader = False
+            elif line.lower().startswith("p:"):
+                parsed.append(("P", line[2:].strip()))
+                auto_leader = True
+            else:
+                parsed.append(("L" if auto_leader else "P", line))
+                auto_leader = not auto_leader
+
+        def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+        def _card(role_label: str, entries, role_filter: str | None) -> str:
+            rows = []
+            for role, text in entries:
+                if role_filter and role != role_filter:
+                    rows.append(f"<div class='line skip'>&nbsp;</div>")
+                else:
+                    cls = "leader" if role == "L" else "people"
+                    prefix = "<b>Leader:</b> " if role == "L" else "<i>People:</i> "
+                    rows.append(f"<div class='line {cls}'>{prefix}{esc(text)}</div>")
+            return "\n".join([
+                f"<div class='card'>",
+                f"<div class='card-title'>{esc(role_label)}</div>",
+                f"<div class='card-sub'>{esc(header)}</div>",
+                "<div class='reading'>",
+            ] + rows + ["</div></div>"])
+
+        css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; font-size: 11pt; color: #111; }
+.card { border: 1px solid #bbb; border-radius: 6px; padding: 18px 22px;
+        margin: 0 auto 20px; max-width: 5.5in; page-break-inside: avoid; }
+.card-title { font-size: 13pt; font-weight: bold; font-variant: small-caps;
+              letter-spacing: 0.06em; margin-bottom: 2px; }
+.card-sub { font-size: 9pt; color: #666; margin-bottom: 12px; }
+.reading { line-height: 1.7; }
+.line { margin-bottom: 3px; }
+.leader { font-weight: bold; }
+.people { font-style: italic; }
+.skip { color: #ccc; user-select: none; }
+@media print {
+  body { margin: 0; }
+  @page { size: letter; margin: 0.6in; }
+  .card { border: 1px solid #999; page-break-after: always; }
+  .card:last-child { page-break-after: auto; }
+}
+"""
+
+        leader_card  = _card("Leader / Minister",  parsed, "L")
+        people_card  = _card("People's Insert",     parsed, "P")
+        full_card    = _card("Full Pew Card",        parsed, None)
+
+        html = "\n".join([
+            "<!DOCTYPE html><html lang='en'>",
+            f"<head><meta charset='utf-8'><title>Reading Cards — {esc(header)}</title>",
+            f"<style>{css}</style></head><body>",
+            leader_card, people_card, full_card,
+            "</body></html>",
+        ])
+
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
+            f.write(html); tmp = f.name
+        Gtk.show_uri(None, GLib.filename_to_uri(tmp, None), 0)
+
+    # ── AV sheet export ───────────────────────────────────────────────────────
+
+    def export_av_sheet(self):
+        if self.current_file:
+            default = Path(self.current_file).stem + "_av_sheet.html"
+            folder  = str(Path(self.current_file).parent)
+        else:
+            default = "av_sheet.html"; folder = config.last_dir
+        dlg = Gtk.FileDialog(title="Export AV sheet", initial_name=default)
+        dlg.set_initial_folder(Gio.File.new_for_path(folder))
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        f = Gtk.FileFilter(); f.set_name("HTML files (*.html)"); f.add_pattern("*.html")
+        filters.append(f); dlg.set_filters(filters)
+        dlg.save(self, None, self._on_export_av_response)
+
+    def _on_export_av_response(self, dlg, result):
+        try: f = dlg.save_finish(result)
+        except GLib.Error: return
+        path = f.get_path()
+        if not path.endswith(".html"): path += ".html"
+
+        title    = self.service_title_entry.get_text() or "Order of Service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+        church   = config.bulletin.get("church_name", "")
+
+        css = """
+body { font-family: Arial, sans-serif; font-size: 11pt; margin: 1cm auto;
+       max-width: 9in; color: #000; }
+h1 { font-size: 14pt; margin-bottom: 2px; }
+.meta { font-size: 10pt; color: #555; margin-bottom: 14px; }
+table { border-collapse: collapse; width: 100%; }
+th { background: #222; color: #fff; padding: 6px 10px; text-align: left; font-size: 10pt; }
+td { padding: 5px 10px; vertical-align: top; font-size: 10pt; border-bottom: 1px solid #ddd; }
+tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-caps;
+                    letter-spacing: 0.05em; padding: 4px 10px; }
+.hymn { font-weight: bold; color: #1a5276; }
+@media print { body { margin: 0; } @page { margin: 0.6in; } }
+"""
+
+        def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+        def hymn_ref(note: str) -> str:
+            m = re.match(r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)', note.strip())
+            return m.group(1) if m else ""
+
+        def slide_text(note: str) -> str:
+            lines = note.strip().splitlines()
+            out = []
+            for line in lines:
+                line = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', line)
+                line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', line).strip()
+                if line and not re.match(r'^(?:VU|MV|LUS|TLUS|MWS)\s+\d+', line):
+                    out.append(line)
+            return " / ".join(out[:3]) + ("…" if len(out) > 3 else "")
+
+        rows = [
+            "<!DOCTYPE html><html lang='en'>",
+            "<head><meta charset='utf-8'>",
+            f"<title>AV Sheet – {esc(title)}</title>",
+            f"<style>{css}</style></head><body>",
+            f"<h1>{esc(church + ' — ' if church else '')}{esc(title)}</h1>",
+            f"<div class='meta'>{esc(date_str)} &nbsp;·&nbsp; AV / Projection operator sheet</div>",
+            "<table>",
+            "<thead><tr><th>Section</th><th>Element</th><th>Leader</th>"
+            "<th>Hymn ref</th><th>Slide / note</th></tr></thead>",
+            "<tbody>",
+        ]
+
+        current_section = ""
+        for entry in self.service_entries:
+            if isinstance(entry, SectionDivider):
+                current_section = entry.title
+                rows.append(
+                    f"<tr class='section-row'><td colspan='5'>{esc(current_section)}</td></tr>"
+                )
+            elif isinstance(entry, ServiceItem):
+                note_src = entry.bulletin_note if entry.bulletin_note else entry.note
+                rows.append(
+                    f"<tr><td>{esc(current_section)}</td>"
+                    f"<td><strong>{esc(entry.name)}</strong></td>"
+                    f"<td>{esc(entry.leader)}</td>"
+                    f"<td class='hymn'>{esc(hymn_ref(note_src))}</td>"
+                    f"<td>{esc(slide_text(note_src))}</td></tr>"
+                )
+
+        rows += ["</tbody></table>", "</body></html>"]
+
+        try:
+            Path(path).write_text("\n".join(rows), encoding="utf-8")
+            toast = Adw.Toast.new(f"AV sheet saved")
+            toast.set_timeout(4)
+            toast.set_button_label("Open")
+            toast.connect("button-clicked",
+                          lambda _: Gtk.show_uri(None, GLib.filename_to_uri(path, None), 0))
+            self._toast_overlay.add_toast(toast)
+        except Exception as e:
+            self._error("AV sheet export error", str(e))
+
+    # ── Leader's order PDF ────────────────────────────────────────────────────
+
+    def export_minister_pdf(self):
+        if self.current_file:
+            default = Path(self.current_file).stem + "_leader.pdf"
+            folder  = str(Path(self.current_file).parent)
+        else:
+            default = "leader_order.pdf"; folder = config.last_dir
+        dlg = Gtk.FileDialog(title="Export leader's order PDF", initial_name=default)
+        dlg.set_initial_folder(Gio.File.new_for_path(folder))
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        f = Gtk.FileFilter(); f.set_name("PDF files (*.pdf)"); f.add_pattern("*.pdf")
+        filters.append(f); dlg.set_filters(filters)
+        dlg.save(self, None, self._on_export_minister_response)
+
+    def _on_export_minister_response(self, dlg, result):
+        try: f = dlg.save_finish(result)
+        except GLib.Error: return
+        path = Path(f.get_path())
+        if path.suffix.lower() != ".pdf":
+            path = path.with_suffix(".pdf")
+        tex_path = path.with_suffix(".tex")
+        lines = self._build_minister_latex()
+        try:
+            tex_path.write_text("\n".join(lines), encoding="utf-8")
+        except Exception as e:
+            self._error("Export error", str(e)); return
+        self._compile_minister_pdf(tex_path)
+
+    def _build_minister_latex(self) -> list[str]:
+        title    = _latex_escape(self.service_title_entry.get_text() or "Order of Service")
+        date_str = _latex_escape(
+            self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
+        church   = _latex_escape(config.bulletin.get("church_name", ""))
+
+        lines = [
+            r"\documentclass[10pt,letterpaper]{extarticle}",
+            r"\usepackage{fontspec}",
+            r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
+            r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
+            r"\usepackage{geometry}",
+            r"\geometry{top=0.75in,bottom=0.75in,left=0.7in,right=0.7in}",
+            r"\usepackage{parskip,microtype,multicol,titlesec,xcolor}",
+            r"\usepackage{hyperref}",
+            r"\hypersetup{hidelinks}",
+            r"",
+            r"\titleformat{\section}{\normalsize\bfseries\scshape}{}{0em}{}[\titlerule]",
+            r"\titlespacing*{\section}{0pt}{8pt}{3pt}",
+            r"",
+            r"\begin{document}",
+            r"\pagestyle{empty}",
+            r"",
+            r"\begin{center}",
+            r"{\large\bfseries\scshape " + church + r"}\\[0.3em]" if church else "",
+            r"{\Large\bfseries " + title + r"}\\[0.2em]",
+            r"{\normalsize " + date_str + r"}",
+            r"\end{center}",
+            r"\vspace{6pt}\hrule\vspace{10pt}",
+            r"",
+            r"\begin{multicols}{2}",
+            r"",
+        ]
+
+        for entry in self.service_entries:
+            if isinstance(entry, SectionDivider):
+                lines += [
+                    r"\columnbreak" if entry.title in ("Word", "Response", "Sending") else "",
+                    r"\section*{\textsc{" + _latex_escape(entry.title) + r"}}",
+                    "",
+                ]
+            elif isinstance(entry, ServiceItem):
+                name_line = r"\textbf{" + _latex_escape(entry.name) + r"}"
+                if entry.leader:
+                    name_line += r"\quad{\small\textit{(" + _latex_escape(entry.leader) + r")}}"
+                dur = getattr(entry, "duration", 0)
+                if dur:
+                    name_line += r"\hfill{\footnotesize\textcolor{gray}{" + str(dur) + r"min}}"
+                lines.append(name_line + r"\\")
+                if entry.note:
+                    clean = entry.note.strip()
+                    lines.append(r"{\small " + clean + r"}")
+                    lines.append("")
+                lines.append(r"\vspace{4pt}")
+                lines.append("")
+
+        lines += [
+            r"\end{multicols}",
+            r"\end{document}",
+        ]
+        return [l for l in lines if l is not None]
+
+    def _compile_minister_pdf(self, tex_path: Path):
+        xelatex = shutil.which("xelatex")
+        if not xelatex:
+            for candidate in [
+                Path.home() / "texlive/bin/x86_64-linux/xelatex",
+                Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
+                Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
+            ]:
+                if candidate.exists(): xelatex = str(candidate); break
+        if not xelatex:
+            self._show_toast("LaTeX saved — install xelatex to compile to PDF", 6); return
+
+        toast = Adw.Toast.new("Compiling leader's order…")
+        toast.set_timeout(0)
+        self._toast_overlay.add_toast(toast)
+
+        def run():
+            try:
+                result = subprocess.run(
+                    [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
+                    cwd=str(tex_path.parent),
+                    capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
+                )
+                GLib.idle_add(_done, result, toast, tex_path)
+            except Exception as e:
+                GLib.idle_add(lambda msg=str(e): (
+                    toast.dismiss(), self._show_toast(f"Compile error: {msg}", 8)))
+
+        def _done(result, t, tp):
+            try: t.dismiss()
+            except Exception: pass
+            for ext in (".log", ".aux", ".out"):
+                try: tp.with_suffix(ext).unlink(missing_ok=True)
+                except Exception: pass
+            if result.returncode != 0:
+                self._show_toast("Leader's order compile failed — check .log file", 8); return
+            pdf = tp.with_suffix(".pdf")
+            done_toast = Adw.Toast.new(f"✓ {pdf.name}")
+            done_toast.set_timeout(6)
+            done_toast.set_button_label("Open")
+            done_toast.connect("button-clicked",
+                lambda _: Gtk.show_uri(None, GLib.filename_to_uri(str(pdf), None), 0))
+            self._toast_overlay.add_toast(done_toast)
+
+        threading.Thread(target=run, daemon=True).start()
+
     # ── Snippets ──────────────────────────────────────────────────────────────
 
     def open_snippets(self):
@@ -5483,7 +6111,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         lb.add_css_class("boxed-list")
 
         for snip in snippets:
-            row = Adw.ActionRow(title=snip["name"])
+            row = Adw.ActionRow(title=GLib.markup_escape_text(snip["name"]))
             preview = snip["content"].replace("\n", " ")[:60] + ("…" if len(snip["content"]) > 60 else "")
             row.set_subtitle(preview); row.set_activatable(True)
             row._snip_content = snip["content"]
@@ -5809,18 +6437,23 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             heading="Export as…",
             body="Choose a format to export to:"
         )
-        dlg.add_response("cancel",   "Cancel")
-        dlg.add_response("html",     "HTML  (print from browser)")
-        dlg.add_response("bulletin", "Bulletin")
+        dlg.add_response("cancel",    "Cancel")
+        dlg.add_response("html",      "HTML  (print from browser)")
+        dlg.add_response("bulletin",  "Bulletin PDF")
+        dlg.add_response("minister",  "Leader's order PDF")
+        dlg.add_response("av",        "AV team sheet")
         if not simple:
             dlg.add_response("latex", "LaTeX")
             dlg.add_response("text",  "Plain text")
             dlg.add_response("csv",   "CSV")
-        dlg.set_response_appearance("html",     Adw.ResponseAppearance.SUGGESTED)
-        dlg.set_response_appearance("bulletin", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("html",      Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("bulletin",  Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_response_appearance("minister",  Adw.ResponseAppearance.SUGGESTED)
         def on_resp(d, r):
             if r == "html":     self.export_html()
             elif r == "bulletin": self.export_bulletin()
+            elif r == "minister": self.export_minister_pdf()
+            elif r == "av":     self.export_av_sheet()
             elif r == "latex":  self.export_latex()
             elif r == "text":   self.export_text()
             elif r == "csv":    self.export_csv()
@@ -6537,7 +7170,7 @@ class PlannerWindow(Adw.Window):
         self._folder = folder
         self._main = main_window
         self.set_title("Service Planner")
-        self.set_default_size(560, 600)
+        self.set_default_size(920, 640)
         self.set_modal(False)
 
         tv = Adw.ToolbarView()
@@ -6553,30 +7186,45 @@ class PlannerWindow(Adw.Window):
         new_btn.connect("clicked", self._on_new)
         hdr.pack_start(new_btn)
 
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.set_position(320)
+
+        # Left: service list
         self._list = Gtk.ListBox()
-        self._list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self._list.add_css_class("boxed-list")
-        self._list.set_margin_start(16); self._list.set_margin_end(16)
-        self._list.set_margin_top(16); self._list.set_margin_bottom(16)
+        self._list.set_margin_start(12); self._list.set_margin_end(12)
+        self._list.set_margin_top(12); self._list.set_margin_bottom(12)
+        self._list.connect("row-selected", self._on_row_selected)
+        left_scroll = Gtk.ScrolledWindow(); left_scroll.set_vexpand(True)
+        left_scroll.set_size_request(260, -1)
+        left_scroll.set_child(self._list)
+        paned.set_start_child(left_scroll)
+        paned.set_shrink_start_child(False)
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_vexpand(True)
-        scroll.set_child(self._list)
-        tv.set_content(scroll)
+        # Right: detail panel
+        self._detail_scroll = Gtk.ScrolledWindow(); self._detail_scroll.set_vexpand(True)
+        self._detail_scroll.set_size_request(400, -1)
+        self._detail_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._detail_box.set_vexpand(True)
+        self._detail_scroll.set_child(self._detail_box)
+        paned.set_end_child(self._detail_scroll)
+        paned.set_shrink_end_child(False)
+
+        self._toast_overlay = Adw.ToastOverlay()
+        self._toast_overlay.set_child(paned)
+        tv.set_content(self._toast_overlay)
         self.set_content(tv)
-
+        self._show_detail_placeholder()
         self._load()
 
-    def _load(self):
-        while True:
-            child = self._list.get_first_child()
-            if child is None: break
-            self._list.remove(child)
+    def _show_toast(self, msg: str, timeout: int = 3):
+        t = Adw.Toast.new(msg); t.set_timeout(timeout)
+        self._toast_overlay.add_toast(t)
 
+    def _collect_services(self):
+        """Return list of (date, title, item_count, path) from folder."""
         from datetime import date as _date
-        import os
-        today = _date.today()
-
         try:
             from rubric_package.db import (
                 service_index_update, service_index_get_mtime,
@@ -6592,17 +7240,11 @@ class PlannerWindow(Adw.Window):
             for p in self._folder.glob("*.liturgy"):
                 path_str = str(p)
                 on_disk.add(path_str)
-                try:
-                    mtime = p.stat().st_mtime
-                except OSError:
-                    continue
-
+                try: mtime = p.stat().st_mtime
+                except OSError: continue
                 cached_mtime = service_index_get_mtime(path_str) if _db_index else None
                 if _db_index and cached_mtime is not None and abs(cached_mtime - mtime) < 0.01:
-                    # Cache hit — no need to read the file
                     continue
-
-                # Cache miss: read the file and update the index
                 try:
                     d = json.loads(p.read_text(encoding="utf-8"))
                     title = d.get("title", "") or p.stem
@@ -6615,21 +7257,15 @@ class PlannerWindow(Adw.Window):
         except Exception:
             pass
 
-        # Build service list from the index (covers both hits and newly updated entries)
         if _db_index and on_disk:
             service_index_prune(on_disk)
             for row in service_index_all():
-                if row["path"] not in on_disk:
-                    continue
-                p = Path(row["path"])
-                date_str = row["date"]
-                try:
-                    svc_date = _date.fromisoformat(date_str) if date_str else None
-                except ValueError:
-                    svc_date = None
+                if row["path"] not in on_disk: continue
+                p = Path(row["path"]); date_str = row["date"]
+                try: svc_date = _date.fromisoformat(date_str) if date_str else None
+                except ValueError: svc_date = None
                 services.append((svc_date, row["title"] or p.stem, row["item_count"], p))
         elif not _db_index:
-            # Fallback: re-read all files without index
             try:
                 for p in self._folder.glob("*.liturgy"):
                     try:
@@ -6637,53 +7273,253 @@ class PlannerWindow(Adw.Window):
                         title = d.get("title", "") or p.stem
                         date_str = d.get("date", "")
                         item_count = len([i for i in d.get("items", []) if i.get("type") != "divider"])
-                        try:
-                            svc_date = _date.fromisoformat(date_str) if date_str else None
-                        except ValueError:
-                            svc_date = None
+                        try: svc_date = _date.fromisoformat(date_str) if date_str else None
+                        except ValueError: svc_date = None
                         services.append((svc_date, title, item_count, p))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                    except Exception: pass
+            except Exception: pass
+        return services
 
-        upcoming = sorted([(d, t, c, p) for d, t, c, p in services if d and d >= today], key=lambda x: x[0])
-        past = sorted([(d, t, c, p) for d, t, c, p in services if not d or d < today], key=lambda x: (x[0] or _date.min), reverse=True)
+    def _load(self):
+        while self._list.get_first_child():
+            self._list.remove(self._list.get_first_child())
 
-        if not services:
-            row = Adw.ActionRow(title="No services found",
-                subtitle=f"Save .liturgy files to {self._folder} to see them here")
-            row.set_sensitive(False)
-            self._list.append(row)
-            return
+        from datetime import date as _date, timedelta as _td
+        today = _date.today()
+        # Next Sunday
+        days_to_sun = (6 - today.weekday()) % 7 or 7
+        next_sun = today + _td(days=days_to_sun)
 
-        def add_separator(label):
+        services = self._collect_services()
+        # Build date → (title, count, path) lookup
+        by_date: dict[_date, tuple] = {}
+        for svc_date, title, count, path in services:
+            if svc_date: by_date[svc_date] = (title, count, path)
+
+        def _add_sep(label):
             lbl = Gtk.Label(label=label)
             lbl.add_css_class("heading"); lbl.add_css_class("dim-label")
             lbl.set_xalign(0); lbl.set_margin_start(4)
-            lbl.set_margin_top(12); lbl.set_margin_bottom(2)
+            lbl.set_margin_top(10); lbl.set_margin_bottom(2)
             row = Gtk.ListBoxRow(); row.set_activatable(False)
             row.set_child(lbl); self._list.append(row)
 
-        if upcoming:
-            add_separator("Upcoming")
-            for svc_date, title, count, path in upcoming:
-                date_label = svc_date.strftime("%-d %B %Y") if svc_date else "No date"
-                row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
-                row.set_activatable(True)
-                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
-                row.connect("activated", lambda _r, p=path: self._open(p))
-                self._list.append(row)
+        def _add_row(svc_date, title, subtitle, path, planned, colour_hex="#15803D"):
+            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            row.set_activatable(True)
+            # Liturgical season colour dot
+            dot = Gtk.Label()
+            dot.set_markup(f'<span color="{colour_hex}">●</span>')
+            dot.set_valign(Gtk.Align.CENTER)
+            dot.set_margin_end(4)
+            row.add_prefix(dot)
+            icon = Gtk.Image.new_from_icon_name(
+                "emblem-ok-symbolic" if planned else "list-add-symbolic")
+            icon.set_pixel_size(14)
+            icon.add_css_class("success" if planned else "dim-label")
+            row.add_prefix(icon)
+            row._svc_date = svc_date
+            row._svc_path = path
+            self._list.append(row)
 
-        if past:
-            add_separator("Past services")
-            for svc_date, title, count, path in past:
-                date_label = svc_date.strftime("%-d %B %Y") if svc_date else "No date"
-                row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
-                row.set_activatable(True)
-                row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
-                row.connect("activated", lambda _r, p=path: self._open(p))
-                self._list.append(row)
+        # Upcoming Sundays — next 8 weeks
+        _add_sep("Upcoming Sundays")
+        for w in range(8):
+            sun = next_sun + _td(weeks=w)
+            try:
+                info = get_liturgical_info(sun)
+                week_lbl = info.get("week", sun.strftime("%-d %B %Y"))
+                colour_hex = info.get("colour_hex", "#15803D")
+            except Exception:
+                week_lbl = sun.strftime("%-d %B %Y")
+                colour_hex = "#15803D"
+            if sun in by_date:
+                title, count, path = by_date[sun]
+                sub = f"{sun.strftime('%-d %b %Y')}  ·  {count} elements"
+                _add_row(sun, title, sub, path, planned=True, colour_hex=colour_hex)
+            else:
+                _add_row(sun, sun.strftime("%-d %B %Y"), week_lbl, None,
+                         planned=False, colour_hex=colour_hex)
+
+        # Past services (files only)
+        past = sorted([(d, t, c, p) for d, t, c, p in services
+                       if d and d < today], key=lambda x: x[0], reverse=True)
+        undated = [(d, t, c, p) for d, t, c, p in services if not d]
+        if past or undated:
+            _add_sep("Past services")
+            for svc_date, title, count, path in past[:20]:
+                sub = f"{svc_date.strftime('%-d %b %Y')}  ·  {count} elements"
+                try:
+                    past_colour = get_liturgical_info(svc_date).get("colour_hex", "#15803D")
+                except Exception:
+                    past_colour = "#15803D"
+                _add_row(svc_date, title, sub, path, planned=True, colour_hex=past_colour)
+            for _, title, count, path in undated:
+                _add_row(None, title, f"No date  ·  {count} elements", path, planned=True)
+
+    def _show_detail_placeholder(self):
+        while self._detail_box.get_first_child():
+            self._detail_box.remove(self._detail_box.get_first_child())
+        lbl = Gtk.Label(label="Select a Sunday on the left to see its details")
+        lbl.add_css_class("dim-label"); lbl.set_vexpand(True); lbl.set_valign(Gtk.Align.CENTER)
+        self._detail_box.append(lbl)
+
+    def _on_row_selected(self, _lb, row):
+        if row is None or not hasattr(row, "_svc_date"):
+            self._show_detail_placeholder(); return
+        self._show_detail(getattr(row, "_svc_date", None), getattr(row, "_svc_path", None))
+
+    def _show_detail(self, svc_date, path):
+        while self._detail_box.get_first_child():
+            self._detail_box.remove(self._detail_box.get_first_child())
+
+        from datetime import date as _date
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(20); box.set_margin_end(20)
+        box.set_margin_top(16); box.set_margin_bottom(16)
+        box.set_vexpand(True)
+
+        # Liturgical info
+        if svc_date:
+            try:
+                info = get_liturgical_info(svc_date)
+                colour_hex = info.get("colour_hex", "#15803D")
+                week = info.get("week", "")
+                colour_name = info.get("colour", "")
+                ot = info.get("ot", "—"); psalm = info.get("psalm", "—")
+                epistle = info.get("epistle", "—"); gospel = info.get("gospel", "—")
+            except Exception:
+                info = {}; colour_hex = "#15803D"; week = ""; colour_name = ""
+                ot = psalm = epistle = gospel = "—"
+
+            date_lbl = Gtk.Label()
+            date_lbl.set_markup(
+                f'<span color="{colour_hex}">●</span>  '
+                f'<b>{svc_date.strftime("%-d %B %Y")}</b>')
+            date_lbl.add_css_class("title-2"); date_lbl.set_xalign(0)
+            box.append(date_lbl)
+
+            if week:
+                meta_lbl = Gtk.Label(label=f"{week}" + (f"  ·  {colour_name}" if colour_name else ""))
+                meta_lbl.add_css_class("dim-label"); meta_lbl.set_xalign(0)
+                box.append(meta_lbl)
+
+            # Readings grid
+            rd_grp = Adw.PreferencesGroup(title="RCL Readings")
+            for label, val in [("OT", ot), ("Psalm", psalm), ("Epistle", epistle), ("Gospel", gospel)]:
+                if val and val != "—":
+                    r = Adw.ActionRow(title=label, subtitle=val)
+                    r.set_activatable(False); rd_grp.add(r)
+            box.append(rd_grp)
+        else:
+            date_lbl = Gtk.Label(label="No date")
+            date_lbl.add_css_class("title-2"); date_lbl.set_xalign(0)
+            box.append(date_lbl)
+
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Service contents or create button
+        if path and Path(path).exists():
+            try:
+                d = json.loads(Path(path).read_text(encoding="utf-8"))
+                items = [i for i in d.get("items", []) if i.get("type") != "divider"]
+                svc_title = d.get("title", Path(path).stem)
+
+                title_lbl = Gtk.Label(label=svc_title)
+                title_lbl.add_css_class("heading"); title_lbl.set_xalign(0)
+                box.append(title_lbl)
+
+                items_grp = Adw.PreferencesGroup()
+                for it in items[:24]:
+                    note = (it.get("bulletin_note") or it.get("note") or "").strip()
+                    r = Adw.ActionRow(title=GLib.markup_escape_text(it.get("name", "")),
+                                      subtitle=GLib.markup_escape_text(note[:60]) if note else "")
+                    r.set_activatable(False); items_grp.add(r)
+                if len(items) > 24:
+                    extra = Adw.ActionRow(title=f"… and {len(items)-24} more elements")
+                    extra.set_activatable(False); items_grp.add(extra)
+                box.append(items_grp)
+
+                open_btn = Gtk.Button(label="Open in editor")
+                open_btn.add_css_class("suggested-action")
+                open_btn.connect("clicked", lambda _, p=path: (self._open(Path(p)), self.close()))
+                box.append(open_btn)
+
+                # ── After-service notes (attendance + debrief) ────────────────
+                box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL,
+                                         margin_top=8, margin_bottom=4))
+                after_grp = Adw.PreferencesGroup(title="After service",
+                    description="Filled in after Sunday — saved directly to this file.")
+                box.append(after_grp)
+
+                att_row = Adw.ActionRow(title="Attendance")
+                att_adj = Gtk.Adjustment(
+                    value=d.get("attendance", 0), lower=0, upper=9999, step_increment=1)
+                att_spin = Gtk.SpinButton(adjustment=att_adj, numeric=True)
+                att_spin.set_width_chars(5); att_spin.set_valign(Gtk.Align.CENTER)
+                att_row.add_suffix(att_spin); after_grp.add(att_row)
+
+                debrief_lbl = Gtk.Label(label="Notes")
+                debrief_lbl.add_css_class("heading"); debrief_lbl.set_xalign(0)
+                debrief_lbl.set_margin_start(4); debrief_lbl.set_margin_top(6)
+                after_grp.add(debrief_lbl)
+
+                deb_scroll = Gtk.ScrolledWindow()
+                deb_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+                deb_scroll.set_min_content_height(72)
+                deb_tv = Gtk.TextView(); deb_tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+                deb_tv.add_css_class("card")
+                deb_tv.set_top_margin(6); deb_tv.set_bottom_margin(6)
+                deb_tv.set_left_margin(8); deb_tv.set_right_margin(8)
+                deb_tv.get_buffer().set_text(d.get("debrief", ""), -1)
+                deb_scroll.set_child(deb_tv)
+                after_grp.add(deb_scroll)
+
+                def _save_after_notes(_btn, p=path, spin=att_spin, tv=deb_tv):
+                    try:
+                        data_patch = json.loads(Path(p).read_text(encoding="utf-8"))
+                        data_patch["attendance"] = int(spin.get_value())
+                        buf = tv.get_buffer(); s, e = buf.get_bounds()
+                        data_patch["debrief"] = buf.get_text(s, e, False).strip()
+                        Path(p).write_text(
+                            json.dumps(data_patch, indent=2, ensure_ascii=False),
+                            encoding="utf-8")
+                        # Sync to main window if this file is open there
+                        mw = self._main
+                        if mw.current_file and Path(mw.current_file) == Path(p):
+                            mw.service_attendance = data_patch["attendance"]
+                            mw.service_debrief    = data_patch["debrief"]
+                        self._show_toast("Notes saved")
+                    except Exception as ex:
+                        self._show_toast(f"Save failed: {ex}")
+
+                save_btn = Gtk.Button(label="Save notes")
+                save_btn.add_css_class("flat"); save_btn.set_halign(Gtk.Align.END)
+                save_btn.connect("clicked", _save_after_notes)
+                after_grp.add(save_btn)
+
+            except Exception as e:
+                box.append(Gtk.Label(label=f"Error reading file: {e}"))
+        else:
+            no_lbl = Gtk.Label(label="No service planned for this Sunday yet.")
+            no_lbl.add_css_class("dim-label"); no_lbl.set_xalign(0)
+            box.append(no_lbl)
+
+            if svc_date:
+                create_btn = Gtk.Button(label="Create service for this Sunday")
+                create_btn.add_css_class("suggested-action")
+                def _create(_b, d=svc_date):
+                    self._main._confirm_discard(lambda: self._create_for_date(d))
+                create_btn.connect("clicked", _create)
+                box.append(create_btn)
+
+        self._detail_box.append(box)
+
+    def _create_for_date(self, svc_date):
+        try: info = get_liturgical_info(svc_date)
+        except Exception: info = {}
+        self._main._seed_lectionary_service(svc_date, info)
+        self.close()
 
     def _open(self, path: Path):
         self._main._confirm_discard(lambda p=path: self._main._load_file(str(p)))
