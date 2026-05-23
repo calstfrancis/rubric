@@ -1294,8 +1294,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Simple mode ───────────────────────────────────────────────────────────
 
-    def _on_simple_btn_toggled(self, btn):
-        config.simple_mode = btn.get_active()
+    def _on_simple_btn_toggled(self, sw, _param):
+        config.simple_mode = sw.get_active()
         config.save()
         self._apply_simple_mode(skip_btn_sync=True)
 
@@ -1515,14 +1515,15 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
 
-        self._simple_btn = Gtk.ToggleButton(label="Simple")
+        self._simple_btn = Gtk.Switch(valign=Gtk.Align.CENTER)
         self._simple_btn.set_active(config.simple_mode)
-        self._simple_btn.add_css_class("flat")
         self._simple_btn.set_tooltip_text(
             "Simple mode — hides LaTeX, GitHub sync, and advanced features.\n"
             "Toggle to switch modes and watch what changes."
         )
-        self._simple_btn_handler = self._simple_btn.connect("toggled", self._on_simple_btn_toggled)
+        self._simple_btn_handler = self._simple_btn.connect(
+            "notify::active", self._on_simple_btn_toggled
+        )
         hdr.pack_end(self._simple_btn)
 
         self._preview_visible = False
@@ -7744,9 +7745,23 @@ class LiturgyPlannerApp(Adw.Application):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         MainWindow(application=app).present()
 
+def _ensure_desktop_integration():
+    desktop = Path.home() / ".local/share/applications/rubric.desktop"
+    if not desktop.exists():
+        import threading
+        def _run():
+            try:
+                import rubric_setup
+                rubric_setup.main()
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+
+
 def main():
     GLib.set_prgname("rubric")
     GLib.set_application_name("Rubric")
+    _ensure_desktop_integration()
     sys.exit(LiturgyPlannerApp().run(sys.argv))
 
 if __name__ == "__main__":
