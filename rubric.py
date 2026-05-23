@@ -120,7 +120,7 @@ if not _PACKAGE_OK:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.12"
+APP_VERSION = "0.13.0"
 
 class Config:
     def __init__(self):

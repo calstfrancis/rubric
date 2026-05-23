@@ -49,7 +49,7 @@ dist/
 build/
 
 # AppImage build output
-*.AppImage
+#*.AppImage
 appimagetool
 .appimage-runtime-x86_64
 AppDir/usr/

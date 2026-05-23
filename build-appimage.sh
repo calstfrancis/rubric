@@ -21,7 +21,6 @@ APP="$PAYLOAD/usr/share/rubric"
 mkdir -p "$APP"
 
 cp rubric.py bible_api.py hymn_lookup.py hymn_suggestions.py rcl_data.py snippets.py observances.py "$APP/"
-cp -r data "$APP/"
 
 # rubric_package — strip __pycache__ so bundled .pyc files don't conflict
 # with the Python version on the target machine
