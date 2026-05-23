@@ -58,7 +58,7 @@ class Config:
 
     def __init__(self) -> None:
         self.preamble: str = DEFAULT_PREAMBLE
-        self.templates: dict[str, list[dict]] = {}  # name -> items
+        self.templates: dict[str, list[dict]] = {}
         self.default_template: str = ""
         self.palette: list[dict] | None = None
         self.last_dir: str = str(Path.home())
@@ -70,11 +70,19 @@ class Config:
         self.first_launch_completed: bool = False
         self.quickstart_dismissed: bool = False
         self.recently_used: list[str] = []
+        # Scripture
+        self.bible_translation: str = "web"
+        self.bible_api_key_esv: str = ""
+        # UI modes
+        self.simple_mode: bool = True
+        self.compact_mode: bool = False
+        # Advanced
+        self.recurring_elements: list[str] = []
+        self.element_defaults: dict[str, str] = {}
         self._load()
 
     @staticmethod
     def _default_bulletin() -> dict[str, Any]:
-        """Return default bulletin configuration."""
         return {
             "church_name":    "Hope United Church",
             "address":        "",
@@ -85,32 +93,38 @@ class Config:
             "mission":        "",
             "accessibility":  "All are welcome.",
             "welcome":        "A warm welcome is extended to all.",
-            "staff": [],          # [{"role": "Minister", "name": "...", "email": "..."}]
-            "announcements":  [], # [{"text": "...", "expires": "YYYY-MM-DD" or ""}]
-            "print_mode":     "booklet",   # "booklet" or "digital"
+            "staff": [],
+            "announcements":  [],
+            "print_mode":     "booklet",
             "include_scripture": True,
             "include_announcements": True,
+            "cover_image": "",
         }
 
     def _load(self) -> None:
-        """Load configuration from disk."""
         if CONFIG_PATH.exists():
             try:
                 d = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-                self.preamble = d.get("preamble", DEFAULT_PREAMBLE)
-                self.palette = d.get("palette", None)
-                self.last_dir = d.get("last_dir", str(Path.home()))
-                self.recent_files = d.get("recent_files", [])
-                self.use_tabs = d.get("use_tabs", False)
+                self.preamble          = d.get("preamble", DEFAULT_PREAMBLE)
+                self.palette           = d.get("palette", None)
+                self.last_dir          = d.get("last_dir", str(Path.home()))
+                self.recent_files      = d.get("recent_files", [])
+                self.use_tabs          = d.get("use_tabs", False)
                 self.last_seen_version = d.get("last_seen_version", "")
                 saved_bulletin = d.get("bulletin", {})
                 self.bulletin = {**self._default_bulletin(), **saved_bulletin}
-                self.github_repo = d.get("github_repo", "")
-                self.default_template = d.get("default_template", "")
-                self.templates = d.get("templates", {})
+                self.github_repo       = d.get("github_repo", "")
+                self.default_template  = d.get("default_template", "")
+                self.templates         = d.get("templates", {})
                 self.first_launch_completed = d.get("first_launch_completed", False)
-                self.quickstart_dismissed = d.get("quickstart_dismissed", False)
-                self.recently_used = d.get("recently_used", [])
+                self.quickstart_dismissed   = d.get("quickstart_dismissed", False)
+                self.recently_used     = d.get("recently_used", [])
+                self.bible_translation = d.get("bible_translation", "web")
+                self.bible_api_key_esv = d.get("bible_api_key_esv", "")
+                self.simple_mode       = d.get("simple_mode", True)
+                self.compact_mode      = d.get("compact_mode", False)
+                self.recurring_elements = d.get("recurring_elements", [])
+                self.element_defaults  = d.get("element_defaults", {})
                 # migrate old single template
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
@@ -119,28 +133,32 @@ class Config:
                 pass
 
     def add_recent(self, path: str) -> None:
-        """Add a file to recent files list."""
         if path in self.recent_files:
             self.recent_files.remove(path)
         self.recent_files.insert(0, path)
         self.recent_files = self.recent_files[:10]
 
     def save(self) -> None:
-        """Save configuration to disk."""
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         p: dict[str, Any] = {
-            "preamble": self.preamble,
-            "templates": self.templates,
-            "default_template": self.default_template,
-            "last_dir": self.last_dir,
-            "recent_files": self.recent_files,
-            "use_tabs": self.use_tabs,
-            "last_seen_version": self.last_seen_version,
-            "bulletin": self.bulletin,
-            "github_repo": self.github_repo,
+            "preamble":              self.preamble,
+            "templates":             self.templates,
+            "default_template":      self.default_template,
+            "last_dir":              self.last_dir,
+            "recent_files":          self.recent_files,
+            "use_tabs":              self.use_tabs,
+            "last_seen_version":     self.last_seen_version,
+            "bulletin":              self.bulletin,
+            "github_repo":           self.github_repo,
             "first_launch_completed": self.first_launch_completed,
-            "quickstart_dismissed": self.quickstart_dismissed,
-            "recently_used": self.recently_used,
+            "quickstart_dismissed":  self.quickstart_dismissed,
+            "recently_used":         self.recently_used,
+            "bible_translation":     self.bible_translation,
+            "bible_api_key_esv":     self.bible_api_key_esv,
+            "simple_mode":           self.simple_mode,
+            "compact_mode":          self.compact_mode,
+            "recurring_elements":    self.recurring_elements,
+            "element_defaults":      self.element_defaults,
         }
         if self.palette is not None:
             p["palette"] = self.palette

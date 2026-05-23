@@ -10,6 +10,7 @@ Results are cached in the Rubric SQLite database (~/.local/share/rubric/rubric.d
 """
 
 import threading
+import time
 import urllib.request
 import urllib.error
 import re
@@ -167,6 +168,7 @@ def prefetch_hymnal(book: str, on_progress=None, on_done=None):
                         if _DB_OK:
                             hymn_set(key, title)
                         added += 1
+                        time.sleep(0.25)
             except Exception:
                 pass
             if on_progress:

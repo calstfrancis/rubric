@@ -26,6 +26,12 @@ except (ImportError, ValueError):
     def _idle_add(fn, *args):
         fn(*args)
 
+try:
+    from rubric_package.db import bible_get as _bible_get, bible_set as _bible_set
+    _CACHE_OK = True
+except ImportError:
+    _CACHE_OK = False
+
 ESV_API = "https://api.esv.org/v3/passage/text/"
 
 BIBLE_API_TRANSLATIONS = {"web": "web", "kjv": "kjv", "asv": "asv"}
@@ -108,9 +114,16 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
     """
     def fetch():
         cleaned = clean_reference(reference)
+        cache_key = f"{translation}:{cleaned}"
+
+        if _CACHE_OK:
+            cached = _bible_get(cache_key)
+            if cached:
+                _idle_add(callback, cached, None)
+                return
 
         if translation == "esv" and esv_key:
-            _fetch_esv(cleaned, callback, esv_key)
+            _fetch_esv(cleaned, callback, esv_key, cache_key if _CACHE_OK else None)
             return
 
         # Fall back to bible-api.com for web/kjv/asv
@@ -138,6 +151,9 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
 
             if not passage:
                 _idle_add(callback, None, "No text returned"); return
+
+            if _CACHE_OK:
+                _bible_set(cache_key, passage)
             _idle_add(callback, passage, None)
 
         except urllib.error.HTTPError as e:
@@ -149,7 +165,7 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
     threading.Thread(target=fetch, daemon=True).start()
 
 
-def _fetch_esv(reference: str, callback, key: str):
+def _fetch_esv(reference: str, callback, key: str, cache_key: str | None = None):
     params = urllib.parse.urlencode({
         "q": reference,
         "include-verse-numbers": "true",
@@ -175,6 +191,8 @@ def _fetch_esv(reference: str, callback, key: str):
         # Format into verse-per-line using [1] [2] markers
         text = re.sub(r'\[(\d+)\]', lambda m: f"\n{m.group(1)} ", text)
         text = re.sub(r'\n+', '\n', text).strip()
+        if cache_key and _CACHE_OK:
+            _bible_set(cache_key, text)
         _idle_add(callback, text, None)
     except urllib.error.HTTPError as e:
         if e.code == 401:

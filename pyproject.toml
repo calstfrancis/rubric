@@ -25,6 +25,7 @@ classifiers = [
 
 [project.scripts]
 rubric = "rubric:main"
+rubric-desktop-install = "rubric_setup:main"
 
 [tool.mypy]
 python_version = "3.10"
@@ -42,11 +43,11 @@ module = "gi.*"
 ignore_missing_imports = true
 
 [tool.setuptools]
-py-modules = ["rubric", "bible_api", "hymn_lookup", "hymn_suggestions", "observances", "rcl_data", "snippets"]
+py-modules = ["rubric", "rubric_setup", "bible_api", "hymn_lookup", "hymn_suggestions", "observances", "rcl_data", "snippets"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rubric_package*"]
 
 [tool.setuptools.package-data]
-rubric_package = ["py.typed", "data/*.json", "data/*.svg"]
+rubric_package = ["py.typed", "data/*.json", "data/*.svg", "data/*.md"]

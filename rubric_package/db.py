@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS hymn_cache (
     title TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS bible_cache (
+    key  TEXT PRIMARY KEY,
+    text TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS snippets (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
@@ -129,6 +134,30 @@ def hymn_search(query: str, limit: int = 30) -> list[dict]:
             (q, q, limit),
         ).fetchall()
         return [{"key": r["key"], "title": r["title"]} for r in rows]
+    finally:
+        con.close()
+
+
+# ── Bible cache ───────────────────────────────────────────────────────────────
+
+def bible_get(key: str) -> str | None:
+    """Return a cached passage text, or None if not cached. Key: 'translation:reference'."""
+    con = _open()
+    try:
+        row = con.execute("SELECT text FROM bible_cache WHERE key = ?", (key,)).fetchone()
+        return row["text"] if row else None
+    finally:
+        con.close()
+
+
+def bible_set(key: str, text: str) -> None:
+    """Store a passage in the cache."""
+    con = _open()
+    try:
+        con.execute(
+            "INSERT OR REPLACE INTO bible_cache (key, text) VALUES (?, ?)", (key, text)
+        )
+        con.commit()
     finally:
         con.close()
 

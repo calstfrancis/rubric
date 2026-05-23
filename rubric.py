@@ -17,14 +17,23 @@ from rcl_data import get_liturgical_info
 
 # Import from refactored package
 try:
-    from rubric_package.models.config import Config, config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, DEFAULT_PREAMBLE, SECTIONS, get_palette
+    from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, DEFAULT_PREAMBLE, SECTIONS
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
     from rubric_package.utils.latex import latex_escape, note_for_latex, passage_to_latex, migrate_scripture_note
     from rubric_package.utils.colors import section_colour, hex_to_rgb
     from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS as _HYMN_KW
-    _PACKAGE_OK = True
-except ImportError:
-    _PACKAGE_OK = False
+except ImportError as _pkg_err:
+    print(f"Fatal: rubric_package not found — {_pkg_err}", file=sys.stderr)
+    sys.exit(1)
+
+_latex_escape           = latex_escape
+_note_for_latex         = note_for_latex
+_passage_to_latex       = passage_to_latex
+_migrate_scripture_note = migrate_scripture_note
+_section_colour         = section_colour
+_hex_to_rgb             = hex_to_rgb
+_is_hymn_element        = is_hymn_element
+_entry_from_dict        = entry_from_dict
 
 try:
     from hymn_lookup import lookup_hymn, parse_hymn_ref, search_hymns, prefetch_hymnal
@@ -71,161 +80,11 @@ except Exception:
         except Exception:
             _WebKit = None
 
-# Define constants locally if package import failed
-if not _PACKAGE_OK:
-    MAX_UNDO = 50
-    AUTOSAVE_SECS = 180
-    CONFIG_PATH = Path.home() / ".config/rubric/config.json"
-    AUTOSAVE_PATH = Path.home() / ".local/share/rubric/autosave.liturgy"
-
-    DEFAULT_PREAMBLE = r"""\documentclass[12pt, letterpaper]{extarticle}
-\usepackage{fontspec}
-\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
-\usepackage{geometry}
-\geometry{top=1in,bottom=1in,left=0.5in,right=0.5in}
-\usepackage{parskip,microtype,titlesec}
-\usepackage{multicol}
-\setlength{\columnsep}{1.5em}
-% Elements: bold left-aligned with rule below
-\titleformat{\section}{\normalsize\bfseries}{}{0em}{}[\titlerule]
-\titlespacing*{\section}{0pt}{10pt}{4pt}
-% Scripture block: suppresses parskip between verses, hanging indent.
-% \sverse just emits text; the scripture environment handles all spacing/indent.
-\newenvironment{scripture}{%
-  \par\begingroup
-  \setlength{\parskip}{0pt}%
-  \setlength{\parindent}{-2.4em}%
-  \leftskip=2.4em
-}{%
-  \par\endgroup\vspace{4pt}%
-}
-\newcommand{\sverse}[2]{\textsuperscript{#1}\quad #2\par}
-\usepackage{hyperref}
-\hypersetup{hidelinks}
-"""
-
-    SECTIONS = [
-        ("Gathering", ["Prelude","Welcome","Land acknowledgement","Announcements",
-                       "Call to worship","Opening hymn","Prayer of approach",
-                       "Prayer of confession","Words of assurance","Gloria / sung response"]),
-        ("Word",      ["Hebrew Bible reading","Psalm / sung psalm","Epistle reading",
-                       "Gospel reading","Children's time","Hymn","Anthem / special music",
-                       "Sermon / reflection","Silent reflection"]),
-        ("Response",  ["Hymn","Affirmation of faith","Prayers of the people","Lord's prayer",
-                       "Offering / dedication","Stewardship moment","Table liturgy","Communion"]),
-        ("Sending",   ["Closing hymn","Commissioning","Benediction","Postlude"]),
-    ]
-    _HYMN_KW = {"hymn","psalm","sung","song","music","anthem","gloria"}
-
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 APP_VERSION = "0.13.0"
 
-class Config:
-    def __init__(self):
-        self.preamble           = DEFAULT_PREAMBLE
-        self.templates          : dict[str, list[dict]] = {}  # name -> items
-        self.default_template   : str = ""
-        self.palette            : list[dict] | None = None
-        self.last_dir           = str(Path.home())
-        self.recent_files       : list[str] = []
-        self.use_tabs           = False
-        self.last_seen_version  : str = ""
-        self.bulletin           : dict = self._default_bulletin()
-        self.github_repo        : str = ""
-        self.bible_translation  : str = "web"
-        self.bible_api_key_esv  : str = ""
-        self.simple_mode            : bool = True
-        self.first_launch_completed : bool = False
-        self.quickstart_dismissed   : bool = False
-        self.recently_used          : list[str] = []
-        self.compact_mode           : bool = False
-        self.recurring_elements     : list[str] = []
-        self.element_defaults       : dict[str, str] = {}
-        self._load()
-
-    # backward-compat: old "template_items" key becomes template named "Default"
-    @staticmethod
-    def _default_bulletin() -> dict:
-        return {
-            "church_name":    "Hope United Church",
-            "address":        "",
-            "service_time":   "10:30 am",
-            "website":        "",
-            "email":          "",
-            "phone":          "",
-            "mission":        "",
-            "accessibility":  "All are welcome.",
-            "welcome":        "A warm welcome is extended to all.",
-            "staff": [],          # [{"role": "Minister", "name": "...", "email": "..."}]
-            "announcements":  [], # [{"text": "...", "expires": "YYYY-MM-DD" or ""}]
-            "print_mode":     "booklet",   # "booklet" or "digital"
-            "include_scripture": True,
-            "include_announcements": True,
-            "cover_image": "",
-        }
-
-    def _load(self):
-        if CONFIG_PATH.exists():
-            try:
-                d = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-                self.preamble         = d.get("preamble",         DEFAULT_PREAMBLE)
-                self.palette          = d.get("palette",          None)
-                self.last_dir         = d.get("last_dir",         str(Path.home()))
-                self.recent_files     = d.get("recent_files",     [])
-                self.use_tabs          = d.get("use_tabs",           False)
-                self.last_seen_version = d.get("last_seen_version",  "")
-                saved_bulletin = d.get("bulletin", {})
-                self.bulletin = {**self._default_bulletin(), **saved_bulletin}
-                self.github_repo      = d.get("github_repo",      "")
-                self.default_template = d.get("default_template", "")
-                self.templates        = d.get("templates",        {})
-                self.bible_translation = d.get("bible_translation", "web")
-                self.bible_api_key_esv = d.get("bible_api_key_esv", "")
-                self.simple_mode             = d.get("simple_mode", True)
-                self.first_launch_completed  = d.get("first_launch_completed", False)
-                self.quickstart_dismissed    = d.get("quickstart_dismissed", False)
-                self.recently_used           = d.get("recently_used", [])
-                self.compact_mode            = d.get("compact_mode", False)
-                self.recurring_elements      = d.get("recurring_elements", [])
-                self.element_defaults        = d.get("element_defaults", {})
-                # migrate old single template
-                if not self.templates and d.get("template_items"):
-                    self.templates["Default"] = d["template_items"]
-                    self.default_template = "Default"
-            except Exception:
-                pass
-
-    def add_recent(self, path: str):
-        if path in self.recent_files: self.recent_files.remove(path)
-        self.recent_files.insert(0, path)
-        self.recent_files = self.recent_files[:10]
-
-    def save(self):
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        p: dict = {
-            "preamble":         self.preamble,
-            "templates":        self.templates,
-            "default_template": self.default_template,
-            "last_dir":         self.last_dir,
-            "recent_files":     self.recent_files,
-            "use_tabs":           self.use_tabs,
-            "last_seen_version":  self.last_seen_version,
-            "bulletin":           self.bulletin,
-            "github_repo":        self.github_repo,
-            "bible_translation":  self.bible_translation,
-            "bible_api_key_esv":  self.bible_api_key_esv,
-            "simple_mode":            self.simple_mode,
-            "first_launch_completed": self.first_launch_completed,
-            "quickstart_dismissed":   self.quickstart_dismissed,
-            "recently_used":          self.recently_used,
-            "compact_mode":           self.compact_mode,
-            "recurring_elements":     self.recurring_elements,
-            "element_defaults":       self.element_defaults,
-        }
-        if self.palette is not None: p["palette"] = self.palette
-        CONFIG_PATH.write_text(json.dumps(p, indent=2, ensure_ascii=False), encoding="utf-8")
 
 config = Config()
 
@@ -275,160 +134,6 @@ def get_palette() -> list[tuple[str, list[str]]]:
 
 # ── Data model ────────────────────────────────────────────────────────────────
 
-class SectionDivider:
-    is_divider = True
-    def __init__(self, title="New section"): self.title = title
-    def to_dict(self): return {"type":"divider","title":self.title}
-    @classmethod
-    def from_dict(cls, d): return cls(d.get("title","Section"))
-
-class ServiceItem:
-    is_divider = False
-    def __init__(self, name, section, note="", leader="",
-                 show_in_bulletin=True, bulletin_note="", prep_note="", duration=0):
-        self.name = name; self.section = section
-        self.note = note; self.leader = leader
-        self.show_in_bulletin = show_in_bulletin
-        self.bulletin_note = bulletin_note
-        self.prep_note = prep_note
-        self.duration = duration
-    def to_dict(self):
-        d = {"type": "item", "name": self.name, "section": self.section,
-             "note": self.note, "leader": self.leader,
-             "show_in_bulletin": self.show_in_bulletin,
-             "bulletin_note": self.bulletin_note}
-        if self.prep_note: d["prep_note"] = self.prep_note
-        if self.duration:  d["duration"]  = self.duration
-        return d
-    @classmethod
-    def from_dict(cls, d):
-        return cls(d["name"], d.get("section", ""), d.get("note", ""),
-                   d.get("leader", ""), d.get("show_in_bulletin", True),
-                   d.get("bulletin_note", ""), d.get("prep_note", ""),
-                   d.get("duration", 0))
-
-def _entry_from_dict(d):
-    return SectionDivider.from_dict(d) if d.get("type")=="divider" else ServiceItem.from_dict(d)
-
-def _latex_escape(t):
-    for c,e in [("\\","\\textbackslash{}"),("&","\\&"),("%","\\%"),("$","\\$"),
-                ("#","\\#"),("_","\\_"),("{","\\{"),("}","\\}"),
-                ("~","\\textasciitilde{}"),("^","\\textasciicircum{}")]:
-        t = t.replace(c, e)
-    return t
-
-def _note_for_latex(n):
-    if not n: return ""
-    return n if any(l.strip().startswith("\\") for l in n.splitlines()) else _latex_escape(n)
-
-
-def _passage_to_latex(reference: str, text: str, translation: str = "web") -> str:
-    r"""
-    Convert Bible verse text to LaTeX inside a {scripture} environment.
-    The API sometimes splits a single verse across multiple lines;
-    we join all lines until the next numbered verse into one \sverse call.
-    """
-    lines = text.strip().splitlines()
-
-    # First pass: group lines into (verse_num, full_text) pairs
-    verses = []   # list of (vnum_str, text_str)
-    current_num = None
-    current_parts = []
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        m = re.match(r'^(\d+)\s*(.*)', line)
-        if m:
-            # Save previous verse if any
-            if current_num is not None:
-                verses.append((current_num, " ".join(current_parts)))
-            current_num = m.group(1)
-            current_parts = [m.group(2).strip()] if m.group(2).strip() else []
-        else:
-            # Continuation of the current verse
-            if current_num is not None:
-                current_parts.append(line)
-            # else: text before any verse number -- ignore
-
-    # Flush last verse
-    if current_num is not None:
-        verses.append((current_num, " ".join(current_parts)))
-
-    latex_lines = []
-    for vnum, vtext in verses:
-        latex_lines.append(f"\\sverse{{{vnum}}}{{{_latex_escape(vtext)}}}")
-
-    ref_escaped = _latex_escape(reference)
-    trl_label = translation.upper()
-    body = "\n".join(latex_lines)
-    return (
-        f"% {ref_escaped} ({trl_label})\n"
-        f"{{\\small\\textit{{{ref_escaped} ({trl_label})}}}}\n"
-        f"\\begin{{scripture}}\n"
-        f"{body}\n"
-        f"\\end{{scripture}}"
-    )
-
-def _migrate_scripture_note(note):
-    if r'\begin{quotation}' not in note:
-        return note
-    lines = note.splitlines()
-    pre, verses, post = [], [], []
-    ref_line = ""
-    in_q = False
-    after_q = False
-    for line in lines:
-        s = line.strip()
-        if s == r'\begin{quotation}':  in_q = True;  continue
-        if s == r'\end{quotation}':    in_q = False; after_q = True; continue
-        if after_q:                    post.append(line); continue
-        if not in_q:                   pre.append(line); continue
-        if not s: continue
-        if s.startswith(r'\textit{') or s.startswith('% '):
-            m = re.search(r'\\textit\{\\small ([^}]+)\}', s)
-            ref_line = "{\\small\\textit{" + m.group(1) + "}}" if m else s
-            continue
-        m = re.match(r'\\noindent\\textsuperscript\{(\d+)\}(.+)', s)
-        if m:
-            verses.append("\\sverse{" + m.group(1) + "}{" + m.group(2).strip() + "}")
-            continue
-        if verses: verses[-1] = verses[-1] + " " + s
-        else: verses.append(s + r'\par')
-    result = "\n".join(pre).rstrip()
-    if ref_line: result += ("\n" if result else "") + ref_line
-    if verses:
-        result += "\n\\begin{scripture}\n" + "\n".join(verses) + "\n\\end{scripture}"
-    if post: result += "\n" + "\n".join(post)
-    return result
-
-
-def _section_colour(section):
-    pal = get_palette(); secs = [s for s,_ in pal]
-    cols = ["#1D9E75","#534AB7","#993C1D","#185FA5","#B45309","#6B21A8","#15803D","#B91C1C"]
-    try: return cols[secs.index(section) % len(cols)]
-    except ValueError: return "#888780"
-
-def _hex_to_rgb(h):
-    h = h.lstrip("#")
-    return int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
-
-def _is_hymn_element(name): return any(k in name.lower() for k in _HYMN_KW)
-
-
-# ── Backward compatibility aliases ────────────────────────────────────────────
-
-# If package is available, create underscore aliases for existing code
-# Note: _entry_from_dict is NOT overridden here — it must use the inline
-# ServiceItem/SectionDivider classes so that isinstance() checks elsewhere match.
-if _PACKAGE_OK:
-    _latex_escape = latex_escape
-    _note_for_latex = note_for_latex
-    _passage_to_latex = passage_to_latex
-    _migrate_scripture_note = migrate_scripture_note
-    _section_colour = section_colour
-    _hex_to_rgb = hex_to_rgb
 
 
 # ── Bible viewer ──────────────────────────────────────────────────────────────
@@ -1589,7 +1294,16 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Simple mode ───────────────────────────────────────────────────────────
 
-    def _apply_simple_mode(self):
+    def _on_simple_btn_toggled(self, btn):
+        config.simple_mode = btn.get_active()
+        config.save()
+        self._apply_simple_mode(skip_btn_sync=True)
+
+    def _apply_simple_mode(self, skip_btn_sync: bool = False):
+        if not skip_btn_sync and hasattr(self, "_simple_btn"):
+            GObject.signal_handler_block(self._simple_btn, self._simple_btn_handler)
+            self._simple_btn.set_active(config.simple_mode)
+            GObject.signal_handler_unblock(self._simple_btn, self._simple_btn_handler)
         if hasattr(self, "_rr_btn"):
             self._rr_btn.set_visible(not config.simple_mode)
         self._refresh_menu()
@@ -1800,6 +1514,17 @@ class MainWindow(Adw.ApplicationWindow):
         self._menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu")
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
+
+        self._simple_btn = Gtk.ToggleButton(label="Simple")
+        self._simple_btn.set_active(config.simple_mode)
+        self._simple_btn.add_css_class("flat")
+        self._simple_btn.set_tooltip_text(
+            "Simple mode — hides LaTeX, GitHub sync, and advanced features.\n"
+            "Toggle to switch modes and watch what changes."
+        )
+        self._simple_btn_handler = self._simple_btn.connect("toggled", self._on_simple_btn_toggled)
+        hdr.pack_end(self._simple_btn)
+
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_btn = Gtk.ToggleButton(icon_name="document-print-preview-symbolic",
@@ -5588,7 +5313,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             yt_btn = Gtk.Button(tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
             yt_btn.add_css_class("flat"); yt_btn.set_valign(Gtk.Align.CENTER)
             _yt_svg = Path(__file__).parent / "data" / "youtube.svg"
-            if not _yt_svg.exists() and _PACKAGE_OK:
+            if not _yt_svg.exists():
                 import rubric_package as _rp
                 _yt_svg = Path(_rp.__file__).parent / "data" / "youtube.svg"
             try:
