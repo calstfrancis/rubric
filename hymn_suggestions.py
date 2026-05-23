@@ -12,7 +12,11 @@ import json
 import re
 from pathlib import Path
 
-_DATA_FILE = Path(__file__).parent / "data" / "hymn_suggestions.json"
+try:
+    import rubric_package as _rp
+    _DATA_FILE = Path(_rp.__file__).parent / "data" / "hymn_suggestions.json"
+except ImportError:
+    _DATA_FILE = Path(__file__).parent / "data" / "hymn_suggestions.json"
 _cache: dict | None = None
 
 

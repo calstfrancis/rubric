@@ -1,5 +1,87 @@
 # Rubric — Frequently Asked Questions
 
+## Installation
+
+**Q: What is the recommended way to install Rubric?**
+
+pipx. It installs Rubric into an isolated environment and keeps the `rubric` command on your PATH without cluttering your system Python. Because Rubric depends on system GTK libraries (not available on PyPI), pass `--system-site-packages`:
+
+```bash
+pipx install --system-site-packages rubric-liturgy
+```
+
+**Q: What are the system dependencies?**
+
+GTK4, libadwaita, and python3-gobject must be installed before Rubric. These come from your distribution's package manager, not from pip.
+
+| Distribution | Command |
+|---|---|
+| openSUSE | `sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0` |
+| Ubuntu/Debian | `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1` |
+| Fedora | `sudo dnf install python3-gobject gtk4 libadwaita` |
+
+**Q: I tried `pipx install rubric-liturgy` (without `--system-site-packages`) and it fails.**
+
+That is expected. GTK's Python bindings (`gi`) are a system package and are not on PyPI. `--system-site-packages` lets the pipx environment see them. Always use:
+
+```bash
+pipx install --system-site-packages rubric-liturgy
+```
+
+**Q: Can I use `pip install` instead of `pipx`?**
+
+Yes, though pipx is cleaner. Install with:
+
+```bash
+pip install --user rubric-liturgy
+```
+
+Then make sure `~/.local/bin` is on your PATH. You can check with `echo $PATH`. To add it permanently:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+**Q: How do I update to a new version?**
+
+```bash
+# With pipx:
+pipx upgrade rubric-liturgy
+
+# With pip:
+pip install --user --upgrade rubric-liturgy
+```
+
+**Q: How do I uninstall?**
+
+```bash
+# With pipx:
+pipx uninstall rubric-liturgy
+
+# With pip:
+pip uninstall rubric-liturgy
+```
+
+User data (config, saved services, hymn cache) stays in `~/.config/rubric/` and `~/.local/share/rubric/`. Delete those folders if you want a clean slate.
+
+**Q: The icon shows as a "W" or generic letter in the GNOME panel.**
+
+The pipx/pip install does not register a `.desktop` entry. If you want Rubric in your app launcher with its icon, clone the repository and run `bash install.sh` (which installs the desktop entry separately). The `rubric` command from pipx/pip still works in the terminal regardless.
+
+**Q: I get "Dependencies missing" when running install.sh.**
+
+```bash
+python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1'); from gi.repository import Gtk, Adw; print('OK')"
+```
+
+If you see symbol errors, run `sudo zypper dup` (or the equivalent for your distro) to sync GLib/GTK4 versions.
+
+**Q: I want the inline Hymnary preview but it opens in the browser instead.**
+
+Install WebKit: `sudo zypper install python3-webkit2` (or `sudo apt install python3-gi-webkit2`). After installing, restart Rubric — it detects WebKit at launch.
+
+---
+
 ## Simple Mode
 
 **Q: What is Simple mode?**
@@ -15,26 +97,6 @@ Close and reopen Preferences — new tabs appear for LaTeX preamble and Snippets
 **Q: I want to produce a proper print PDF for the bulletin. Do I need LaTeX?**
 
 Yes, for the LaTeX-compiled PDF you need TeX Live + `memoir` package. In simple mode the bulletin exports as HTML — open it in your browser and use File → Print to produce a PDF. For most congregational use the HTML output is indistinguishable from the LaTeX version.
-
----
-
-## Installation
-
-**Q: The icon shows as a "W" or generic letter in the GNOME panel.**
-
-Re-run `bash install.sh`. Icons are installed under both `rubric.svg` and `io.github.calstfrancis.rubric.svg`. Log out and back in if it persists.
-
-**Q: I get "Dependencies missing" when running install.sh.**
-
-```bash
-python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1'); from gi.repository import Gtk, Adw; print('OK')"
-```
-
-If you see symbol errors, run `sudo zypper dup` to sync GLib/GTK4 versions.
-
-**Q: I want the inline Hymnary preview but it opens in the browser instead.**
-
-Install WebKit: `sudo zypper install python3-webkit2`. After installing, restart Rubric — it detects WebKit at launch.
 
 ---
 
@@ -123,7 +185,7 @@ GitHub no longer accepts passwords over HTTPS. Use a Personal Access Token (PAT)
 
 **Q: I'm working on two computers. How do I pull changes from GitHub?**
 
-Open **Preferences → GitHub** and click **Pull**. Or use the pull option from the hamburger menu. Always pull before editing on a different machine to avoid conflicts.
+Open **Preferences → GitHub** and click **Pull**. Always pull before editing on a different machine to avoid conflicts.
 
 **Q: What gets committed when I push?**
 
@@ -242,8 +304,6 @@ The directory containing your `.liturgy` file must be inside a git repo. Run `gi
 | Snippets | `~/.config/rubric/snippets.json` |
 | Hymn cache | `~/.local/share/rubric/hymn_cache.json` |
 | Autosave | `~/.local/share/rubric/autosave.liturgy` |
-| App code | `~/.local/share/rubric/` |
-| Docs | `~/.local/share/rubric/HELP.md` etc. |
 
 **Q: Can I undo and redo changes?**
 

@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.12 — Service archive, element library, bulletin preview, UX polish
+## 0.13.0 — PyPI release, Service archive, element library, bulletin preview, UX polish
 
 ### Added (this release)
 

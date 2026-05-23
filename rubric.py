@@ -5588,6 +5588,9 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             yt_btn = Gtk.Button(tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
             yt_btn.add_css_class("flat"); yt_btn.set_valign(Gtk.Align.CENTER)
             _yt_svg = Path(__file__).parent / "data" / "youtube.svg"
+            if not _yt_svg.exists() and _PACKAGE_OK:
+                import rubric_package as _rp
+                _yt_svg = Path(_rp.__file__).parent / "data" / "youtube.svg"
             try:
                 from gi.repository import GdkPixbuf
                 import gi as _gi

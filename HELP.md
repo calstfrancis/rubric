@@ -4,6 +4,14 @@
 
 Rubric is a GNOME-native application for planning worship services for the United Church of Canada. It integrates the Revised Common Lectionary, hymn lookup for Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and export to HTML or LaTeX for bulletin production.
 
+Install via pipx (recommended):
+
+```bash
+pipx install --system-site-packages rubric-liturgy
+```
+
+See [README.md](README.md) for full installation instructions including system dependencies.
+
 ---
 
 ## First Launch

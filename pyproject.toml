@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rubric"
-version = "0.12"
+name = "rubric-liturgy"
+version = "0.13.0"
 description = "A GNOME-native worship service planning tool for United Church of Canada ministry"
 readme = "README.md"
 license = {text = "GPL-3.0"}
@@ -23,6 +23,9 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 
+[project.scripts]
+rubric = "rubric:main"
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
@@ -38,9 +41,12 @@ show_error_codes = true
 module = "gi.*"
 ignore_missing_imports = true
 
+[tool.setuptools]
+py-modules = ["rubric", "bible_api", "hymn_lookup", "hymn_suggestions", "observances", "rcl_data", "snippets"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rubric_package*"]
 
 [tool.setuptools.package-data]
-rubric_package = ["py.typed"]
+rubric_package = ["py.typed", "data/*.json", "data/*.svg"]

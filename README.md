@@ -1,10 +1,11 @@
 # Rubric
+
 [![Tests](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml/badge.svg)](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/rubric-liturgy)](https://pypi.org/project/rubric-liturgy/)
+
 A GNOME-native worship service planning tool for United Church of Canada ministry.
 
 Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and export options for bulletin production.
-
-![Rubric screenshot](docs/screenshot.png)
 
 ---
 
@@ -25,38 +26,76 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **Per-element bulletin toggle** — the 📋 button marks each element shown or hidden in the bulletin independently of the leader copy
 - **Bulletin preferences** — church name, address, service time, website, email, phone, welcome line, accessibility note, mission statement, staff/contact list, and announcements — all in **Preferences → Bulletin**
 - **Announcement expiry** — each announcement carries an optional `YYYY-MM-DD` expiry date; expired announcements are omitted automatically
-- **Service Planner** — scans the `liturgy/` folder (or any folder) and lists all services grouped into Upcoming and Past, sorted by date. Click any row to open that service.
-- **GitHub repository sync** — set up a local git repository from **Preferences → GitHub** and push/pull to GitHub with one click. Creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders automatically.
-- **Repository-aware save paths** — when a GitHub repository is configured, Save As defaults to `repo/liturgy/`, Export LaTeX to `repo/tex/`, bulletin export to `repo/bulletins/`, and compiled PDFs move automatically to `repo/pdf/` or `repo/bulletins/`.
+- **Past Liturgies archive** — browse every saved service in a read-only viewer; insert any past element's text into the current service with one click
+- **Element Library** — searchable database of every element from every saved service
+- **Bulletin preview panel** — live preview of the congregational bulletin as you edit; popout to a floating window
+- **Service Planner** — scans the `liturgy/` folder and lists all services grouped into Upcoming and Past
+- **GitHub repository sync** — push/pull services to a GitHub repository with one click
+- **Repository-aware save paths** — Save As, LaTeX export, and bulletin export default to the right subfolder when a repository is configured
 - **Scripture translation selector** — choose WEB, KJV, ASV, or ESV in **Preferences → Scripture**
 - **Undo / Redo** — Ctrl+Z and Ctrl+Shift+Z
 - **LaTeX export** — `extarticle`, two-column layout per liturgical movement, Junicode font, proper scripture environment (advanced mode)
 - **PDF compilation** — one-click xelatex compilation from within the app (advanced mode)
 - **Snippets library** — reusable liturgical texts (advanced mode)
 - **Responsive reading builder** — L:/P: syntax generates formatted LaTeX (advanced mode)
-- **Leader assignment** — per-element leader name exports as right-aligned italic in the section heading
-- **Templates** — named service order templates with a chooser on new service
-- **Tab view** — sections as notebook tabs with drag-and-drop between them
 - **CSV export** — for sharing with musicians and AV teams (advanced mode)
-- **GitHub Actions CI** — automated test run on every push
 
 ---
 
 ## Requirements
 
 - Python 3.10+
-- GTK4 + libadwaita
-- python3-gobject
+- GTK4 + libadwaita + python3-gobject (system packages)
 
+**openSUSE / Leap / Tumbleweed:**
 ```bash
 sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0
 ```
 
-LaTeX (xelatex + Junicode + `memoir` package) is only needed for PDF compilation and the advanced bulletin export. In simple mode, HTML export covers all bulletin and service order needs with no TeX Live required. See [docs/texlive.md](docs/texlive.md) or the in-app TeX Live tab (Help → Welcome) if you want PDF output.
+**Ubuntu / Debian:**
+```bash
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
+```
+
+**Fedora:**
+```bash
+sudo dnf install python3-gobject gtk4 libadwaita
+```
+
+LaTeX (xelatex + Junicode + `memoir` package) is only needed for PDF compilation and the advanced bulletin export. In simple mode, HTML export covers all bulletin and service order needs with no TeX Live required.
 
 ---
 
 ## Installation
+
+### pipx (recommended)
+
+[pipx](https://pipx.pypa.io) installs Rubric into an isolated environment and puts the `rubric` command on your PATH. Because Rubric uses system GTK libraries, pass `--system-site-packages`:
+
+```bash
+pipx install --system-site-packages rubric-liturgy
+```
+
+To update later:
+
+```bash
+pipx upgrade rubric-liturgy
+```
+
+### pip
+
+```bash
+pip install --user rubric-liturgy
+```
+
+Make sure `~/.local/bin` is on your PATH (`echo $PATH`). Add it permanently with:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### git clone (development / manual install)
 
 ```bash
 git clone https://github.com/calstfrancis/rubric.git
@@ -64,25 +103,19 @@ cd rubric
 bash install.sh
 ```
 
-The install script:
-- Copies app files to `~/.local/share/rubric/`
-- Creates a launcher at `~/.local/bin/rubric`
-- Installs the desktop entry and icons
-- Registers the `.liturgy` MIME type
+The install script copies app files to `~/.local/share/rubric/`, creates a launcher at `~/.local/bin/rubric`, installs the `.desktop` entry and icons, and registers the `.liturgy` MIME type.
 
 ---
 
 ## Usage
 
-Run from the terminal:
-
 ```bash
 rubric
 ```
 
-Or search for **Rubric** in GNOME Shell / KRunner.
+Or search for **Rubric** in GNOME Shell or your desktop launcher.
 
-On first launch, a welcome dialog explains the main features and provides TeX Live installation instructions.
+On first launch, a welcome wizard offers three starting points: today's lectionary, a blank service, or a guided tour.
 
 ---
 
@@ -95,13 +128,12 @@ Service files use the `.liturgy` extension (JSON). They store the service title,
 ## Running tests
 
 ```bash
-# From the rubric directory:
 python3 -m unittest test_rcl_data test_bible_api -v
-
-# Or individually:
-python3 -m unittest test_rcl_data -v   # RCL date calculations
-python3 -m unittest test_bible_api -v  # Bible reference cleaning
 ```
+
+---
+
+## Project structure
 
 ```
 rubric.py              Main application
@@ -110,20 +142,20 @@ hymn_lookup.py         Hymnary.org title fetcher (VU, MV, LUS)
 hymn_suggestions.py    Season and Proper-specific hymn suggestions
 bible_api.py           Bible passage fetcher (WEB, KJV, ASV, ESV)
 snippets.py            Default liturgical text snippets
-install.sh             Installation script
-test_rcl_data.py       Tests for RCL date calculations
-test_bible_api.py      Tests for Bible reference cleaning
+observances.py         Liturgical calendar and observances intelligence
+rubric_package/        Packaged models, utils, exporters, and data
+install.sh             Manual install script (git clone path)
 HELP.md                User guide
 FAQ.md                 Frequently asked questions
 CHANGELOG.md           Version history
-docs/texlive.md        TeX Live installation guide
+RELEASING.md           How to cut a release
 ```
 
 ---
 
 ## Contributing
 
-Rubric is a young project. Contributions welcome — bug reports, hymn suggestion additions, and UCC-specific liturgical content especially so.
+Contributions welcome — bug reports, hymn suggestion additions, and UCC-specific liturgical content especially so.
 
 Please open an issue before starting significant work.
 

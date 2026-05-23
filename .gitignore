@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 .Python
 *.egg-info/
+*.dist-info/
 
 # LaTeX build artifacts
 *.aux
@@ -16,10 +17,12 @@ __pycache__/
 *.fdb_latexmk
 *.synctex.gz
 *.dvi
+*.pdf
 
 # App runtime files
 hymn_cache.json
 autosave.liturgy
+*.liturgy
 
 # Editor / tools
 .vscode/
@@ -31,17 +34,19 @@ autosave.liturgy
 .claude/
 rubric_redesign_mockup.html
 
+# Aider AI assistant
+.aider*
+
 # Flatpak leftovers
 .flatpak-build/
 .flatpak-builder/
 
-# Backup files created during development
+# Backup files
 *.bak*
 
-# Distribution
+# Distribution / build
 dist/
 build/
-.aider*
 
 # AppImage build output
 *.AppImage
