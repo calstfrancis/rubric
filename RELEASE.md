@@ -1,4 +1,4 @@
-# Rubric v0.14.0
+# Rubric v0.14.2
 
 First public release on PyPI. Install with:
 
