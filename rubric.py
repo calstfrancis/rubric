@@ -83,7 +83,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.2"
+APP_VERSION = "0.14.3"
 
 
 config = Config()
@@ -1524,7 +1524,13 @@ class MainWindow(Adw.ApplicationWindow):
         self._simple_btn_handler = self._simple_btn.connect(
             "notify::active", self._on_simple_btn_toggled
         )
-        hdr.pack_end(self._simple_btn)
+        _simple_lbl = Gtk.Label(label="Simple", valign=Gtk.Align.CENTER)
+        _simple_lbl.add_css_class("caption")
+        _simple_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5,
+                              valign=Gtk.Align.CENTER)
+        _simple_box.append(_simple_lbl)
+        _simple_box.append(self._simple_btn)
+        hdr.pack_end(_simple_box)
 
         self._preview_visible = False
         self._preview_pending_id = None
@@ -3797,11 +3803,22 @@ class MainWindow(Adw.ApplicationWindow):
             "- See the **TeX Live** tab if you want to compile PDFs directly from the app\n"
         )
 
-        app_dir = Path(__file__).parent
-        changelog_path = app_dir / "CHANGELOG.md"
-        whats_new = (changelog_path.read_text(encoding="utf-8")
-                     if changelog_path.exists()
-                     else "# What's New\n\nSee CHANGELOG.md for the full history.")
+        def _find_doc(name: str) -> Path | None:
+            p = Path(__file__).parent / name
+            if p.exists():
+                return p
+            try:
+                import rubric_package as _rp
+                p2 = Path(_rp.__file__).parent / "data" / name
+                if p2.exists():
+                    return p2
+            except ImportError:
+                pass
+            return None
+
+        _cl = _find_doc("CHANGELOG.md")
+        whats_new = (_cl.read_text(encoding="utf-8") if _cl
+                     else "# What's New\n\nNo changelog available.")
 
         texlive_text = (
             "# Installing TeX Live\n\n"
@@ -6807,10 +6824,9 @@ class HelpWindow(Adw.Window):
         self._nb = Gtk.Notebook()
         self._nb.set_show_border(False); self._nb.set_vexpand(True)
 
-        app_dir = Path(__file__).parent
-        self._nb.append_page(self._doc_page(app_dir / "HELP.md"),      Gtk.Label(label="Help"))
-        self._nb.append_page(self._doc_page(app_dir / "FAQ.md"),       Gtk.Label(label="FAQ"))
-        self._nb.append_page(self._doc_page(app_dir / "CHANGELOG.md"), Gtk.Label(label="What's New"))
+        self._nb.append_page(self._doc_page(self._find_doc("HELP.md")),      Gtk.Label(label="Help"))
+        self._nb.append_page(self._doc_page(self._find_doc("FAQ.md")),       Gtk.Label(label="FAQ"))
+        self._nb.append_page(self._doc_page(self._find_doc("CHANGELOG.md")), Gtk.Label(label="What's New"))
         self._nb.append_page(self._about_page(),                        Gtk.Label(label="About"))
         self._nb.set_current_page(self._TAB_IDX.get(start_tab, 0))
 
@@ -6820,7 +6836,21 @@ class HelpWindow(Adw.Window):
     def switch_tab(self, name: str):
         self._nb.set_current_page(self._TAB_IDX.get(name, 0))
 
-    def _doc_page(self, path: Path) -> Gtk.Widget:
+    @staticmethod
+    def _find_doc(name: str) -> Path | None:
+        p = Path(__file__).parent / name
+        if p.exists():
+            return p
+        try:
+            import rubric_package as _rp
+            p2 = Path(_rp.__file__).parent / "data" / name
+            if p2.exists():
+                return p2
+        except ImportError:
+            pass
+        return None
+
+    def _doc_page(self, path: Path | None) -> Gtk.Widget:
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
@@ -6836,8 +6866,8 @@ class HelpWindow(Adw.Window):
         buf.create_tag("code",   family="monospace", background="#f0f0f0")
         buf.create_tag("hr",     strikethrough=True, foreground="#888888")
         buf.create_tag("bullet", left_margin=24)
-        if not path.exists():
-            buf.set_text(f"File not found: {path}", -1)
+        if path is None or not path.exists():
+            buf.set_text("Documentation not found.", -1)
             scroll.set_child(tv); return scroll
         it = buf.get_end_iter(); in_code = False
         for raw in path.read_text(encoding="utf-8").splitlines():
