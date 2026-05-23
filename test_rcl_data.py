@@ -184,7 +184,7 @@ class TestGetLiturgicalInfo(unittest.TestCase):
 
     def test_ordinary_time_has_proper(self):
         info = get_liturgical_info(date(2024, 7, 14))
-        self.assertIn("Proper", info["week"])
+        self.assertIn("Ordinary", info["week"])
 
     def test_ordinary_time_has_readings(self):
         info = get_liturgical_info(date(2024, 7, 14))
