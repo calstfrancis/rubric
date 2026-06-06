@@ -119,10 +119,10 @@ update-desktop-database /usr/share/applications 2>/dev/null || true
 POSTRM
 chmod 755 "$CTRLDIR/postrm"
 
-tar czf "$WORK/control.tar.gz" -C "$CTRLDIR" .
+tar czf "$WORK/control.tar.gz" --format=gnu -C "$CTRLDIR" .
 
 # ── Data archive ───────────────────────────────────────────────────────────────
-tar czf "$WORK/data.tar.gz" -C "$ROOT" .
+tar czf "$WORK/data.tar.gz" --format=gnu -C "$ROOT" .
 
 # ── Assemble .deb (ar archive) ─────────────────────────────────────────────────
 printf '2.0\n' > "$WORK/debian-binary"
