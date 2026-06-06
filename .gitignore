@@ -48,8 +48,7 @@ rubric_redesign_mockup.html
 dist/
 build/
 
-# AppImage build output
-#*.AppImage
-appimagetool
-.appimage-runtime-x86_64
-AppDir/usr/
+# Package build output
+*.AppImage
+*.rpm
+*.deb

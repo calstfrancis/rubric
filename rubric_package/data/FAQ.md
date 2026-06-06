@@ -4,7 +4,20 @@
 
 **Q: What is the recommended way to install Rubric?**
 
-pipx. It installs Rubric into an isolated environment and keeps the `rubric` command on your PATH without cluttering your system Python. Because Rubric depends on system GTK libraries (not available on PyPI), pass `--system-site-packages`:
+The native packages (deb or rpm) are the easiest — they handle desktop integration automatically and install like any other app. Download from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
+
+```bash
+# Debian/Ubuntu
+sudo apt install ./rubric-liturgy_*.deb
+
+# openSUSE
+sudo zypper install ./rubric-liturgy-*.noarch.rpm
+
+# Fedora
+sudo dnf install ./rubric-liturgy-*.noarch.rpm
+```
+
+pipx is the best option if you want to follow PyPI releases:
 
 ```bash
 pipx install --system-site-packages rubric-liturgy
@@ -12,7 +25,7 @@ pipx install --system-site-packages rubric-liturgy
 
 **Q: What are the system dependencies?**
 
-GTK4, libadwaita, and python3-gobject must be installed before Rubric. These come from your distribution's package manager, not from pip.
+GTK4, libadwaita, and python3-gobject. The deb and rpm packages declare these as dependencies and your package manager installs them automatically. For pipx/pip, install them first:
 
 | Distribution | Command |
 |---|---|
@@ -45,20 +58,35 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 **Q: How do I update to a new version?**
 
 ```bash
-# With pipx:
+# deb (Debian/Ubuntu) — download new .deb and reinstall:
+sudo apt install ./rubric-liturgy_*.deb
+
+# RPM (openSUSE) — download new .rpm and upgrade:
+sudo zypper install ./rubric-liturgy-*.noarch.rpm
+
+# pipx:
 pipx upgrade rubric-liturgy
 
-# With pip:
+# pip:
 pip install --user --upgrade rubric-liturgy
 ```
 
 **Q: How do I uninstall?**
 
 ```bash
-# With pipx:
+# deb:
+sudo apt remove rubric-liturgy
+
+# RPM (openSUSE):
+sudo zypper remove rubric-liturgy
+
+# RPM (Fedora):
+sudo dnf remove rubric-liturgy
+
+# pipx:
 pipx uninstall rubric-liturgy
 
-# With pip:
+# pip:
 pip uninstall rubric-liturgy
 ```
 
@@ -66,7 +94,7 @@ User data (config, saved services, hymn cache) stays in `~/.config/rubric/` and 
 
 **Q: The icon shows as a "W" or generic letter in the GNOME panel.**
 
-The pipx/pip install does not register a `.desktop` entry. If you want Rubric in your app launcher with its icon, clone the repository and run `bash install.sh` (which installs the desktop entry separately). The `rubric` command from pipx/pip still works in the terminal regardless.
+The deb and rpm packages register the `.desktop` entry and icon automatically — this should not happen with those installs. For pipx/pip installs, the `.desktop` entry is not registered. Run `rubric-desktop-install` once after installing to set up the icon, app launcher entry, and MIME type. The `rubric` command works in the terminal regardless.
 
 **Q: I get "Dependencies missing" when running install.sh.**
 

@@ -68,7 +68,29 @@ LaTeX (xelatex + Junicode + `memoir` package) is only needed for PDF compilation
 
 ## Installation
 
-### pipx (recommended)
+### Debian/Ubuntu (recommended)
+
+Download `rubric-liturgy_<version>_all.deb` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
+
+```bash
+sudo apt install ./rubric-liturgy_*.deb
+```
+
+Installs system-wide to `/usr/share/rubric/` with a launcher at `/usr/bin/rubric`. Registers the `.desktop` entry, icons, MIME type, and AppStream metainfo automatically.
+
+### openSUSE / Fedora (recommended)
+
+Download `rubric-liturgy-<version>-1.noarch.rpm` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
+
+```bash
+# openSUSE
+sudo zypper install ./rubric-liturgy-*.noarch.rpm
+
+# Fedora
+sudo dnf install ./rubric-liturgy-*.noarch.rpm
+```
+
+### pipx
 
 [pipx](https://pipx.pypa.io) installs Rubric into an isolated environment and puts the `rubric` command on your PATH. Because Rubric uses system GTK libraries, pass `--system-site-packages`:
 
@@ -76,11 +98,9 @@ LaTeX (xelatex + Junicode + `memoir` package) is only needed for PDF compilation
 pipx install --system-site-packages rubric-liturgy
 ```
 
-To update later:
+To update later: `pipx upgrade rubric-liturgy`
 
-```bash
-pipx upgrade rubric-liturgy
-```
+Run `rubric-desktop-install` once after installing to register the `.desktop` entry, icon, and MIME type.
 
 ### pip
 
@@ -95,27 +115,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### Debian/Ubuntu .deb package
-
-Download `rubric-liturgy_<version>_all.deb` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest) and install:
-
-```bash
-sudo apt install ./rubric-liturgy_*.deb
-```
-
-This installs system-wide to `/usr/share/rubric/` and registers the `.desktop` entry, icons, MIME type, and AppStream metainfo automatically.
-
-### openSUSE / Fedora RPM package
-
-Download `rubric-liturgy-<version>-1.noarch.rpm` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest) and install:
-
-```bash
-# openSUSE
-sudo zypper install ./rubric-liturgy-*.noarch.rpm
-
-# Fedora
-sudo dnf install ./rubric-liturgy-*.noarch.rpm
-```
+Run `rubric-desktop-install` once after installing to register the `.desktop` entry, icon, and MIME type.
 
 ### git clone (development / manual install)
 

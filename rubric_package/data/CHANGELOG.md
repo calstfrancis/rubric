@@ -16,7 +16,7 @@ All notable changes are documented here, newest first.
 
 ### Changed
 - **Simple switch label** — the Simple mode toggle in the header bar now shows a "Simple" label beside the switch for clarity.
-- **In-app changelog always available** — the What's New tab in the Welcome wizard and the Help window now show the full changelog in pip/pipx/AppImage installs, not just git-clone installs.
+- **In-app changelog always available** — the What's New tab in the Welcome wizard and the Help window now show the full changelog in pip/pipx/deb/rpm installs, not just git-clone installs.
 - **Help and FAQ in all installs** — HELP.md, FAQ.md, and CHANGELOG.md are now bundled in the package data so they're available regardless of how Rubric is installed.
 
 ---
