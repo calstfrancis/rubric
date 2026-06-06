@@ -83,7 +83,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.5"
+APP_VERSION = "0.14.6"
 
 
 config = Config()
@@ -3698,8 +3698,8 @@ class MainWindow(Adw.ApplicationWindow):
             _si("Opening Prayer",                "Gathering"),
             _si("Second Hymn",                   "Gathering", leader="All"),
             SectionDivider("Word"),
-            _si("Scripture",       "Word", note=_ref("gospel") or _ref("epistle") or _ref("ot")),
-            _si("Sung Psalm",      "Word", note=_ref("psalm"), leader="All"),
+            _si("Scripture",       "Word"),
+            _si("Sung Psalm",      "Word", leader="All"),
             _si("Ministry of Music",  "Word"),
             _si("Growing in Faith",   "Word"),
             _si("Sermon / Message",   "Word"),

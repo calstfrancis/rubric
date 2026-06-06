@@ -87,7 +87,7 @@ Section: misc
 Priority: optional
 Architecture: all
 Installed-Size: $SIZE
-Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, git, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0
 Maintainer: Cal St. Francis <calstfrancis@gmail.com>
 Homepage: https://github.com/calstfrancis/rubric
 Description: GNOME worship service planning tool for UCC ministry

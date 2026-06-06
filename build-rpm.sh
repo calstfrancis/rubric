@@ -64,6 +64,8 @@ Requires:       python3 >= 3.10
 Requires:       python3-gobject
 Requires:       typelib-1_0-Adw-1
 Requires:       typelib-1_0-Gtk-4_0
+Requires:       typelib-1_0-WebKit-6_0
+Requires:       git
 %endif
 
 # Fedora / RHEL / CentOS Stream
@@ -72,6 +74,8 @@ Requires:       python3 >= 3.10
 Requires:       python3-gobject3
 Requires:       gtk4
 Requires:       libadwaita
+Requires:       webkit2gtk4.1
+Requires:       git
 %endif
 
 %description

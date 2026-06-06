@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.14.6 — Clear pre-filled Scripture/Psalm, package dependencies
+
+### Fixed
+- **Scripture and Sung Psalm no longer pre-filled** — "Start with today's lectionary" was injecting the RCL reading references into the notes of the Scripture and Sung Psalm elements. Those fields now start empty so you can look up and insert the text yourself.
+
+### Changed
+- **`git` added as a package dependency** — the deb and RPM now declare `git` as a required dependency so GitHub sync works out of the box on a fresh install.
+- **WebKit added as a package dependency** — `gir1.2-webkit2-4.1` (deb) and `typelib-1_0-WebKit-6_0` (RPM/openSUSE) are now required dependencies, ensuring the live bulletin preview panel is available without a separate install step.
+- **hunspell / pandoc** — neither is used by Rubric; confirmed not added.
+
+---
+
 ## 0.14.5 — Welcome wizard fixed, GitHub sync improved
 
 ### Fixed
