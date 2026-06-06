@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.14.8 — Sidebar, startup ordering, background hymn downloads
+
+### Fixed
+- **Sidebar no longer starts half-visible** — pane position was set before GTK had allocated the widget's size; deferred to first idle so it takes effect correctly.
+- **Restore unsaved work dialog now appears after the changelog** — on first launch after an update, the autosave restore prompt was appearing simultaneously with (and fighting over) the What's New dialog. It now fires only after the changelog is dismissed.
+- **Hymn downloads continue in background** — closing the setup wizard while a hymn title download is running no longer abandons it. Progress callbacks are safely guarded; a toast notification appears on the main window when the download finishes.
+- **Hymn title scraping: og:title first** — Hymnary.org now renders page titles via JavaScript; the static `<title>` tag returns just "Hymnary.org". Switched to reading the `og:title` meta tag, which is set server-side, plus a more browser-like User-Agent. Also moved the rate-limit sleep to apply on every request (not only when a title is found).
+
+---
+
 ## 0.14.7 — Compact view actually compact
 
 ### Fixed

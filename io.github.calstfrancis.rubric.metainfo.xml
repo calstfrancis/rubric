@@ -42,6 +42,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.14.8" date="2026-06-06">
+      <description>
+        <p>Sidebar starts fully visible. Autosave restore dialog now appears after the changelog, not over it. Hymn downloads continue in the background if you close the wizard; toast notification when done. Hymn scraping now uses og:title for reliability.</p>
+      </description>
+    </release>
     <release version="0.14.7" date="2026-06-06">
       <description>
         <p>Compact view now actually reduces row height. Fixes the CSS that was adding padding to divider rows and having no effect on service-item rows.</p>

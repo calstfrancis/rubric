@@ -83,7 +83,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.7"
+APP_VERSION = "0.14.8"
 
 
 config = Config()
@@ -1278,7 +1278,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self.service_entries.append(_entry_from_dict(d))
             self._refresh_order_list()
         GLib.timeout_add_seconds(AUTOSAVE_SECS, self._do_autosave)
-        GLib.idle_add(self._check_autosave)
         GLib.idle_add(self._check_welcome)
         threading.Thread(target=self._background_index_scan, daemon=True).start()
 
@@ -1550,10 +1549,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_shrink_start_child(True); paned.set_shrink_end_child(False); paned.set_position(290)
+        paned.set_shrink_start_child(True); paned.set_shrink_end_child(False)
         paned.set_start_child(self._build_palette_panel())
         self._palette_paned = paned
         self._palette_visible = True
+        GLib.idle_add(lambda: paned.set_position(290))
 
         # Inner paned: order panel | bulletin preview (preview hidden by default)
         self._preview_panel = self._build_preview_panel()
@@ -3274,8 +3274,12 @@ class MainWindow(Adw.ApplicationWindow):
     def _check_welcome(self) -> bool:
         if not config.first_launch_completed:
             self._show_setup_wizard(on_done=self._show_first_launch_wizard)
+            GLib.idle_add(self._check_autosave)
         elif config.last_seen_version != APP_VERSION:
-            self._show_welcome(is_new_version=bool(config.last_seen_version))
+            self._show_welcome(is_new_version=bool(config.last_seen_version),
+                               on_done=self._check_autosave)
+        else:
+            GLib.idle_add(self._check_autosave)
         return False
 
     # ── Setup wizard ─────────────────────────────────────────────────────────
@@ -3383,16 +3387,29 @@ class MainWindow(Adw.ApplicationWindow):
         hymn_grp = Adw.PreferencesGroup()
         p2_dl_bar = Gtk.ProgressBar(); p2_dl_bar.set_visible(False)
         p2_dl_status = Gtk.Label(label=""); p2_dl_status.add_css_class("caption"); p2_dl_status.add_css_class("dim-label")
+        _wizard_open = [True]   # flipped to False when wizard closes
+
         for bk, bk_label, max_n in [("VU","Voices United (VU)",961),("MV","More Voices (MV)",217),("LUS","Let Us Sing (LUS)",150)]:
             dl_row = Adw.ActionRow(title=f"Download {bk_label}")
             dl_btn = Gtk.Button(label="Download", valign=Gtk.Align.CENTER); dl_btn.add_css_class("flat")
-            def _start_dl(_b, book=bk, n=max_n):
-                p2_dl_bar.set_visible(True); p2_dl_bar.set_fraction(0)
-                p2_dl_status.set_label(f"Downloading {book}…")
+            def _start_dl(_b, book=bk, btn=dl_btn):
+                btn.set_sensitive(False)
+                if _wizard_open[0]:
+                    p2_dl_bar.set_visible(True); p2_dl_bar.set_fraction(0)
+                    p2_dl_status.set_label(f"Downloading {book}… (continues in background if you close)")
                 def _prog(done, total):
-                    p2_dl_bar.set_fraction(done / total); p2_dl_bar.set_text(f"{book} {done}/{total}"); return False
+                    if _wizard_open[0]:
+                        p2_dl_bar.set_fraction(done / total)
+                        p2_dl_bar.set_text(f"{book} {done}/{total}")
+                    return False
                 def _done(added):
-                    p2_dl_bar.set_visible(False); p2_dl_status.set_label(f"✓ {added} titles cached from {book}"); return False
+                    if _wizard_open[0]:
+                        p2_dl_bar.set_visible(False)
+                        p2_dl_status.set_label(f"✓ {added} titles cached from {book}")
+                    msg = (f"✓ {added} {book} hymn titles downloaded"
+                           if added else f"{book} download complete — check your network if titles are missing")
+                    self._show_toast(msg, timeout=6)
+                    return False
                 prefetch_hymnal(book, on_progress=_prog, on_done=_done)
             dl_btn.connect("clicked", _start_dl)
             dl_row.add_suffix(dl_btn); hymn_grp.add(dl_row)
@@ -3480,6 +3497,7 @@ class MainWindow(Adw.ApplicationWindow):
             win.close()  # close-request handler schedules on_done
 
         def _on_wizard_close(_w):
+            _wizard_open[0] = False
             if on_done:
                 GLib.idle_add(on_done)
             return False  # always allow close
@@ -3728,7 +3746,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._show_toast(f"Service pre-filled for {week or today.strftime('%-d %B %Y')}",
                          timeout=5)
 
-    def _show_welcome(self, is_new_version: bool = False):
+    def _show_welcome(self, is_new_version: bool = False, on_done=None):
         win = Adw.Window(transient_for=self, modal=True)
         win.set_title("Welcome to Rubric")
         win.set_default_size(680, 560)
@@ -3872,11 +3890,15 @@ class MainWindow(Adw.ApplicationWindow):
         sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
         close_btn = Gtk.Button(label="Get started" if not is_new_version else "Let's go")
         close_btn.add_css_class("suggested-action")
-        def on_close(_):
+        def _on_win_close(_w):
             config.last_seen_version = APP_VERSION
             config.save()
-            win.close()
-        close_btn.connect("clicked", on_close); btn_row.append(close_btn)
+            if on_done:
+                GLib.idle_add(on_done)
+            return False
+        close_btn.connect("clicked", lambda _: win.close())
+        win.connect("close-request", _on_win_close)
+        btn_row.append(close_btn)
         outer.append(btn_row)
         tv.set_content(outer)
         win.present()

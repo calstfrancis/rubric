@@ -74,27 +74,33 @@ def lookup_hymn(prefix: str, number: int, callback):
         try:
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": "Mozilla/5.0 LiturgyPlanner/1.0"},
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"},
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 html = resp.read().decode("utf-8", errors="replace")
 
-            # Hymnary page titles look like:
-            # "Voices United: The Hymn... 16. Mary, woman of the promise | Hymnary.org"
-            # or just "O Come, O Come, Emmanuel | Hymnary.org"
-            m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
-            if m:
-                raw = m.group(1).strip()
-                title = raw.split("|")[0].strip()
-                # Strip leading book name + number: "Book Name 16. Actual Title" -> "Actual Title"
+            title = ""
+            og = re.search(
+                r'<meta\s[^>]*property=["\']og:title["\']\s[^>]*content=["\']([^"\']+)["\']'
+                r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s[^>]*property=["\']og:title["\']',
+                html, re.IGNORECASE)
+            if og:
+                title = (og.group(1) or og.group(2) or "").strip()
                 clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
                 if clean:
                     title = clean.group(1).strip()
-                if title and "hymnary" not in title.lower() and len(title) > 2:
-                    if _DB_OK:
-                        hymn_set(key, title)
-                    GLib.idle_add(callback, title, None)
-                    return
+            else:
+                t = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+                if t:
+                    raw = t.group(1).strip().split("|")[0].strip()
+                    clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
+                    title = clean.group(1).strip() if clean else raw
+
+            if title and "hymnary" not in title.lower() and len(title) > 2:
+                if _DB_OK:
+                    hymn_set(key, title)
+                GLib.idle_add(callback, title, None)
+                return
 
             GLib.idle_add(callback, None, f"#{number} not found in {hymnal_name}")
 
@@ -152,25 +158,38 @@ def prefetch_hymnal(book: str, on_progress=None, on_done=None):
             url = f"https://hymnary.org/hymn/{hymnal_id}/{n}"
             try:
                 req = urllib.request.Request(
-                    url, headers={"User-Agent": "Mozilla/5.0 LiturgyPlanner/1.0"}
+                    url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     html = resp.read().decode("utf-8", errors="replace")
-                m = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
-                if m:
-                    raw = m.group(1).strip()
-                    title = raw.split("|")[0].strip()
-                    clean = re.match(r"^.*?\d+\.\s+(.+)$", title)
+
+                title = ""
+                # og:title is set server-side and reliable even on JS-rendered pages
+                og = re.search(
+                    r'<meta\s[^>]*property=["\']og:title["\']\s[^>]*content=["\']([^"\']+)["\']'
+                    r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s[^>]*property=["\']og:title["\']',
+                    html, re.IGNORECASE)
+                if og:
+                    title = (og.group(1) or og.group(2) or "").strip()
+                    # Strip leading "Book Name: NN. " prefix if present
+                    clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
                     if clean:
                         title = clean.group(1).strip()
-                    hymnal_name = HYMNALS[book][1]
-                    if title and "hymnary" not in title.lower() and len(title) > 2:
-                        if _DB_OK:
-                            hymn_set(key, title)
-                        added += 1
-                        time.sleep(0.25)
+                else:
+                    # Fallback: <title> tag
+                    t = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
+                    if t:
+                        raw = t.group(1).strip().split("|")[0].strip()
+                        clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
+                        title = clean.group(1).strip() if clean else raw
+
+                if title and "hymnary" not in title.lower() and len(title) > 2:
+                    if _DB_OK:
+                        hymn_set(key, title)
+                    added += 1
             except Exception:
                 pass
+            time.sleep(0.25)
             if on_progress:
                 GLib.idle_add(on_progress, n, max_n)
         if on_done:
