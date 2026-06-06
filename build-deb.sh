@@ -128,7 +128,40 @@ tar czf "$WORK/data.tar.gz" --format=gnu -C "$ROOT" .
 printf '2.0\n' > "$WORK/debian-binary"
 
 OUTPUT="$SCRIPT_DIR/${NAME}_${VERSION}_all.deb"
-ar qc "$OUTPUT" "$WORK/debian-binary" "$WORK/control.tar.gz" "$WORK/data.tar.gz"
+
+# Write the ar archive with Python to guarantee correct format:
+# - uid/gid = 0 (root) in ar headers, as dpkg-deb produces
+# - no duplicate members (ar qc appends to existing files)
+# - no extended symbol table entries
+python3 - << PYEOF
+import os, sys
+
+members = [
+    ('debian-binary', '$WORK/debian-binary'),
+    ('control.tar.gz', '$WORK/control.tar.gz'),
+    ('data.tar.gz', '$WORK/data.tar.gz'),
+]
+
+with open('$OUTPUT', 'wb') as out:
+    out.write(b'!<arch>\n')
+    for name, path in members:
+        data = open(path, 'rb').read()
+        size = len(data)
+        # 60-byte ar member header (GNU ar / dpkg-deb format)
+        header = (
+            (name + '/').encode().ljust(16) +   # name, slash-terminated, space-padded
+            b'0           ' +                    # mtime  (12 chars)
+            b'0     ' +                          # uid=0  (6 chars)
+            b'0     ' +                          # gid=0  (6 chars)
+            b'100644  ' +                        # mode   (8 chars)
+            str(size).encode().ljust(10) +       # size   (10 chars)
+            b'\`\n'                              # magic  (2 chars)
+        )
+        out.write(header)
+        out.write(data)
+        if size % 2:
+            out.write(b'\n')  # ar requires even-length members
+PYEOF
 
 echo ""
 echo "Done: $(basename "$OUTPUT")  ($(du -sh "$OUTPUT" | cut -f1))"
