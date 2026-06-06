@@ -95,6 +95,28 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+### Debian/Ubuntu .deb package
+
+Download `rubric-liturgy_<version>_all.deb` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest) and install:
+
+```bash
+sudo apt install ./rubric-liturgy_*.deb
+```
+
+This installs system-wide to `/usr/share/rubric/` and registers the `.desktop` entry, icons, MIME type, and AppStream metainfo automatically.
+
+### openSUSE / Fedora RPM package
+
+Download `rubric-liturgy-<version>-1.noarch.rpm` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest) and install:
+
+```bash
+# openSUSE
+sudo zypper install ./rubric-liturgy-*.noarch.rpm
+
+# Fedora
+sudo dnf install ./rubric-liturgy-*.noarch.rpm
+```
+
 ### git clone (development / manual install)
 
 ```bash

@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.14.4 — deb and RPM packages
+
+### Added
+- **`build-deb.sh`** — builds a native Debian/Ubuntu `.deb` package for system-wide installation using only standard Linux tools (`ar`, `tar`, `gzip` — no dpkg-deb required). Installs the app to `/usr/share/rubric/`, the launcher to `/usr/bin/rubric`, and registers desktop integration (`.desktop` entry, icons, MIME type, AppStream metainfo). Includes post-install hooks to update the MIME database, desktop database, and icon cache. Depends on `python3-gi`, `gir1.2-gtk-4.0`, and `gir1.2-adw-1`.
+- **`build-rpm.sh`** — builds a native `.rpm` package using `rpmbuild`. Generates a spec file with distro-conditional dependencies (openSUSE typelibs vs Fedora `gtk4`/`libadwaita`). Includes `%post`/`%postun` hooks using openSUSE RPM macros or plain `update-*` commands depending on the build host. Output RPM goes to the project directory ready to install with `zypper` or `dnf`.
+
+---
+
 ## 0.14.3 — Simple mode switch label, in-app changelog, Help/FAQ available in all installs
 
 ### Changed

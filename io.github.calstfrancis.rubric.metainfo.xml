@@ -42,6 +42,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.14.4" date="2026-06-06">
+      <description>
+        <p>Native .deb (Debian/Ubuntu) and .rpm (openSUSE/Fedora) packages. Build scripts added: build-deb.sh and build-rpm.sh.</p>
+      </description>
+    </release>
     <release version="0.12" date="2026-05-16">
       <description>
         <p>Simple mode (HTML-only workflow, no LaTeX required), Service Planner, GitHub sync, redo support, translation selector (WEB/KJV/ASV/ESV), and HTML bulletin export.</p>
