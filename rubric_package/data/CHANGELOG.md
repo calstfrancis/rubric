@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.14.7 — Compact view actually compact
+
+### Fixed
+- **Compact view now reduces row height** — the previous CSS was adding padding to divider rows (making them taller) while having no effect on service-item rows at all. Rewritten to correctly reduce `Adw.ActionRow` internal padding and shrink divider row margins.
+
+---
+
 ## 0.14.6 — Clear pre-filled Scripture/Psalm, package dependencies
 
 ### Fixed

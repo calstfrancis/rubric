@@ -83,7 +83,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.6"
+APP_VERSION = "0.14.7"
 
 
 config = Config()
@@ -7820,8 +7820,11 @@ class LiturgyPlannerApp(Adw.Application):
             pass
         css = Gtk.CssProvider()
         css.load_from_data(b"""
-.compact-mode .boxed-list row { min-height: 38px; }
-.compact-mode .boxed-list row > box { padding-top: 3px; padding-bottom: 3px; }
+/* Compact mode: item rows (Adw.ActionRow) */
+.compact-mode .boxed-list row.activatable { min-height: 36px; }
+.compact-mode .boxed-list actionrow > box { padding-top: 3px; padding-bottom: 3px; min-height: 24px; }
+/* Compact mode: divider rows (custom Gtk.ListBoxRow > Gtk.Box) */
+.compact-mode .boxed-list row > box { margin-top: 3px; margin-bottom: 3px; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,
