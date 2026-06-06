@@ -4,6 +4,19 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.14.5 — Welcome wizard fixed, GitHub sync improved
+
+### Fixed
+- **Welcome wizard buttons dead** — `close-request` handler in the setup wizard returned a truthy integer (the `GLib.idle_add` callback ID) instead of `False`, telling GTK not to close the window. The dialog was permanently stuck — the X button did nothing and the app could not be quit. Fixed to always return `False`.
+- **Double first-launch wizard** — when the setup wizard finished, the `_show_first_launch_wizard` callback was scheduled twice (once from `close-request`, once from `_close()`), stacking two modal windows. Removed the duplicate call.
+- **Welcome choice rows unreliable** — the `activated` signal on `Adw.ActionRow` with `SelectionMode.NONE` was not consistently firing on click. Switched to `lb.connect("row-activated", …)` on the `Gtk.ListBox`, which is reliable in all libadwaita versions.
+
+### Changed
+- **GitHub sync: pull before push** — the sync button now pulls remote changes (with `--rebase`) before pushing, so two computers using the same repository don't get rejected pushes. If a genuine conflict exists, the rebase is aborted cleanly and a clear message explains what happened.
+- **GitHub auth error now actionable** — authentication failures show step-by-step instructions for creating a Personal Access Token and storing credentials with `git credential.helper store`, instead of just pointing at a URL.
+
+---
+
 ## 0.14.4 — deb and RPM packages
 
 ### Added

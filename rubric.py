@@ -83,7 +83,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.4"
+APP_VERSION = "0.14.5"
 
 
 config = Config()
@@ -3477,13 +3477,17 @@ class MainWindow(Adw.ApplicationWindow):
             if _cur[0] < len(pages) - 1: _go(_cur[0] + 1)
             else: _close()
         def _close():
-            win.close()
-            if on_done: GLib.idle_add(on_done)
+            win.close()  # close-request handler schedules on_done
+
+        def _on_wizard_close(_w):
+            if on_done:
+                GLib.idle_add(on_done)
+            return False  # always allow close
 
         next_btn.connect("clicked", _on_next)
         back_btn.connect("clicked", _on_back)
         skip_btn.connect("clicked", _on_skip)
-        win.connect("close-request", lambda _w: (GLib.idle_add(on_done) if on_done else None) or False)
+        win.connect("close-request", _on_wizard_close)
         _go(0)
         win.present()
 
@@ -3651,10 +3655,13 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._show_quickstart_banner()
 
-        lect_row.connect("activated",  lambda _: _finish("lect"))
-        blank_row.connect("activated", lambda _: _finish("blank"))
-        tour_row.connect("activated",  lambda _: _finish("tour"))
-        skip_btn.connect("clicked",    lambda _: _finish("blank"))
+        def _on_row_activated(_lb, row):
+            if row is lect_row:  _finish("lect")
+            elif row is blank_row: _finish("blank")
+            elif row is tour_row:  _finish("tour")
+        lb.connect("row-activated", _on_row_activated)
+        skip_btn.connect("clicked", lambda _: _finish("blank"))
+        win.connect("close-request", lambda _w: _finish("blank") or False)
         win.present()
 
     # ── Lectionary service seeding ────────────────────────────────────────────
@@ -5954,11 +5961,26 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 else:
                     self._show_toast(heading, timeout=6)
 
+            _AUTH_HELP = (
+                "GitHub requires a Personal Access Token (PAT) — passwords no longer work.\n\n"
+                "To create one:\n"
+                "1. Go to github.com → Settings → Developer settings\n"
+                "   → Personal access tokens → Fine-grained tokens\n"
+                "2. Generate a new token with Contents: Read and Write\n"
+                "   permission for your repository\n"
+                "3. Copy the token\n\n"
+                "To save it so you're not asked again, run in a terminal:\n"
+                "   git config --global credential.helper store\n"
+                "Then push once — enter your GitHub username and the token\n"
+                "as the password when prompted."
+            )
+
             try:
+                # ── Stage and commit local changes ──────────────────────────
                 add_r = subprocess.run(["git", "-C", repo, "add", "-A"],
                                        capture_output=True, text=True, timeout=10)
                 if add_r.returncode != 0:
-                    GLib.idle_add(abort, "Push failed",
+                    GLib.idle_add(abort, "Sync failed",
                                   add_r.stderr.strip() or "git add failed")
                     return
 
@@ -5969,9 +5991,42 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                                               capture_output=True, text=True, timeout=15)
                     if commit_r.returncode != 0:
                         out = (commit_r.stderr or commit_r.stdout or "").strip()
-                        GLib.idle_add(abort, "Push failed (commit)", out)
+                        GLib.idle_add(abort, "Sync failed (commit)", out)
                         return
 
+                # ── Pull remote changes before pushing ──────────────────────
+                has_remote = subprocess.run(
+                    ["git", "-C", repo, "remote"],
+                    capture_output=True, text=True, timeout=5
+                ).stdout.strip()
+
+                if has_remote:
+                    pull_r = subprocess.run(
+                        ["git", "-C", repo, "pull", "--rebase"],
+                        capture_output=True, text=True, timeout=60
+                    )
+                    if pull_r.returncode != 0:
+                        pull_out = (pull_r.stdout + pull_r.stderr).strip()
+                        pull_low = pull_out.lower()
+                        # Abort a broken rebase so the repo isn't left mid-rebase
+                        subprocess.run(["git", "-C", repo, "rebase", "--abort"],
+                                       capture_output=True, timeout=10)
+                        if "permission denied" in pull_low or "authentication" in pull_low:
+                            GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
+                        elif "conflict" in pull_low or "merge conflict" in pull_low:
+                            GLib.idle_add(abort, "Sync conflict",
+                                "Another computer has made changes that conflict with yours.\n\n"
+                                "Open a terminal in your repository folder and run:\n"
+                                "  git status\n"
+                                "to see which files conflict, then resolve them manually.")
+                        elif "no tracking" in pull_low or "no such ref" in pull_low \
+                                or pull_out == "":
+                            pass  # no upstream yet — first push will set it
+                        else:
+                            GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
+                            return
+
+                # ── Push ────────────────────────────────────────────────────
                 push_r = subprocess.run(["git", "-C", repo, "push"],
                                         capture_output=True, text=True, timeout=30)
                 if push_r.returncode != 0:
@@ -5992,24 +6047,22 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                             self._error("Push failed",
                                 "Repository not found on GitHub.\n\n"
                                 "Check the URL in Preferences → GitHub.")
-                        elif "Permission denied" in err or "Authentication failed" in err:
-                            self._error("Push failed",
-                                "Authentication failed.\n\n"
-                                "Make sure you have SSH keys set up, or use a GitHub\n"
-                                "personal access token.\n\nSee: github.com/settings/keys")
+                        elif "Permission denied" in err or "Authentication failed" in err \
+                                or "authentication" in err.lower():
+                            self._error("Authentication failed", _AUTH_HELP)
                         else:
                             self._error("Push failed", err[:400])
                     else:
-                        self._show_toast("✓ Pushed to GitHub", timeout=4)
+                        self._show_toast("✓ Synced to GitHub", timeout=4)
 
                 GLib.idle_add(finish)
 
             except subprocess.TimeoutExpired:
-                GLib.idle_add(abort, "Push timed out — check your network connection.")
+                GLib.idle_add(abort, "Sync timed out — check your network connection.")
             except FileNotFoundError:
                 GLib.idle_add(abort, "git not found", "Install git: sudo zypper install git")
             except Exception as e:
-                GLib.idle_add(abort, "Push error", str(e))
+                GLib.idle_add(abort, "Sync error", str(e))
 
         threading.Thread(target=run, daemon=True).start()
 
