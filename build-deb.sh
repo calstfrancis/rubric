@@ -89,12 +89,19 @@ SIZE=$(du -sk "$ROOT" | cut -f1)
 CTRLDIR="$WORK/control"
 mkdir -p "$CTRLDIR"
 
+# Architecture: amd64 if we bundled a binary, all otherwise
+if [ -f "$APPDIR/bin/typst" ] || [ -f "$APPDIR/rubric_package/bin/typst" ]; then
+    DEB_ARCH="amd64"
+else
+    DEB_ARCH="all"
+fi
+
 cat > "$CTRLDIR/control" << EOF
 Package: rubric-liturgy
 Version: $VERSION
 Section: misc
 Priority: optional
-Architecture: all
+Architecture: $DEB_ARCH
 Installed-Size: $SIZE
 Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, git, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0
 Maintainer: Cal St. Francis <calstfrancis@gmail.com>
@@ -136,7 +143,7 @@ tar czf "$WORK/data.tar.gz" --format=gnu -C "$ROOT" .
 # ── Assemble .deb (ar archive) ─────────────────────────────────────────────────
 printf '2.0\n' > "$WORK/debian-binary"
 
-OUTPUT="$SCRIPT_DIR/${NAME}_${VERSION}_all.deb"
+OUTPUT="$SCRIPT_DIR/${NAME}_${VERSION}_${DEB_ARCH}.deb"
 
 # Write the ar archive with Python to guarantee correct format:
 # - uid/gid = 0 (root) in ar headers, as dpkg-deb produces

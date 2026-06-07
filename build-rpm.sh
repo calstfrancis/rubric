@@ -39,13 +39,20 @@ find "$SRCDIR/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/d
 find "$SRCDIR/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
 
 # Typst binary — bundled in rubric_package/bin/ or copied from system
+TYPST_BUNDLED=false
 if [ -f "rubric_package/bin/typst" ]; then
     mkdir -p "$SRCDIR/rubric_package/bin"
     install -m 755 rubric_package/bin/typst "$SRCDIR/rubric_package/bin/typst"
+    TYPST_BUNDLED=true
 elif command -v typst &>/dev/null; then
     mkdir -p "$SRCDIR/bin"
     install -m 755 "$(command -v typst)" "$SRCDIR/bin/typst"
+    TYPST_BUNDLED=true
 fi
+
+# Architecture: x86_64 if we're bundling a binary, noarch otherwise
+RPM_ARCH="noarch"
+$TYPST_BUNDLED && RPM_ARCH="x86_64"
 
 cp io.github.calstfrancis.rubric.desktop "$SRCDIR/"
 cp io.github.calstfrancis.rubric.metainfo.xml "$SRCDIR/"
@@ -65,7 +72,7 @@ Release:        $RELEASE%{?dist}
 Summary:        GNOME worship service planning tool for UCC ministry
 License:        GPL-3.0-or-later
 URL:            https://github.com/calstfrancis/rubric
-BuildArch:      noarch
+BuildArch:      $RPM_ARCH
 Source0:        %{name}-%{version}.tar.gz
 
 # openSUSE
