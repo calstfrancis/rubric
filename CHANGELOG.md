@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.0 — Typst polish, packaging, and documentation
+
+### Added
+- **Typst syntax highlighting** — the Typst mode editor now uses GtkSourceView 5 (if installed) with a bundled `typst.lang` language definition covering headings, bold, italic, function calls, comments, math, labels, and all Rubric-specific keywords. Falls back to plain monospace editor if GtkSourceView is unavailable.
+- **Preferences → Typst Files** — in-app editor for the four Typst preamble templates (`bulletin_print`, `bulletin_digital`, `manuscript`, `_shared`). Edit opens a GtkSourceView editor with Typst highlighting; Save override writes to `~/.config/rubric/templates/` (persists across upgrades); Reset to default removes the override.
+- **Structured error messages** — `typst compile` stderr is now parsed into structured errors (message + file:line:col). All three compilation paths (bulletin, manuscript, preview) show a short human-readable message including the line number.
+- **`mark_error_line()`** on `ElementContentWidget` — highlights the error line in Typst mode when GtkSourceView is available.
+- **Typst binary bundled in packages** — `build-deb.sh` and `build-rpm.sh` now include the system `typst` binary at build time (`/usr/share/rubric/bin/typst`, `chmod 755`).
+
+### Changed
+- **`.gitignore`** — added Typst temp preview files (`rubric_preview_*.typ/pdf`) and `rubric_package/bin/` (bundled binary path, too large for git).
+- **`metainfo.xml`** — removed all LaTeX references; updated feature list to describe Typst, rich text editor, and live preview.
+- **`README.md`**, **`HELP.md`**, **`FAQ.md`** — LaTeX/xelatex references replaced with Typst throughout. Content editor (rich text + Typst mode toggle) documented. New Typst Templates section in HELP. New "Typst and PDF" FAQ section.
+- **`install.sh`** — removed xelatex dependency check; added typst binary detection and chmod step.
+- Version bumped to **0.15.0**.
+
+---
+
 ## 0.14.8 — Sidebar, startup ordering, background hymn downloads
 
 ### Fixed

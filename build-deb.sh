@@ -44,6 +44,15 @@ cp -r rubric_package "$APPDIR/"
 find "$APPDIR/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 find "$APPDIR/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
 
+# Typst binary — bundled in rubric_package/bin/ or copied from system
+if [ -f "rubric_package/bin/typst" ]; then
+    mkdir -p "$APPDIR/rubric_package/bin"
+    install -m 755 rubric_package/bin/typst "$APPDIR/rubric_package/bin/typst"
+elif command -v typst &>/dev/null; then
+    mkdir -p "$APPDIR/bin"
+    install -m 755 "$(command -v typst)" "$APPDIR/bin/typst"
+fi
+
 # Documentation bundled in app dir
 for f in HELP.md FAQ.md CHANGELOG.md; do
     [ -f "$f" ] && cp "$f" "$APPDIR/" || true

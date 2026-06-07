@@ -8,169 +8,219 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rubric_package.utils.latex import (
-    latex_escape,
-    note_for_latex,
-    passage_to_latex,
-    migrate_scripture_note,
+from rubric_package.utils.typst import (
+    typst_escape,
+    note_for_typst,
+    passage_to_typst,
+    strip_typst_for_html,
+    strip_typst_plain,
 )
 from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
 from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS
+from rubric_package.utils.rich_typst import process_inline, TAG_BOLD, TAG_ITALIC
 
 
-class TestLatexEscape(unittest.TestCase):
-    """LaTeX escaping tests."""
-
-    def test_escapes_backslash(self):
-        """Backslash is escaped."""
-        result = latex_escape("\\text")
-        self.assertIn("textbackslash", result)
-        # Result should contain textbackslash and end with text
-        self.assertTrue(result.startswith("\\textbackslash"))
-        self.assertTrue(result.endswith("text"))
-
-    def test_escapes_ampersand(self):
-        """Ampersand is escaped."""
-        result = latex_escape("A & B")
-        self.assertEqual(result, "A \\& B")
-
-    def test_escapes_percent(self):
-        """Percent is escaped."""
-        result = latex_escape("100%")
-        self.assertEqual(result, "100\\%")
-
-    def test_escapes_dollar(self):
-        """Dollar sign is escaped."""
-        result = latex_escape("$100")
-        self.assertEqual(result, "\\$100")
+class TestTypstEscape(unittest.TestCase):
+    """Typst escaping tests."""
 
     def test_escapes_hash(self):
         """Hash is escaped."""
-        result = latex_escape("#1")
+        result = typst_escape("#1")
         self.assertEqual(result, "\\#1")
+
+    def test_escapes_asterisk(self):
+        """Asterisk is escaped."""
+        result = typst_escape("*bold*")
+        self.assertEqual(result, "\\*bold\\*")
 
     def test_escapes_underscore(self):
         """Underscore is escaped."""
-        result = latex_escape("text_here")
+        result = typst_escape("text_here")
         self.assertEqual(result, "text\\_here")
 
-    def test_escapes_braces(self):
-        """Braces are escaped."""
-        result = latex_escape("{text}")
-        self.assertEqual(result, "\\{text\\}")
+    def test_escapes_at(self):
+        """At-sign is escaped."""
+        result = typst_escape("@label")
+        self.assertEqual(result, "\\@label")
+
+    def test_escapes_dollar(self):
+        """Dollar sign is escaped."""
+        result = typst_escape("$100")
+        self.assertEqual(result, "\\$100")
+
+    def test_escapes_angle_brackets(self):
+        """Angle brackets are escaped."""
+        result = typst_escape("<tag>")
+        self.assertEqual(result, "\\<tag\\>")
 
     def test_escapes_multiple(self):
-        """Multiple special chars are escaped."""
-        result = latex_escape("100% & $50")
-        self.assertEqual(result, "100\\% \\& \\$50")
+        """Multiple special chars are all escaped."""
+        result = typst_escape("#1 *bold* _em_")
+        self.assertEqual(result, "\\#1 \\*bold\\* \\_em\\_")
 
     def test_plain_text_unchanged(self):
         """Plain text without special chars is unchanged."""
-        result = latex_escape("Hello World")
+        result = typst_escape("Hello World")
         self.assertEqual(result, "Hello World")
 
     def test_empty_string(self):
         """Empty string returns empty."""
-        result = latex_escape("")
+        result = typst_escape("")
         self.assertEqual(result, "")
 
 
-class TestNoteForLatex(unittest.TestCase):
-    """Note preparation for LaTeX tests."""
+class TestNoteForTypst(unittest.TestCase):
+    """Note preparation for Typst tests."""
 
     def test_empty_note(self):
         """Empty note returns empty."""
-        result = note_for_latex("")
+        result = note_for_typst("")
         self.assertEqual(result, "")
 
     def test_plain_text_escaped(self):
-        """Plain text is escaped."""
-        result = note_for_latex("100% sure")
-        self.assertEqual(result, "100\\% sure")
+        """Plain text with special chars is escaped."""
+        result = note_for_typst("Pray for #1")
+        self.assertEqual(result, "Pray for \\#1")
 
-    def test_latex_commands_preserved(self):
-        """Lines starting with backslash are preserved."""
-        note = "\\textit{Italic text}"
-        result = note_for_latex(note)
+    def test_typst_commands_preserved(self):
+        """Notes with Typst function calls are passed through as-is."""
+        note = "#scripture[\n  #sverse(1)[In the beginning...]\n]"
+        result = note_for_typst(note)
         self.assertEqual(result, note)
 
-    def test_mixed_content(self):
-        """Mixed content is handled correctly."""
-        note = "Regular text\\n\\textbf{bold}"
-        result = note_for_latex(note)
-        # Should be escaped because no line starts with \
-        self.assertIn("\\&" if "&" in result else "text", result)
+    def test_typst_passthrough_on_hash_at_line_start(self):
+        """A line starting with #letter triggers passthrough."""
+        note = "Some text\n#ldr[Leader: Say this]"
+        result = note_for_typst(note)
+        self.assertEqual(result, note)
+
+    def test_plain_multiline_escaped(self):
+        """Plain multiline text without # at line start is escaped."""
+        note = "Line one\nLine two"
+        result = note_for_typst(note)
+        self.assertEqual(result, note)  # no special chars to escape
 
 
-class TestPassageToLatex(unittest.TestCase):
-    """Bible passage to LaTeX conversion tests."""
+class TestPassageToTypst(unittest.TestCase):
+    """Bible passage to Typst conversion tests."""
 
     def test_single_verse(self):
-        """Convert single verse."""
+        """Convert single verse produces sverse and scripture blocks."""
         text = "1 In the beginning..."
-        result = passage_to_latex("Gen 1:1", text)
-        self.assertIn("\\sverse{1}", result)
-        self.assertIn("\\begin{scripture}", result)
-        self.assertIn("\\end{scripture}", result)
+        result = passage_to_typst("Gen 1:1", text)
+        self.assertIn("#sverse(1)", result)
+        self.assertIn("#scripture[", result)
+        self.assertIn("In the beginning", result)
 
     def test_multiple_verses(self):
-        """Convert multiple verses."""
+        """Multiple verses each get their own sverse."""
         text = "1 First verse\n2 Second verse\n3 Third verse"
-        result = passage_to_latex("Test 1:1-3", text)
-        self.assertIn("\\sverse{1}", result)
-        self.assertIn("\\sverse{2}", result)
-        self.assertIn("\\sverse{3}", result)
+        result = passage_to_typst("Test 1:1-3", text)
+        self.assertIn("#sverse(1)", result)
+        self.assertIn("#sverse(2)", result)
+        self.assertIn("#sverse(3)", result)
 
-    def test_verse_continuation(self):
-        """Verse split across lines is joined."""
+    def test_verse_continuation_joined(self):
+        """Continuation lines are joined into the same sverse."""
         text = "1 First part\nsecond part of verse"
-        result = passage_to_latex("Test 1:1", text)
-        # Both parts should be in one sverse
+        result = passage_to_typst("Test 1:1", text)
         self.assertIn("First part", result)
         self.assertIn("second part", result)
+        self.assertEqual(result.count("#sverse"), 1)
 
     def test_reference_in_output(self):
-        """Reference appears in output."""
-        result = passage_to_latex("John 3:16", "16 For God so loved...")
+        """Reference and translation label appear in the header line."""
+        result = passage_to_typst("John 3:16", "16 For God so loved...", "web")
         self.assertIn("John 3:16", result)
         self.assertIn("(WEB)", result)
 
+    def test_translation_label_uppercase(self):
+        """Translation key is uppercased in the label."""
+        result = passage_to_typst("Ps 23:1", "1 The Lord is my shepherd", "esv")
+        self.assertIn("(ESV)", result)
+
     def test_empty_text(self):
-        """Empty text handled gracefully."""
-        result = passage_to_latex("Ref", "")
-        self.assertIn("\\begin{scripture}", result)
+        """Empty verse text produces a scripture block with no sverse lines."""
+        result = passage_to_typst("Ref", "")
+        self.assertIn("#scripture[", result)
+        self.assertNotIn("#sverse", result)
+
+    def test_special_chars_in_reference_escaped(self):
+        """Special Typst chars in the reference are escaped."""
+        result = passage_to_typst("Ps 23:1 #special", "1 Text")
+        self.assertIn("\\#special", result)
 
 
-class TestMigrateScriptureNote(unittest.TestCase):
-    """Scripture note migration tests."""
+class TestStripTypstForHtml(unittest.TestCase):
+    """strip_typst_for_html tests."""
 
-    def test_no_quotation_returns_unchanged(self):
-        """Text without quotation environment is unchanged."""
-        text = "Regular note text"
-        result = migrate_scripture_note(text)
-        self.assertEqual(result, text)
+    def test_scripture_content_preserved(self):
+        """Verse text content is preserved when stripping scripture markup."""
+        text = "#scripture[\n  #sverse(1)[In the beginning]\n]"
+        result = strip_typst_for_html(text)
+        self.assertIn("In the beginning", result)
 
-    def test_migrates_quotation(self):
-        """Old quotation format is migrated."""
-        note = r"""\begin{quotation}
-\textit{\small John 3:16}
-\noindent\textsuperscript{16}For God so loved...
-\end{quotation}"""
-        result = migrate_scripture_note(note)
-        self.assertIn("\\begin{scripture}", result)
-        self.assertIn("\\end{scripture}", result)
-        self.assertIn("\\sverse", result)
+    def test_scripture_nested_brackets_multi_verse(self):
+        """All sverse content preserved when scripture has multiple nested brackets."""
+        text = "#scripture[\n  #sverse(1)[First verse]\n  #sverse(2)[Second verse]\n]"
+        result = strip_typst_for_html(text)
+        self.assertIn("First verse", result)
+        self.assertIn("Second verse", result)
 
-    def test_preserves_pre_post_content(self):
-        """Content before/after quotation is preserved."""
-        note = r"""Before
-\begin{quotation}
-\noindent\textsuperscript{1}Verse
-\end{quotation}
-After"""
-        result = migrate_scripture_note(note)
-        self.assertIn("Before", result)
-        self.assertIn("After", result)
+    def test_leader_note_with_strong_stripped(self):
+        """#leader-note containing #strong[...] is fully stripped."""
+        text = "#leader-note[say *this* and #strong[that]]"
+        result = strip_typst_for_html(text)
+        self.assertNotIn("this", result)
+        self.assertNotIn("that", result)
+
+    def test_bold_markup(self):
+        """*bold* becomes <strong>."""
+        result = strip_typst_for_html("*hello*")
+        self.assertIn("<strong>hello</strong>", result)
+
+    def test_italic_markup(self):
+        """_italic_ becomes <em>."""
+        result = strip_typst_for_html("_hello_")
+        self.assertIn("<em>hello</em>", result)
+
+    def test_leader_note_stripped(self):
+        """#leader-note[...] is removed entirely."""
+        result = strip_typst_for_html("#leader-note[For the minister only]")
+        self.assertNotIn("For the minister only", result)
+        self.assertNotIn("#leader-note", result)
+
+    def test_plain_text_unchanged(self):
+        """Plain text passes through."""
+        result = strip_typst_for_html("Hello World")
+        self.assertEqual(result, "Hello World")
+
+
+class TestStripTypstPlain(unittest.TestCase):
+    """strip_typst_plain tests."""
+
+    def test_scripture_to_plain(self):
+        """#scripture block becomes plain numbered verse text."""
+        text = "#scripture[\n  #sverse(1)[In the beginning]\n]"
+        result = strip_typst_plain(text)
+        self.assertIn("In the beginning", result)
+
+    def test_leader_note_stripped(self):
+        """#leader-note[...] is removed entirely."""
+        result = strip_typst_plain("#leader-note[Private note]")
+        self.assertNotIn("Private note", result)
+
+    def test_bold_markup_stripped(self):
+        """*bold* is stripped to plain text."""
+        result = strip_typst_plain("*hello*")
+        self.assertIn("hello", result)
+        self.assertNotIn("*", result)
+
+    def test_italic_markup_stripped(self):
+        """_italic_ is stripped to plain text."""
+        result = strip_typst_plain("_hello_")
+        self.assertIn("hello", result)
+        self.assertNotIn("_", result)
 
 
 class TestSectionColour(unittest.TestCase):
@@ -186,7 +236,6 @@ class TestSectionColour(unittest.TestCase):
         """Different sections may have different colors."""
         c1 = section_colour("Gathering")
         c2 = section_colour("Word")
-        # They may or may not be different, but both should be valid
         self.assertTrue(c1.startswith("#"))
         self.assertTrue(c2.startswith("#"))
 
@@ -235,37 +284,29 @@ class TestIsHymnElement(unittest.TestCase):
     """Hymn element detection tests."""
 
     def test_detects_hymn(self):
-        """Detects 'hymn' in name."""
         self.assertTrue(is_hymn_element("Opening Hymn"))
 
     def test_detects_psalm(self):
-        """Detects 'psalm' in name."""
         self.assertTrue(is_hymn_element("Sung Psalm"))
 
     def test_detects_song(self):
-        """Detects 'song' in name."""
         self.assertTrue(is_hymn_element("Song of Praise"))
 
     def test_detects_music(self):
-        """Detects 'music' in name."""
         self.assertTrue(is_hymn_element("Special Music"))
 
     def test_detects_anthem(self):
-        """Detects 'anthem' in name."""
         self.assertTrue(is_hymn_element("Choral Anthem"))
 
     def test_detects_gloria(self):
-        """Detects 'gloria' in name."""
         self.assertTrue(is_hymn_element("Gloria Patri"))
 
     def test_case_insensitive(self):
-        """Detection is case insensitive."""
         self.assertTrue(is_hymn_element("HYMN"))
         self.assertTrue(is_hymn_element("Hymn"))
         self.assertTrue(is_hymn_element("hymn"))
 
     def test_non_hymn_returns_false(self):
-        """Non-hymn elements return False."""
         self.assertFalse(is_hymn_element("Sermon"))
         self.assertFalse(is_hymn_element("Prayer"))
         self.assertFalse(is_hymn_element("Reading"))
@@ -275,13 +316,57 @@ class TestHymnKeywords(unittest.TestCase):
     """HYMN_KEYWORDS constant tests."""
 
     def test_contains_expected_keywords(self):
-        """Contains expected hymn keywords."""
         self.assertIn("hymn", HYMN_KEYWORDS)
         self.assertIn("psalm", HYMN_KEYWORDS)
         self.assertIn("song", HYMN_KEYWORDS)
         self.assertIn("music", HYMN_KEYWORDS)
         self.assertIn("anthem", HYMN_KEYWORDS)
         self.assertIn("gloria", HYMN_KEYWORDS)
+
+
+class TestProcessInline(unittest.TestCase):
+    """process_inline pure-Python unit tests."""
+
+    def test_plain_text_no_tags(self):
+        result = process_inline("Hello world")
+        self.assertEqual(result, [("Hello world", frozenset())])
+
+    def test_bold(self):
+        result = process_inline("*bold*")
+        self.assertEqual(result, [("bold", frozenset({TAG_BOLD}))])
+
+    def test_italic(self):
+        result = process_inline("_italic_")
+        self.assertEqual(result, [("italic", frozenset({TAG_ITALIC}))])
+
+    def test_mixed(self):
+        result = process_inline("say *bold* and _italic_")
+        texts = [frag for frag, _ in result]
+        self.assertIn("bold", texts)
+        self.assertIn("italic", texts)
+        bold_tags = [tags for frag, tags in result if frag == "bold"][0]
+        italic_tags = [tags for frag, tags in result if frag == "italic"][0]
+        self.assertIn(TAG_BOLD, bold_tags)
+        self.assertIn(TAG_ITALIC, italic_tags)
+
+    def test_strong_fn_normalised_to_bold(self):
+        result = process_inline("#strong[word]")
+        self.assertEqual(result, [("word", frozenset({TAG_BOLD}))])
+
+    def test_emph_fn_normalised_to_italic(self):
+        result = process_inline("#emph[word]")
+        self.assertEqual(result, [("word", frozenset({TAG_ITALIC}))])
+
+    def test_empty(self):
+        result = process_inline("")
+        self.assertEqual(result, [])
+
+    def test_surrounding_text_preserved(self):
+        result = process_inline("before *bold* after")
+        all_text = "".join(frag for frag, _ in result)
+        self.assertEqual(all_text, "before bold after")
+        bold_frags = [f for f, t in result if TAG_BOLD in t]
+        self.assertEqual(bold_frags, ["bold"])
 
 
 if __name__ == "__main__":

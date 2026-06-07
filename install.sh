@@ -31,15 +31,13 @@ print('  GTK4 + libadwaita: OK')
     exit 1
 }
 
-# Optional: xelatex + memoir for PDF export
-if command -v xelatex &>/dev/null; then
-    echo "  xelatex: OK"
-    if ! kpsewhich memoir.cls &>/dev/null; then
-        echo "  NOTE: 'memoir' TeX package not found — bulletin PDF export will fail."
-        echo "        Install with:  tlmgr install memoir"
-    fi
+# Typst (bundled binary preferred; system fallback)
+if [ -f "$SCRIPT_DIR/rubric_package/bin/typst" ]; then
+    echo "  typst: bundled (rubric_package/bin/typst)"
+elif command -v typst &>/dev/null; then
+    echo "  typst: $(command -v typst) — PDF compilation available"
 else
-    echo "  xelatex: not found (PDF export unavailable — simple mode HTML works fine)"
+    echo "  typst: not found — PDF compilation unavailable (HTML export works fine)"
 fi
 
 # ── App files ─────────────────────────────────────────────────────────────────
@@ -55,6 +53,11 @@ if [ -d "$SCRIPT_DIR/rubric_package" ]; then
     cp -r "$SCRIPT_DIR/rubric_package" "$APP_DIR/"
     find "$APP_DIR/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
     find "$APP_DIR/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
+    # Restore typst binary executable bit if bundled
+    if [ -f "$APP_DIR/rubric_package/bin/typst" ]; then
+        chmod +x "$APP_DIR/rubric_package/bin/typst"
+        echo "  typst binary: installed to $APP_DIR/rubric_package/bin/typst"
+    fi
 else
     echo "ERROR: rubric_package/ not found — cannot install." >&2
     exit 1

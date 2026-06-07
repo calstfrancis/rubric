@@ -1,3 +1,5 @@
-"""GTK views for Rubric (kept in main rubric.py for now)."""
+"""GTK4 view widgets for Rubric."""
 
-__all__ = []
+from .element_content import ElementContentWidget
+
+__all__ = ["ElementContentWidget"]

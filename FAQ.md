@@ -114,17 +114,37 @@ Install WebKit: `sudo zypper install python3-webkit2` (or `sudo apt install pyth
 
 **Q: What is Simple mode?**
 
-Simple mode is the default experience for new users. It hides features that require LaTeX (PDF compilation, LaTeX export, responsive reading builder, snippets) and GitHub sync, keeping the interface focused on planning and writing. Bulletin export becomes an HTML file that opens in your browser — no TeX Live required.
+Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes — no TeX Live required.
 
 Toggle it off any time in **Preferences → View → Simple mode**.
 
 **Q: I turned off Simple mode. Where is everything?**
 
-Close and reopen Preferences — new tabs appear for LaTeX preamble and Snippets. The toolbar gains the GitHub sync button and document/print icons. The hamburger menu expands with LaTeX export, CSV export, GitHub sync, snippets, and responsive reading options. All keyboard shortcuts continue to work regardless of mode.
+The toolbar gains the GitHub sync button and document/print icons. The hamburger menu expands with CSV export, GitHub sync, snippets, and responsive reading options. All keyboard shortcuts continue to work regardless of mode.
 
 **Q: I want to produce a proper print PDF for the bulletin. Do I need LaTeX?**
 
-Yes, for the LaTeX-compiled PDF you need TeX Live + `memoir` package. In simple mode the bulletin exports as HTML — open it in your browser and use File → Print to produce a PDF. For most congregational use the HTML output is indistinguishable from the LaTeX version.
+No. Rubric includes a bundled [Typst](https://typst.app/) typesetter. PDF export works out of the box — no TeX Live, no LaTeX installation. If you prefer HTML, export as HTML and use File → Print in your browser.
+
+---
+
+## Typst and PDF
+
+**Q: Can I use custom Typst markup in my element content?**
+
+Yes. Toggle any element to **Typst mode** (the **Typst** button at the top right of the content editor). You can enter any valid Typst, including functions not in Rubric's supported subset. The full Typst source is passed through to the compiled document unchanged. Just note that the rich-text editor can only display the subset it knows about — if you switch back to rich text, unsupported constructs appear as literal text (no data loss).
+
+**Q: Where are the Typst template files?**
+
+Bundled templates live inside the application package (read-only). Go to **Preferences → Typst Files**, click **Edit…** on any template, and **Save override** to create an editable copy at `~/.config/rubric/templates/<name>.typ`. Rubric checks that folder on every compile, so your changes persist across upgrades. Click **Reset to default** to remove an override.
+
+**Q: The four template names are bulletin_print, bulletin_digital, manuscript, and _shared. What does _shared contain?**
+
+`_shared.typ` defines Rubric's custom Typst functions: `#movement` (section heading), `#sverse` (verse with superscript number), `#scripture` (indented scripture block), `#leader-note` (grey box for leader-only notes), `#ldr` and `#ppl` (bold leader/people lines for responsive readings). Every generated document includes these automatically — you can redefine them in `_shared` to change how they look globally.
+
+**Q: Can I point Rubric at a different typst binary?**
+
+The app checks in order: `rubric_package/bin/typst` (bundled), `/usr/share/rubric/bin/typst` (system install path), `~/.local/share/rubric/bin/typst`, then `typst` on PATH. Place any compatible binary at one of those locations and it will be used automatically.
 
 ---
 

@@ -19,6 +19,13 @@ __pycache__/
 *.dvi
 *.pdf
 
+# Typst temp files (preview compilation)
+rubric_preview_*.typ
+rubric_preview_*.pdf
+
+# Bundled typst binary — distributed via build scripts, too large for git
+rubric_package/bin/
+
 # App runtime files
 hymn_cache.json
 autosave.liturgy

@@ -14,7 +14,6 @@ from rubric_package.models.service import ServiceItem, SectionDivider, entry_fro
 from rubric_package.models.config import (
     Config,
     SECTIONS,
-    DEFAULT_PREAMBLE,
     MAX_UNDO,
     AUTOSAVE_SECS,
     get_palette,
@@ -98,6 +97,56 @@ class TestServiceItem(unittest.TestCase):
         self.assertIn("Hymn", r)
         self.assertIn("Minister", r)
 
+    def test_content_typst_field(self):
+        """ServiceItem accepts and stores content_typst."""
+        item = ServiceItem("Test", "Word", content_typst="*bold* text")
+        self.assertEqual(item.content_typst, "*bold* text")
+        self.assertEqual(item.content_mode, "rich")
+
+    def test_content_typst_in_to_dict(self):
+        """content_typst is serialised to dict."""
+        item = ServiceItem("Test", "Word", content_typst="hello")
+        d = item.to_dict()
+        self.assertEqual(d["content_typst"], "hello")
+
+    def test_migration_from_bulletin_note(self):
+        """from_dict migrates bulletin_note to content_typst when absent."""
+        d = {"type": "item", "name": "Test", "bulletin_note": "Bulletin text"}
+        item = ServiceItem.from_dict(d)
+        self.assertEqual(item.content_typst, "Bulletin text")
+
+    def test_migration_fallback_to_note(self):
+        """from_dict falls back to note when bulletin_note is absent."""
+        d = {"type": "item", "name": "Test", "note": "Leader note"}
+        item = ServiceItem.from_dict(d)
+        self.assertEqual(item.content_typst, "Leader note")
+
+    def test_migration_prep_note_wrapped(self):
+        """from_dict wraps prep_note in #leader-note[...] and appends to base."""
+        d = {
+            "type": "item", "name": "Test",
+            "bulletin_note": "Bulletin", "prep_note": "Private",
+        }
+        item = ServiceItem.from_dict(d)
+        self.assertIn("Bulletin", item.content_typst)
+        self.assertIn("#leader-note[Private]", item.content_typst)
+
+    def test_migration_prep_note_only(self):
+        """from_dict wraps prep_note alone when no base content."""
+        d = {"type": "item", "name": "Test", "prep_note": "Only prep"}
+        item = ServiceItem.from_dict(d)
+        self.assertEqual(item.content_typst, "#leader-note[Only prep]")
+
+    def test_content_typst_preserved_over_migration(self):
+        """content_typst in the dict takes priority over old fields."""
+        d = {
+            "type": "item", "name": "Test",
+            "content_typst": "New content",
+            "bulletin_note": "Old bulletin",
+        }
+        item = ServiceItem.from_dict(d)
+        self.assertEqual(item.content_typst, "New content")
+
 
 class TestSectionDivider(unittest.TestCase):
     """SectionDivider data model tests."""
@@ -171,7 +220,6 @@ class TestConfig(unittest.TestCase):
         """Set up test fixtures."""
         # Create a fresh config instance for testing
         self.config = Config.__new__(Config)
-        self.config.preamble = DEFAULT_PREAMBLE
         self.config.templates = {}
         self.config.default_template = ""
         self.config.palette = None
@@ -264,12 +312,6 @@ class TestConstants(unittest.TestCase):
         """AUTOSAVE_SECS is a positive integer."""
         self.assertIsInstance(AUTOSAVE_SECS, int)
         self.assertGreater(AUTOSAVE_SECS, 0)
-
-    def test_default_preamble_contains_latex(self):
-        """DEFAULT_PREAMBLE contains LaTeX commands."""
-        self.assertIn("\\documentclass", DEFAULT_PREAMBLE)
-        self.assertIn("\\usepackage", DEFAULT_PREAMBLE)
-        self.assertIn("\\newenvironment{scripture}", DEFAULT_PREAMBLE)
 
 
 if __name__ == "__main__":

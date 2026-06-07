@@ -11,18 +11,18 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 
 ## Features
 
-- **Simple mode** (on by default) — hides LaTeX, GitHub sync, CSV export, snippets, responsive reading, and the LaTeX preamble preference. All features remain accessible when turned off. Toggle in **Preferences → View → Simple mode**.
+- **Simple mode** (on by default) — keeps the interface focused for everyday planning. Toggle in **Preferences → View → Simple mode**.
 - **RCL integration** — lectionary readings, liturgical colour, and season for any Sunday; weekday services default to the coming Sunday with a stepper
 - **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header, updated daily
 - **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
 - **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org; optional inline Hymnary preview via WebKit
 - **Bible viewer** — fetch passages in WEB, KJV, ASV, or ESV (ESV requires a free API key from api.esv.org)
-- **HTML export** — generates a clean, print-ready HTML file and opens it in the browser; use File → Print for a PDF without LaTeX
-- **Congregational bulletin export**
-  - **Simple mode** — HTML bulletin opens in the browser (no LaTeX required)
-  - **Advanced mode** — LaTeX-compiled PDF for print or digital
-    - **Print (booklet)** — `memoir` class, half-letter (5.5 × 8.5 in), fold for saddle-stitch
-    - **Digital (screen PDF)** — `extarticle`, full letter, colour hyperlinks
+- **HTML export** — generates a clean, print-ready HTML file and opens it in the browser
+- **Bulletin PDF export** — compiled with the bundled [Typst](https://typst.app/) typesetter; no LaTeX required
+  - **Print (booklet)** — half-letter (5.5 × 8.5 in), fold for saddle-stitch
+  - **Digital (screen PDF)** — full letter, colour hyperlinks
+- **Rich text editor** — per-element formatting toolbar (bold, italic, headings, lists, leader notes) with a Typst toggle for raw source editing; both modes store the same Typst content
+- **Live PDF preview** — bulletin compiles in the background as you edit
 - **Per-element bulletin toggle** — the 📋 button marks each element shown or hidden in the bulletin independently of the leader copy
 - **Bulletin preferences** — church name, address, service time, website, email, phone, welcome line, accessibility note, mission statement, staff/contact list, and announcements — all in **Preferences → Bulletin**
 - **Announcement expiry** — each announcement carries an optional `YYYY-MM-DD` expiry date; expired announcements are omitted automatically
@@ -34,10 +34,8 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **Repository-aware save paths** — Save As, LaTeX export, and bulletin export default to the right subfolder when a repository is configured
 - **Scripture translation selector** — choose WEB, KJV, ASV, or ESV in **Preferences → Scripture**
 - **Undo / Redo** — Ctrl+Z and Ctrl+Shift+Z
-- **LaTeX export** — `extarticle`, two-column layout per liturgical movement, Junicode font, proper scripture environment (advanced mode)
-- **PDF compilation** — one-click xelatex compilation from within the app (advanced mode)
 - **Snippets library** — reusable liturgical texts (advanced mode)
-- **Responsive reading builder** — L:/P: syntax generates formatted LaTeX (advanced mode)
+- **Responsive reading builder** — L:/P: syntax for formatted call-and-response text (advanced mode)
 - **CSV export** — for sharing with musicians and AV teams (advanced mode)
 
 ---
@@ -62,7 +60,7 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
 sudo dnf install python3-gobject gtk4 libadwaita
 ```
 
-LaTeX (xelatex + Junicode + `memoir` package) is only needed for PDF compilation and the advanced bulletin export. In simple mode, HTML export covers all bulletin and service order needs with no TeX Live required.
+**PDF compilation** uses the bundled [Typst](https://typst.app/) typesetter — no LaTeX or TeX Live required. If Typst is not bundled in your install, it also accepts a system `typst` binary on your PATH.
 
 ---
 
@@ -143,7 +141,7 @@ On first launch, a welcome wizard offers three starting points: today's lectiona
 
 ## File format
 
-Service files use the `.liturgy` extension (JSON). They store the service title, date, ordered elements with notes and leader assignments, and the path to the linked `.tex` export file.
+Service files use the `.liturgy` extension (JSON). They store the service title, date, and ordered elements. Each element carries a `content_typst` field with Typst markup for both leader notes and bulletin text.
 
 ---
 

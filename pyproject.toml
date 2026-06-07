@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rubric-liturgy"
-version = "0.14.8"
+version = "0.15.0"
 description = "A GNOME-native worship service planning tool for United Church of Canada ministry"
 readme = "README.md"
 license = {text = "GPL-3.0"}
@@ -50,4 +50,4 @@ where = ["."]
 include = ["rubric_package*"]
 
 [tool.setuptools.package-data]
-rubric_package = ["py.typed", "data/*.json", "data/*.svg", "data/*.md"]
+rubric_package = ["py.typed", "data/*.json", "data/*.svg", "data/*.md", "data/*.lang", "templates/*.typ", "bin/typst"]

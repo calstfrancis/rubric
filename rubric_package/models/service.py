@@ -39,15 +39,21 @@ class ServiceItem:
         bulletin_note: str = "",
         prep_note: str = "",
         duration: int = 0,
+        content_typst: str = "",
+        content_mode: str = "rich",
     ) -> None:
         self.name = name
         self.section = section
         self.note = note
         self.leader = leader
-        self.show_in_bulletin = show_in_bulletin  # whether element appears in bulletin
-        self.bulletin_note = bulletin_note       # congregation-facing text (overrides note)
-        self.prep_note = prep_note               # private prep/sermon notes — never exported
-        self.duration = duration                 # estimated duration in minutes (0 = unset)
+        self.show_in_bulletin = show_in_bulletin
+        self.bulletin_note = bulletin_note
+        self.prep_note = prep_note
+        self.duration = duration
+        # Unified content field (Phase 2).  Populated from old fields on load.
+        self.content_typst = content_typst
+        # "rich" or "typst"; not persisted (always opens in rich mode)
+        self.content_mode = content_mode
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -59,6 +65,7 @@ class ServiceItem:
             "leader": self.leader,
             "show_in_bulletin": self.show_in_bulletin,
             "bulletin_note": self.bulletin_note,
+            "content_typst": self.content_typst,
         }
         if self.prep_note:
             d["prep_note"] = self.prep_note
@@ -69,15 +76,29 @@ class ServiceItem:
     @classmethod
     def from_dict(cls, d: dict) -> ServiceItem:
         """Deserialize from dictionary."""
+        note         = d.get("note", "")
+        bulletin_note = d.get("bulletin_note", "")
+        prep_note    = d.get("prep_note", "")
+        content_typst = d.get("content_typst", "")
+
+        # Migrate: build content_typst from old fields if the file pre-dates Phase 2
+        if not content_typst:
+            base = bulletin_note or note
+            if prep_note:
+                content_typst = (f"{base}\n" if base else "") + f"#leader-note[{prep_note}]"
+            else:
+                content_typst = base
+
         return cls(
             d["name"],
             d.get("section", ""),
-            d.get("note", ""),
+            note,
             d.get("leader", ""),
             d.get("show_in_bulletin", True),
-            d.get("bulletin_note", ""),
-            d.get("prep_note", ""),
+            bulletin_note,
+            prep_note,
             d.get("duration", 0),
+            content_typst,
         )
 
     def __repr__(self) -> str:

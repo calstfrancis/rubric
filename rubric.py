@@ -17,19 +17,23 @@ from rcl_data import get_liturgical_info
 
 # Import from refactored package
 try:
-    from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, DEFAULT_PREAMBLE, SECTIONS
+    from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, SECTIONS
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
-    from rubric_package.utils.latex import latex_escape, note_for_latex, passage_to_latex, migrate_scripture_note
+    from rubric_package.utils.typst import (
+        typst_escape, note_for_typst, passage_to_typst,
+        strip_typst_for_html, strip_typst_plain, TYPST_SHARED,
+        format_typst_error,
+    )
     from rubric_package.utils.colors import section_colour, hex_to_rgb
     from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS as _HYMN_KW
+    from rubric_package.views.element_content import ElementContentWidget
 except ImportError as _pkg_err:
     print(f"Fatal: rubric_package not found — {_pkg_err}", file=sys.stderr)
     sys.exit(1)
 
-_latex_escape           = latex_escape
-_note_for_latex         = note_for_latex
-_passage_to_latex       = passage_to_latex
-_migrate_scripture_note = migrate_scripture_note
+_typst_escape           = typst_escape
+_note_for_typst         = note_for_typst
+_passage_to_typst       = passage_to_typst
 _section_colour         = section_colour
 _hex_to_rgb             = hex_to_rgb
 _is_hymn_element        = is_hymn_element
@@ -83,7 +87,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.14.8"
+APP_VERSION = "0.15.0"
 
 
 config = Config()
@@ -184,8 +188,8 @@ class BibleViewer(Adw.Window):
 
     def _on_insert(self, _):
         if self._on_insert_cb and self._text:
-            latex = _passage_to_latex(self._ref, self._text, self._translation)
-            self._on_insert_cb(latex)
+            typst = _passage_to_typst(self._ref, self._text, self._translation)
+            self._on_insert_cb(typst)
         self.close()
 
 
@@ -527,33 +531,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
         super().__init__(**kw)
         self.set_title("Preferences"); self.set_default_size(700,560); self.set_search_enabled(False)
         self._build_view()
-        if not config.simple_mode:
-            self._build_latex()
         self._build_template(); self._build_palette()
         if _SNIP_OK and not config.simple_mode:
             self._build_snippets()
         self._build_github(); self._build_scripture()
+        self._build_typst_files()
         self.connect("close-request", self._on_close)
-
-    def _build_latex(self):
-        page = Adw.PreferencesPage(title="LaTeX", icon_name="text-x-generic-symbolic"); self.add(page)
-        grp = Adw.PreferencesGroup(title="LaTeX preamble",
-            description="Everything before \\begin{document}. Export adds begin/end automatically.")
-        page.add(grp)
-        scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(280); scroll.add_css_class("card")
-        scroll.set_margin_top(4); scroll.set_margin_bottom(4)
-        self._preamble_view = Gtk.TextView(); self._preamble_view.set_monospace(True)
-        self._preamble_view.set_wrap_mode(Gtk.WrapMode.NONE)
-        self._preamble_view.set_top_margin(10); self._preamble_view.set_bottom_margin(10)
-        self._preamble_view.set_left_margin(12); self._preamble_view.set_right_margin(12)
-        self._preamble_view.get_buffer().set_text(config.preamble, -1)
-        scroll.set_child(self._preamble_view); grp.add(scroll)
-        rg = Adw.PreferencesGroup(); page.add(rg)
-        rr = Adw.ActionRow(title="Reset to default", subtitle="Restore built-in Junicode/XeLaTeX preamble")
-        rb = Gtk.Button(label="Reset", valign=Gtk.Align.CENTER); rb.add_css_class("destructive-action")
-        rb.connect("clicked", lambda _: self._preamble_view.get_buffer().set_text(DEFAULT_PREAMBLE,-1))
-        rr.add_suffix(rb); rr.set_activatable_widget(rb); rg.add(rr)
 
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)
@@ -561,8 +544,8 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # ── Simple mode ───────────────────────────────────────────────────
         mode_grp = Adw.PreferencesGroup(
             title="Feature level",
-            description="Simple mode hides LaTeX export, GitHub sync, CSV export, "
-                        "snippets, and other technical features. You can turn it off "
+            description="Simple mode hides Typst export, GitHub sync, CSV export, "
+                        "snippets, and other advanced features. You can turn it off "
                         "whenever you're ready to explore more."
         )
         page.add(mode_grp)
@@ -871,9 +854,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
             save_snippets(self._snippets); self._refresh_snippets_prefs()
 
     def _on_close(self, _):
-        if hasattr(self, "_preamble_view"):
-            buf = self._preamble_view.get_buffer(); s,e = buf.get_bounds()
-            config.preamble = buf.get_text(s,e,False)
         builtin = [{"section":s,"items":list(i)} for s,i in SECTIONS]
         config.palette = self._pal if self._pal != builtin else None
         config.use_tabs = self._tabs_active()
@@ -1001,6 +981,139 @@ class PreferencesWindow(Adw.PreferencesWindow):
             return False
 
         prefetch_hymnal(book, on_progress=on_progress, on_done=on_done)
+
+    def _build_typst_files(self):
+        """Preferences page: view and edit the bundled Typst template files."""
+        page = Adw.PreferencesPage(title="Typst Files", icon_name="text-x-generic-symbolic")
+        self.add(page)
+
+        _TEMPLATES = [
+            ("bulletin_print",   "Bulletin — print/booklet",  "Half-letter (5.5×8.5in), fold for saddle-stitch"),
+            ("bulletin_digital", "Bulletin — digital/screen", "Full letter, colour hyperlinks"),
+            ("manuscript",       "Manuscript",                "Leader copy, full-letter"),
+            ("_shared",          "Shared functions",          "Rubric function definitions included in all documents"),
+        ]
+
+        info_grp = Adw.PreferencesGroup(
+            title="Typst preamble templates",
+            description="User overrides go in ~/.config/rubric/templates/. "
+                        "Edit a template here to create an override; Reset restores the bundled default.",
+        )
+        page.add(info_grp)
+
+        for fname, label, subtitle in _TEMPLATES:
+            row = Adw.ActionRow(title=label, subtitle=subtitle)
+            edit_btn = Gtk.Button(label="Edit…", valign=Gtk.Align.CENTER)
+            edit_btn.add_css_class("flat")
+            edit_btn.connect("clicked", lambda _b, fn=fname, lbl=label: self._open_typst_template_editor(fn, lbl))
+            row.add_suffix(edit_btn)
+            info_grp.add(row)
+
+    def _open_typst_template_editor(self, fname: str, label: str):
+        """Open an in-app editor for a .typ template file."""
+        import shutil as _shutil
+        user_path = Path.home() / ".config/rubric/templates" / f"{fname}.typ"
+        bundled   = Path(__file__).parent / "rubric_package" / "templates" / f"{fname}.typ"
+
+        # Read user override, or bundled default
+        if user_path.exists():
+            text = user_path.read_text(encoding="utf-8")
+            is_override = True
+        elif bundled.exists():
+            text = bundled.read_text(encoding="utf-8")
+            is_override = False
+        else:
+            text = ""
+            is_override = False
+
+        # ── Dialog ────────────────────────────────────────────────────────────
+        win = Adw.Window(transient_for=self, modal=True, title=f"Edit: {label}")
+        win.set_default_size(680, 520)
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        hdr.set_show_end_title_buttons(False)
+
+        # Status label (shows override vs bundled)
+        _loc = "User override (~/.config/rubric/templates/)" if is_override else "Bundled default (read-only copy)"
+        status_lbl = Gtk.Label(label=_loc)
+        status_lbl.add_css_class("caption"); status_lbl.add_css_class("dim-label")
+
+        cancel_btn = Gtk.Button(label="Cancel"); cancel_btn.add_css_class("flat")
+        cancel_btn.connect("clicked", lambda _: win.close())
+        save_btn = Gtk.Button(label="Save override"); save_btn.add_css_class("suggested-action")
+        reset_btn = Gtk.Button(label="Reset to default"); reset_btn.add_css_class("destructive-action")
+        reset_btn.set_visible(is_override)
+
+        hdr.pack_start(cancel_btn)
+        hdr.pack_end(save_btn)
+        hdr.pack_end(reset_btn)
+        tv.add_top_bar(hdr)
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        vbox.set_margin_top(4); vbox.set_margin_bottom(8)
+        vbox.set_margin_start(12); vbox.set_margin_end(12)
+        vbox.append(status_lbl)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.set_vexpand(True)
+
+        # Try GtkSourceView for syntax highlighting
+        try:
+            gi.require_version("GtkSource", "5")
+            from gi.repository import GtkSource as _GS
+            from rubric_package.views.element_content import _get_typst_language, _init_source_language_manager
+            _init_source_language_manager()
+            src_buf = _GS.Buffer()
+            lang = _get_typst_language()
+            if lang:
+                src_buf.set_language(lang)
+            sm = _GS.StyleSchemeManager.get_default()
+            scheme = sm.get_scheme("classic") or sm.get_scheme("tango")
+            if scheme:
+                src_buf.set_style_scheme(scheme)
+            src_buf.set_highlight_syntax(True)
+            src_buf.set_text(text, -1)
+            editor = _GS.View.new_with_buffer(src_buf)
+            editor.set_show_line_numbers(True)
+            editor.set_tab_width(2)
+            _buf = src_buf
+        except Exception:
+            editor = Gtk.TextView()
+            _buf = editor.get_buffer()
+            _buf.set_text(text, -1)
+
+        editor.set_wrap_mode(Gtk.WrapMode.NONE)
+        editor.add_css_class("monospace")
+        editor.set_top_margin(8); editor.set_bottom_margin(8)
+        editor.set_left_margin(10); editor.set_right_margin(10)
+        sw.set_child(editor)
+        vbox.append(sw)
+        tv.set_content(vbox)
+        win.set_content(tv)
+
+        def _save(_b):
+            s, e = _buf.get_bounds()
+            content = _buf.get_text(s, e, False)
+            user_path.parent.mkdir(parents=True, exist_ok=True)
+            user_path.write_text(content, encoding="utf-8")
+            status_lbl.set_text("User override (~/.config/rubric/templates/)")
+            reset_btn.set_visible(True)
+
+        def _reset(_b):
+            if bundled.exists():
+                bundled_text = bundled.read_text(encoding="utf-8")
+                try:
+                    user_path.unlink()
+                except FileNotFoundError:
+                    pass
+                _buf.set_text(bundled_text, -1)
+                status_lbl.set_text("Bundled default (read-only copy)")
+                reset_btn.set_visible(False)
+
+        save_btn.connect("clicked", _save)
+        reset_btn.connect("clicked", _reset)
+        win.present()
 
     def _build_github(self):
         page = Adw.PreferencesPage(title="GitHub", icon_name="network-server-symbolic")
@@ -1151,7 +1264,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             try:
                 gitignore.write_text(
                     "# LaTeX build artefacts\n"
-                    "*.aux\n*.log\n*.out\n*.fls\n*.fdb_latexmk\n*.synctex.gz\n"
+                    "*.log\n"
                     "*.toc\n*.lof\n*.lot\n*.dvi\n*.maf\n*.mtc\n*.mtc0\n",
                     encoding="utf-8"
                 )
@@ -1260,7 +1373,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._undo_stack: list[list[dict]] = []
         self._redo_stack: list[list[dict]] = []
         self.current_file: str|None = None
-        self.tex_file: str|None = None
+        self.typ_file: str|None = None
         self.modified = False; self._updating_note = False
         self.selected_date = None; self._selected_global_idx = -1
         self._current_readings: dict[str,str] = {}
@@ -1356,9 +1469,9 @@ class MainWindow(Adw.ApplicationWindow):
             ("save",          self.save_file,         "<Ctrl>s"),
             ("save-as",       self.save_file_as,      "<Ctrl><Shift>s"),
             ("export-text",   self.export_text,       None),
-            ("export-latex",       self.export_latex,          None),
-            ("quick-export-latex", self.quick_export_latex,    "<Ctrl>e"),
-            ("compile-pdf",        self.compile_pdf,           "<Ctrl><Shift>p"),
+            ("export-typst",       self.export_typst,          None),
+            ("quick-export-typst", self.quick_export_typst,    "<Ctrl>e"),
+            ("compile-pdf",        self.compile_typst_pdf,     "<Ctrl><Shift>p"),
             ("save-template", self.save_as_template,  None),
             ("duplicate",     self.duplicate_service, None),
             ("add-custom",    self.add_custom,        "<Ctrl><Shift>n"),
@@ -1372,7 +1485,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("clear-recent",       self._clear_recent,      None),
             ("tab-rename",         self._tab_rename_action, None),
             ("tab-delete",         self._tab_delete_action, None),
-            ("unlink-tex",         self._unlink_tex,           None),
+            ("unlink-typ",         self._unlink_typ,           None),
             ("responsive-reading", self.open_responsive_reading,"<Ctrl>r"),
             ("snippets",           self.open_snippets,          "<Ctrl><Shift>i"),
             ("scripture-search",   self.open_scripture_search,  "<Ctrl><Shift>f"),
@@ -1499,12 +1612,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.push_btn.connect("clicked", lambda _: self.git_push())
 
         self.tex_btn = Gtk.Button(icon_name="emblem-documents-symbolic",
-                                  tooltip_text="Export to LaTeX (Ctrl+E)")
-        self.tex_btn.connect("clicked", lambda _: self.quick_export_latex())
+                                  tooltip_text="Export to Typst (Ctrl+E)")
+        self.tex_btn.connect("clicked", lambda _: self.quick_export_typst())
 
         self.pdf_btn = Gtk.Button(icon_name="document-print-symbolic",
-                                  tooltip_text="Compile to PDF via xelatex (Ctrl+Shift+P)")
-        self.pdf_btn.connect("clicked", lambda _: self.compile_pdf())
+                                  tooltip_text="Compile to PDF via Typst (Ctrl+Shift+P)")
+        self.pdf_btn.connect("clicked", lambda _: self.compile_typst_pdf())
 
         self._update_lect_label()
         GLib.timeout_add_seconds(86400, self._update_lect_label)
@@ -1985,75 +2098,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.hymn_revealer = self.item_toolbar_revealer
         self.leader_revealer = self.item_toolbar_revealer
 
-        # Notes header: tab switcher (Leader / Bulletin content)
-        notes_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        notes_header.set_margin_start(12); notes_header.set_margin_end(12)
-        notes_header.set_margin_top(4); notes_header.set_margin_bottom(2)
-        tab_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        self._leader_tab_btn = Gtk.ToggleButton(label="Leader notes")
-        self._leader_tab_btn.add_css_class("flat"); self._leader_tab_btn.set_active(True)
-        self._bulletin_tab_btn = Gtk.ToggleButton(label="Bulletin text")
-        self._bulletin_tab_btn.add_css_class("flat")
-        self._bulletin_tab_btn.set_group(self._leader_tab_btn)
-        self._prep_tab_btn = Gtk.ToggleButton(label="Prep notes")
-        self._prep_tab_btn.add_css_class("flat")
-        self._prep_tab_btn.set_group(self._leader_tab_btn)
-        self._prep_tab_btn.set_tooltip_text("Private sermon/prep notes — never exported to PDF or bulletin")
-        def on_leader_tab(btn):
-            if btn.get_active(): self._notes_stack.set_visible_child_name("leader")
-        def on_bulletin_tab(btn):
-            if btn.get_active(): self._notes_stack.set_visible_child_name("bulletin")
-        def on_prep_tab(btn):
-            if btn.get_active(): self._notes_stack.set_visible_child_name("prep")
-        self._leader_tab_btn.connect("toggled", on_leader_tab)
-        self._bulletin_tab_btn.connect("toggled", on_bulletin_tab)
-        self._prep_tab_btn.connect("toggled", on_prep_tab)
-        tab_box.append(self._leader_tab_btn); tab_box.append(self._bulletin_tab_btn)
-        tab_box.append(self._prep_tab_btn)
-        notes_header.append(tab_box)
-        notes_box.append(notes_header)
-        notes_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        # Notes stack: Leader tab (leader notes) and Bulletin tab (bulletin_note)
-        self._notes_stack = Gtk.Stack(); self._notes_stack.set_vexpand(True)
-        self._notes_stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-
-        ns = Gtk.ScrolledWindow()
-        ns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); ns.set_vexpand(True)
-        ns.set_margin_start(12); ns.set_margin_end(12); ns.set_margin_top(8); ns.set_margin_bottom(8)
-        self.notes_view = Gtk.TextView(); self.notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.notes_view.add_css_class("card")
-        self.notes_view.set_top_margin(8); self.notes_view.set_bottom_margin(8)
-        self.notes_view.set_left_margin(10); self.notes_view.set_right_margin(10)
-        self.notes_view.get_buffer().connect("changed", self._on_notes_changed)
-        ns.set_child(self.notes_view)
-        self._notes_stack.add_named(ns, "leader")
-
-        bns = Gtk.ScrolledWindow()
-        bns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); bns.set_vexpand(True)
-        bns.set_margin_start(12); bns.set_margin_end(12); bns.set_margin_top(8); bns.set_margin_bottom(8)
-        self.bulletin_notes_view = Gtk.TextView()
-        self.bulletin_notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.bulletin_notes_view.add_css_class("card")
-        self.bulletin_notes_view.set_top_margin(8); self.bulletin_notes_view.set_bottom_margin(8)
-        self.bulletin_notes_view.set_left_margin(10); self.bulletin_notes_view.set_right_margin(10)
-        self.bulletin_notes_view.get_buffer().connect("changed", self._on_bulletin_notes_changed)
-        bns.set_child(self.bulletin_notes_view)
-        self._notes_stack.add_named(bns, "bulletin")
-
-        pns = Gtk.ScrolledWindow()
-        pns.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); pns.set_vexpand(True)
-        pns.set_margin_start(12); pns.set_margin_end(12); pns.set_margin_top(8); pns.set_margin_bottom(8)
-        self.prep_notes_view = Gtk.TextView()
-        self.prep_notes_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.prep_notes_view.add_css_class("card")
-        self.prep_notes_view.set_top_margin(8); self.prep_notes_view.set_bottom_margin(8)
-        self.prep_notes_view.set_left_margin(10); self.prep_notes_view.set_right_margin(10)
-        self.prep_notes_view.get_buffer().connect("changed", self._on_prep_notes_changed)
-        pns.set_child(self.prep_notes_view)
-        self._notes_stack.add_named(pns, "prep")
-
-        notes_box.append(self._notes_stack)
+        # Unified content editor (replaces the old 3-tab Leader/Bulletin/Prep stack)
+        self._content_widget = ElementContentWidget()
+        self._content_widget.set_vexpand(True)
+        self._content_widget.set_on_changed(self._on_content_typst_changed)
+        notes_box.append(self._content_widget)
 
         # Scripture reference detection banner
         self._scripture_detect_rev = Gtk.Revealer()
@@ -2107,16 +2156,7 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Row factories ─────────────────────────────────────────────────────────
 
     def _make_item_row(self, si: ServiceItem, global_idx: int) -> Adw.ActionRow:
-        # Build a short preview: first 4-5 words of the first line of note
-        preview = ""
-        if si.note:
-            first_line = si.note.strip().split('\n')[0].strip()
-            # Strip leading LaTeX commands for display
-            if first_line.startswith('\\'):
-                first_line = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', first_line)
-                first_line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first_line).strip()
-            words = first_line.split()
-            preview = ' '.join(words[:5]) + ('…' if len(words) > 5 else '')
+        preview = self._note_preview(si.content_typst)
         row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(preview))
         row.set_subtitle_lines(1); row._entry = si
         colour = _section_colour(si.section)
@@ -2316,18 +2356,11 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _handle_selection(self, row):
         self._updating_note = True
-        buf = self.notes_view.get_buffer()
-        buf_bul = self.bulletin_notes_view.get_buffer()
-        buf_prep = self.prep_notes_view.get_buffer()
         if row and hasattr(row,"_entry") and isinstance(row._entry, ServiceItem):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
-            buf.set_text(si.note, -1)
-            buf_bul.set_text(si.bulletin_note, -1)
-            buf_prep.set_text(getattr(si, "prep_note", ""), -1)
-            # Always land on Leader tab so the user sees the leader notes
-            self._leader_tab_btn.set_active(True)
+            self._content_widget.set_content(si.content_typst)
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
@@ -2343,9 +2376,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self._focus_elem_lbl.set_text(si.name)
         else:
             self._selected_global_idx = -1
-            buf.set_text("", -1)
-            buf_bul.set_text("", -1)
-            buf_prep.set_text("", -1)
+            self._content_widget.set_content("")
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
             self.duration_spin.set_value(0)
@@ -2356,8 +2387,8 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_palette_row_activated(self, _lb, row):
         item = ServiceItem(row._item_name, row._section_name)
         default_note = config.element_defaults.get(row._item_name, "")
-        if default_note and not item.note:
-            item.note = default_note
+        if default_note and not item.content_typst:
+            item.content_typst = default_note
         self._push_undo(); self._add_entry(item)
         name = row._item_name
         was_empty = not config.recently_used
@@ -2485,10 +2516,12 @@ class MainWindow(Adw.ApplicationWindow):
             if not (0 <= idx < len(self.service_entries)): return
             entry = self.service_entries[idx]
             if not isinstance(entry, ServiceItem): return
-            entry.note = (hymn_line+"\n"+entry.note if entry.note else hymn_line)
-            self._updating_note = True; self.notes_view.get_buffer().set_text(entry.note,-1); self._updating_note = False
+            entry.content_typst = (hymn_line + "\n" + entry.content_typst
+                                   if entry.content_typst else hymn_line)
+            self._content_widget.set_content(entry.content_typst)
             row = self._find_row_for_index(idx)
-            if isinstance(row, Adw.ActionRow): row.set_subtitle(self._note_preview(entry.note))
+            if isinstance(row, Adw.ActionRow):
+                row.set_subtitle(self._note_preview(entry.content_typst))
             self._mark_modified()
         lookup_hymn(prefix, number, on_result)
 
@@ -2550,12 +2583,12 @@ class MainWindow(Adw.ApplicationWindow):
         if not (0 <= idx < len(self.service_entries)): return
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
-        entry.note = (hymn_line + "\n" + entry.note if entry.note else hymn_line)
-        self._updating_note = True
-        self.notes_view.get_buffer().set_text(entry.note, -1)
-        self._updating_note = False
+        entry.content_typst = (hymn_line + "\n" + entry.content_typst
+                               if entry.content_typst else hymn_line)
+        self._content_widget.set_content(entry.content_typst)
         row = self._find_row_for_index(idx)
-        if isinstance(row, Adw.ActionRow): row.set_subtitle(self._note_preview(entry.note))
+        if isinstance(row, Adw.ActionRow):
+            row.set_subtitle(self._note_preview(entry.content_typst))
         self._mark_modified()
 
     # ── Bible viewer ──────────────────────────────────────────────────────────
@@ -2570,11 +2603,9 @@ class MainWindow(Adw.ApplicationWindow):
         if not (0 <= idx < len(self.service_entries)): return
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
-        sep = "\n\n" if entry.note else ""
-        entry.note = entry.note + sep + text
-        self._updating_note = True
-        self.notes_view.get_buffer().set_text(entry.note, -1)
-        self._updating_note = False
+        sep = "\n\n" if entry.content_typst else ""
+        entry.content_typst = entry.content_typst + sep + text
+        self._content_widget.set_content(entry.content_typst)
         self._mark_modified()
 
     # ── Notes ─────────────────────────────────────────────────────────────────
@@ -2597,33 +2628,35 @@ class MainWindow(Adw.ApplicationWindow):
         return None
 
     def _note_preview(self, note: str) -> str:
-        if not note: return ""
-        first_line = note.strip().split('\n')[0].strip()
-        if first_line.startswith('\\'):
-            first_line = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', first_line)
-            first_line = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first_line).strip()
+        if not note:
+            return ""
+        first_line = strip_typst_plain(note).split('\n')[0].strip()
         words = first_line.split()
         return ' '.join(words[:5]) + ('…' if len(words) > 5 else '')
 
-    def _on_notes_changed(self, buf):
-        if self._updating_note: return
+    def _on_content_typst_changed(self, content: str):
+        """Called by ElementContentWidget when the user edits content."""
+        if self._updating_note:
+            return
         idx = self._selected_index()
-        if not (0 <= idx < len(self.service_entries)): return
+        if not (0 <= idx < len(self.service_entries)):
+            return
         entry = self.service_entries[idx]
-        if not isinstance(entry, ServiceItem): return
-        s, e = buf.get_bounds(); entry.note = buf.get_text(s, e, False)
+        if not isinstance(entry, ServiceItem):
+            return
+        entry.content_typst = content
         row = self._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
-            row.set_subtitle(self._note_preview(entry.note))
+            row.set_subtitle(self._note_preview(content))
         self._mark_modified()
-        self._detect_scripture_ref(entry.note)
+        self._detect_scripture_ref(content)
 
     def _detect_scripture_ref(self, text: str):
         """Show inline banner if a scripture reference is found in the note."""
         if not hasattr(self, "_scripture_detect_rev"):
             return
-        # Only detect if note is short (i.e. typed as a reference, not a full passage)
-        if len(text.strip()) > 120 or text.strip().startswith("\\"):
+        # Only detect if content is short (i.e. a typed reference, not a full passage)
+        if len(text.strip()) > 120 or text.strip().startswith('#scripture'):
             self._scripture_detect_rev.set_reveal_child(False)
             return
         m = re.search(
@@ -2649,25 +2682,6 @@ class MainWindow(Adw.ApplicationWindow):
                           transient_for=self)
         win.present()
 
-    def _on_bulletin_notes_changed(self, buf):
-        if self._updating_note: return
-        idx = self._selected_index()
-        if not (0 <= idx < len(self.service_entries)): return
-        entry = self.service_entries[idx]
-        if not isinstance(entry, ServiceItem): return
-        s, e = buf.get_bounds()
-        entry.bulletin_note = buf.get_text(s, e, False)
-        self._mark_modified()
-
-    def _on_prep_notes_changed(self, buf):
-        if self._updating_note: return
-        idx = self._selected_index()
-        if not (0 <= idx < len(self.service_entries)): return
-        entry = self.service_entries[idx]
-        if not isinstance(entry, ServiceItem): return
-        s, e = buf.get_bounds()
-        entry.prep_note = buf.get_text(s, e, False)
-        self._mark_modified()
 
     # ── Calendar / readings ───────────────────────────────────────────────────
 
@@ -3069,12 +3083,8 @@ class MainWindow(Adw.ApplicationWindow):
                 if not si.show_in_bulletin:
                     continue
                 lines.append(si.name)
-                body = (si.bulletin_note or si.note or "").strip()
+                body = strip_typst_plain(si.content_typst).strip() if si.content_typst else ""
                 if body:
-                    import re as _re2
-                    body = _re2.sub(r'\\\\', '\n', body)
-                    body = _re2.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', body)
-                    body = _re2.sub(r'\\[a-zA-Z]+\*?\s*', '', body)
                     for bline in body.splitlines():
                         if bline.strip():
                             lines.append("  " + bline.strip())
@@ -3098,12 +3108,8 @@ class MainWindow(Adw.ApplicationWindow):
                 if si.leader:
                     line += f"  ({si.leader})"
                 parts.append(line)
-                note = (si.bulletin_note or si.note or "").strip()
+                note = strip_typst_plain(si.content_typst).strip() if si.content_typst else ""
                 if note:
-                    import re as _re2
-                    note = _re2.sub(r'\\\\', '\n', note)
-                    note = _re2.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', note)
-                    note = _re2.sub(r'\\[a-zA-Z]+\*?\s*', '', note)
                     first = note.split('\n')[0].strip()
                     if first:
                         parts.append(f"    {first}")
@@ -3124,11 +3130,29 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_pending_id = None
         if not getattr(self, "_preview_visible", False):
             return False
-        # Don't clobber manual bulletin edit
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             return False
         if self._preview_webview is None:
             return False
+
+        typst = self._find_typst()
+        if typst and not getattr(self, "_preview_compiling", False):
+            # Capture Typst source in main thread (GTK widget access required)
+            try:
+                typ_src = self._build_bulletin_typst(digital=False)
+            except Exception:
+                return False
+            self._preview_compiling = True
+            self._preview_spinner.set_visible(True)
+            self._preview_spinner.start()
+            self._preview_compiling_lbl.set_visible(True)
+            threading.Thread(
+                target=self._run_preview_compile, args=(typ_src, typst),
+                daemon=True,
+            ).start()
+            return False
+
+        # Typst not found or compile in progress — HTML fallback
         try:
             html = self._build_bulletin_html()
             self._preview_webview.load_html(html, None)
@@ -3136,66 +3160,73 @@ class MainWindow(Adw.ApplicationWindow):
             pass
         return False
 
-    def _find_xelatex(self) -> str | None:
-        """Return path to xelatex, or None."""
-        x = shutil.which("xelatex")
-        if x:
-            return x
+    def _run_preview_compile(self, typ_src: str, typst_bin: str) -> None:
+        """Background thread: compile bulletin Typst to PDF for live preview."""
+        import tempfile as _tf
+        try:
+            with _tf.NamedTemporaryFile(
+                suffix=".typ", delete=False, mode="w", encoding="utf-8",
+                prefix="rubric_preview_",
+            ) as f:
+                f.write(typ_src)
+                typ_path = Path(f.name)
+            pdf_path = typ_path.with_suffix(".pdf")
+            result = subprocess.run(
+                [typst_bin, "compile", str(typ_path), str(pdf_path)],
+                capture_output=True, text=True, timeout=60,
+                encoding="utf-8", errors="replace",
+            )
+            if result.returncode == 0 and pdf_path.exists():
+                GLib.idle_add(self._load_preview_pdf, str(pdf_path))
+            else:
+                err = (result.stderr or result.stdout or "").strip()
+                GLib.idle_add(self._preview_compile_done)
+                if err:
+                    short = format_typst_error(err)[:100]
+                    GLib.idle_add(lambda msg=short: self._show_toast(f"Preview: {msg}", timeout=4))
+        except subprocess.TimeoutExpired:
+            GLib.idle_add(self._preview_compile_done)
+        except Exception:
+            GLib.idle_add(self._preview_compile_done)
+
+    def _find_typst(self) -> str | None:
+        """Return path to the typst binary, or None."""
+        # Check bundled binary first
         for candidate in [
-            Path.home() / "texlive/bin/x86_64-linux/xelatex",
-            Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
-            Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
+            Path(__file__).parent / "rubric_package" / "bin" / "typst",
+            Path("/usr/share/rubric/bin/typst"),
+            Path.home() / ".local/share/rubric/bin/typst",
         ]:
             if candidate.exists():
                 return str(candidate)
-        return None
+        return shutil.which("typst")
 
-    def _compile_preview_pdf(self):
-        """Build bulletin TeX, compile in background, load the PDF in the preview."""
-        import tempfile
-        xelatex = self._find_xelatex()
-        if not xelatex:
-            return
-
-        try:
-            digital = config.bulletin.get("print_mode", "booklet") == "digital"
-            lines = self._build_bulletin_latex(digital=digital)
-            tex_src = "\n".join(lines)
-        except Exception:
-            return
-
-        if not getattr(self, "_preview_pdf_dir", None):
-            self._preview_pdf_dir = tempfile.mkdtemp(prefix="rubric-preview-")
-
-        tex_path = Path(self._preview_pdf_dir) / "preview.tex"
-        try:
-            tex_path.write_text(tex_src, encoding="utf-8")
-        except Exception:
-            return
-
-        self._preview_compiling = True
-        self._preview_spinner.set_visible(True)
-        self._preview_spinner.start()
-        self._preview_compiling_lbl.set_visible(True)
-
-        def run():
-            try:
-                subprocess.run(
-                    [xelatex, "-interaction=nonstopmode", "-halt-on-error",
-                     "preview.tex"],
-                    cwd=self._preview_pdf_dir,
-                    capture_output=True, text=True, timeout=60,
-                    encoding="utf-8", errors="replace",
-                )
-                pdf = Path(self._preview_pdf_dir) / "preview.pdf"
-                if pdf.exists():
-                    GLib.idle_add(self._load_preview_pdf, str(pdf))
-                else:
-                    GLib.idle_add(self._preview_compile_done)
-            except Exception:
-                GLib.idle_add(self._preview_compile_done)
-
-        threading.Thread(target=run, daemon=True).start()
+    def _load_typst_preamble(self, name: str) -> str:
+        """Return a Typst document preamble, checking user override first."""
+        user_path = Path.home() / ".config/rubric/templates" / f"{name}.typ"
+        if user_path.exists():
+            return user_path.read_text(encoding="utf-8").strip()
+        bundled = Path(__file__).parent / "rubric_package" / "templates" / f"{name}.typ"
+        if bundled.exists():
+            return bundled.read_text(encoding="utf-8").strip()
+        # Hardcoded fallback
+        _fallbacks: dict[str, str] = {
+            "bulletin_print": (
+                '#set page(width: 5.5in, height: 8.5in, margin: (x: 0.6in, y: 0.7in))\n'
+                '#set text(size: 11pt)\n#set par(justify: false)'
+            ),
+            "bulletin_digital": (
+                '#set page(paper: "us-letter", margin: 1in)\n'
+                '#set text(size: 12pt)\n#set par(justify: false)\n'
+                '#show link: it => text(fill: rgb("1e3a6e"), it)'
+            ),
+            "manuscript": (
+                '#set page(paper: "us-letter",'
+                ' margin: (top: 1in, bottom: 1in, left: 0.7in, right: 0.7in))\n'
+                '#set text(size: 11pt)\n#set par(justify: false)'
+            ),
+        }
+        return _fallbacks.get(name, "")
 
     def _load_preview_pdf(self, pdf_path: str):
         self._preview_pdf_path = pdf_path
@@ -3252,8 +3283,8 @@ class MainWindow(Adw.ApplicationWindow):
         d = {"title": self.service_title_entry.get_text(),
              "date":  self.selected_date.isoformat() if self.selected_date else None,
              "items": [e.to_dict() for e in self.service_entries]}
-        if self.tex_file:
-            d["tex_file"] = self.tex_file
+        if self.typ_file:
+            d["typ_file"] = self.typ_file
         if getattr(self, "service_bulletin_text", ""):
             d["bulletin_text"] = self.service_bulletin_text
         if getattr(self, "service_attendance", 0):
@@ -3357,7 +3388,7 @@ class MainWindow(Adw.ApplicationWindow):
                 except OSError as e: errors.append(str(e))
             gi_path = rp / ".gitignore"
             if not gi_path.exists():
-                try: gi_path.write_text("*.aux\n*.log\n*.out\n*.fls\n*.fdb_latexmk\n*.synctex.gz\n*.toc\n*.dvi\n", encoding="utf-8")
+                try: gi_path.write_text("*.log\n", encoding="utf-8")
                 except OSError as e: errors.append(str(e))
             try:
                 r = subprocess.run(["git", "-C", str(rp), "init"], capture_output=True, text=True, timeout=10)
@@ -3819,13 +3850,12 @@ class MainWindow(Adw.ApplicationWindow):
             "**Hymn suggestions** — when a date is set, suggested hymns appear below the "
             "order list. Left-click to view on Hymnary.org; right-click to inject into the "
             "selected element.\n\n"
-            "**Export** — click the document icon (Ctrl+E) to export to LaTeX. "
-            "Click the print icon (Ctrl+Shift+P) to compile to PDF via xelatex.\n\n"
+            "**Export** — click the document icon (Ctrl+E) to export to Typst. "
+            "Click the print icon (Ctrl+Shift+P) to compile to PDF via typst.\n\n"
             "## First steps\n\n"
-            "- Open **Preferences** (Ctrl+,) to customise the palette, preamble, and snippets\n"
+            "- Open **Preferences** (Ctrl+,) to customise the palette and snippets\n"
             "- Set a date and browse the RCL readings card\n"
             "- Build a service order and save it as a **template** for future use\n"
-            "- See the **TeX Live** tab if you want to compile PDFs directly from the app\n"
         )
 
         def _find_doc(name: str) -> Path | None:
@@ -3845,41 +3875,33 @@ class MainWindow(Adw.ApplicationWindow):
         whats_new = (_cl.read_text(encoding="utf-8") if _cl
                      else "# What's New\n\nNo changelog available.")
 
-        texlive_text = (
-            "# Installing TeX Live\n\n"
-            "Rubric exports to LaTeX and compiles to PDF using xelatex. "
-            "You need TeX Live for PDF compilation.\n\n"
-            "## Option A — tlmgr (recommended)\n\n"
+        typst_text = (
+            "# Installing Typst\n\n"
+            "Rubric exports to Typst (`.typ`) and compiles to PDF. "
+            "Typst is bundled with Rubric — no separate install needed.\n\n"
+            "If you need to install or update typst manually:\n\n"
+            "## Option A — cargo\n\n"
             "```\n"
-            "wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz\n"
-            "tar -xzf install-tl-unx.tar.gz && cd install-tl-*\n"
-            "sudo perl install-tl\n"
+            "cargo install typst-cli\n"
             "```\n\n"
-            "Choose **Basic scheme**, then install required packages:\n\n"
+            "## Option B — package manager\n\n"
             "```\n"
-            "tlmgr install xetex fontspec geometry parskip microtype titlesec multicol enumitem hyperref memoir junicode\n"
-            "```\n\n"
-            "Add to `~/.bashrc`:\n\n"
-            "```\n"
-            "export PATH=\"$HOME/texlive/bin/x86_64-linux:$PATH\"\n"
-            "```\n\n"
-            "## Option B — zypper (openSUSE Tumbleweed)\n\n"
-            "```\n"
-            "sudo zypper install texlive-xetex texlive-fontspec texlive-geometry texlive-parskip texlive-microtype texlive-titlesec texlive-multicol texlive-enumitem texlive-hyperref texlive-memoir\n"
-            "sudo zypper install junicode-fonts\n"
+            "# openSUSE\n"
+            "sudo zypper install typst\n\n"
+            "# Debian/Ubuntu (24.04+)\n"
+            "sudo apt install typst\n\n"
+            "# Arch\n"
+            "sudo pacman -S typst\n"
             "```\n\n"
             "## Verify\n\n"
             "```\n"
-            "xelatex --version\n"
-            "```\n\n"
-            "## Using a different font\n\n"
-            "Open **Preferences → LaTeX** and change `\\setmainfont{Junicode}` to any "
-            "installed font, e.g. `Linux Libertine O`, `Gentium Plus`, `TeX Gyre Pagella`.\n"
+            "typst --version\n"
+            "```\n"
         )
 
         tabs.append_page(_text_page(welcome_text), Gtk.Label(label="Welcome"))
         tabs.append_page(_text_page(whats_new),    Gtk.Label(label="What's New"))
-        tabs.append_page(_text_page(texlive_text), Gtk.Label(label="TeX Live"))
+        tabs.append_page(_text_page(typst_text),   Gtk.Label(label="Typst"))
         tabs.set_current_page(1 if is_new_version else 0)
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -3974,15 +3996,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
         self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
         self.service_title_entry.set_text("")
-        self._updating_note = True
-        self.notes_view.get_buffer().set_text("", -1)
-        self.bulletin_notes_view.get_buffer().set_text("", -1)
-        self.prep_notes_view.get_buffer().set_text("", -1)
-        self._updating_note = False
+        self._content_widget.set_content("")
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
         self._obs_sep.set_visible(False); self._obs_row.set_visible(False)
-        self.current_file=None; self.tex_file=None; self.modified=False
+        self.current_file=None; self.typ_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
         self.service_bulletin_text = ""
         self.service_attendance = 0
@@ -4009,7 +4027,7 @@ class MainWindow(Adw.ApplicationWindow):
                 item = ServiceItem(name, "")
                 default_note = config.element_defaults.get(name, "")
                 if default_note:
-                    item.note = default_note
+                    item.content_typst = default_note
                 self.service_entries.append(item)
 
     def new_service(self):
@@ -4086,9 +4104,6 @@ class MainWindow(Adw.ApplicationWindow):
             self._reset_state(); self.service_title_entry.set_text(data.get("title",""))
             for d in data.get("items",[]):
                 entry = _entry_from_dict(d)
-                # Migrate old \begin{quotation}...\end{quotation} scripture format
-                if isinstance(entry, ServiceItem) and entry.note:
-                    entry.note = _migrate_scripture_note(entry.note)
                 self.service_entries.append(entry)
             self._refresh_order_list()
             saved_date = data.get("date")
@@ -4099,10 +4114,10 @@ class MainWindow(Adw.ApplicationWindow):
                     self.date_button.set_label(self.selected_date.strftime("%-d %B %Y"))
                     self._update_readings(self.selected_date)
                 except ValueError: pass
-            # Restore linked .tex path if present and file still exists
-            saved_tex = data.get("tex_file")
+            # Restore linked .typ path if present and file still exists
+            saved_tex = data.get("typ_file") or data.get("tex_file")
             if saved_tex and Path(saved_tex).exists():
-                self.tex_file = saved_tex
+                self.typ_file = saved_tex
             self._update_tex_btn()
             self.service_bulletin_text = data.get("bulletin_text", "")
             self.service_attendance = data.get("attendance", 0)
@@ -4269,25 +4284,122 @@ class MainWindow(Adw.ApplicationWindow):
         yield cur_t,cur_i
 
     def export_bulletin(self):
-        """Export congregational bulletin."""
+        """Export congregational bulletin — multi-target dialog."""
         if config.simple_mode:
             self._export_bulletin_html()
             return
-        dlg = Adw.MessageDialog(
-            transient_for=self,
-            heading="Export Bulletin",
-            body="Choose bulletin format:"
-        )
-        dlg.add_response("cancel",  "Cancel")
-        dlg.add_response("print",   "Print (booklet)")
-        dlg.add_response("digital", "Digital (screen PDF)")
-        dlg.set_response_appearance("print",   Adw.ResponseAppearance.SUGGESTED)
-        dlg.set_response_appearance("digital", Adw.ResponseAppearance.SUGGESTED)
-        def on_resp(d, r):
-            if r == "print":   self._export_bulletin_file(digital=False)
-            elif r == "digital": self._export_bulletin_file(digital=True)
-        dlg.connect("response", on_resp)
-        dlg.present()
+        self._show_export_dialog()
+
+    def _show_export_dialog(self) -> None:
+        """Multi-target export dialog with checkboxes for all output formats."""
+        win = Adw.Window(transient_for=self, modal=True, title="Export")
+        win.set_default_size(380, 0)
+        win.set_resizable(False)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        hdr.set_show_end_title_buttons(False)
+        tv.add_top_bar(hdr)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_start(20); box.set_margin_end(20)
+        box.set_margin_top(12); box.set_margin_bottom(20)
+
+        grp = Adw.PreferencesGroup(title="Select outputs")
+
+        def _make_row(title: str, subtitle: str, active: bool) -> Gtk.CheckButton:
+            cb = Gtk.CheckButton()
+            cb.set_active(active)
+            row = Adw.ActionRow(title=title, subtitle=subtitle)
+            row.add_suffix(cb)
+            row.set_activatable_widget(cb)
+            grp.add(row)
+            return cb
+
+        cb_print   = _make_row("Bulletin — Print",   "half-letter booklet, compile to PDF", True)
+        cb_digital = _make_row("Bulletin — Digital", "full letter with hyperlinks",          False)
+        cb_ms      = _make_row("Manuscript",          "leader copy with all notes",           False)
+        cb_html    = _make_row("HTML",                "web or email, opens in browser",       False)
+        box.append(grp)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.add_css_class("flat")
+        cancel_btn.connect("clicked", lambda _: win.close())
+        btn_row.append(cancel_btn)
+        export_btn = Gtk.Button(label="Export")
+        export_btn.add_css_class("suggested-action")
+
+        def _on_export(_b: Gtk.Button) -> None:
+            win.close()
+            if cb_print.get_active():   self._export_bulletin_file(digital=False)
+            if cb_digital.get_active(): self._export_bulletin_file(digital=True)
+            if cb_ms.get_active():      self.quick_export_typst()
+            if cb_html.get_active():    self._export_bulletin_html_typst()
+
+        export_btn.connect("clicked", _on_export)
+        btn_row.append(export_btn)
+        box.append(btn_row)
+
+        tv.set_content(box)
+        win.present()
+
+    def _export_bulletin_html_typst(self) -> None:
+        """Export bulletin as HTML, using typst compile --format html (0.13+) or fallback."""
+        typst = self._find_typst()
+        if not typst:
+            self.export_html()
+            return
+
+        html_supported = False
+        try:
+            ver_result = subprocess.run(
+                [typst, "--version"], capture_output=True, text=True, timeout=5,
+            )
+            m = re.search(r"(\d+)\.(\d+)", ver_result.stdout)
+            if m:
+                html_supported = (int(m.group(1)), int(m.group(2))) >= (0, 13)
+        except Exception:
+            pass
+
+        if not html_supported:
+            self._export_bulletin_html()
+            return
+
+        import tempfile as _tf
+        try:
+            typ_src = self._build_bulletin_typst(digital=True)
+        except Exception:
+            self._export_bulletin_html()
+            return
+
+        def run() -> None:
+            try:
+                with _tf.NamedTemporaryFile(
+                    suffix=".typ", delete=False, mode="w", encoding="utf-8",
+                    prefix="rubric_html_",
+                ) as f:
+                    f.write(typ_src)
+                    typ_path = Path(f.name)
+                html_path = typ_path.with_suffix(".html")
+                result = subprocess.run(
+                    [typst, "compile", "--format", "html",
+                     str(typ_path), str(html_path)],
+                    capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
+                )
+                if result.returncode == 0 and html_path.exists():
+                    GLib.idle_add(
+                        lambda: Gtk.show_uri(None, html_path.as_uri(), 0))
+                    GLib.idle_add(lambda: self._show_toast(
+                        "Opened in browser — use File → Print to save", timeout=6))
+                else:
+                    GLib.idle_add(self._export_bulletin_html)
+            except Exception:
+                GLib.idle_add(self._export_bulletin_html)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _build_bulletin_html(self) -> str:
         """Build and return the bulletin as an HTML string."""
@@ -4340,27 +4452,7 @@ class MainWindow(Adw.ApplicationWindow):
             if text:
                 announcements.append(text)
 
-        def strip_latex(text):
-            text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
-                lambda m: _re.sub(r'\\sverse\{(\d+)\}\{([^}]+)\}',
-                    r'<sup>\1</sup>\2 ', m.group(1).strip()),
-                text, flags=_re.DOTALL)
-            text = _re.sub(r'\\textbf\{([^}]*)\}', r'<strong>\1</strong>', text)
-            text = _re.sub(r'\\textit\{([^}]*)\}', r'<em>\1</em>', text)
-            text = _re.sub(r'\\emph\{([^}]*)\}', r'<em>\1</em>', text)
-            # LaTeX line break \\ → <br>
-            text = _re.sub(r'\\\\', '<br>', text)
-            # Strip spacing/structural commands entirely (don't emit their argument)
-            text = _re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
-            text = _re.sub(
-                r'\\(?:noindent|newline|newpage|pagebreak|clearpage|par'
-                r'|medskip|bigskip|smallskip|linebreak|centering)\b\s*',
-                ' ', text)
-            # Generic commands with one braced arg: emit the arg content
-            text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
-            # Remaining bare commands
-            text = _re.sub(r'\\[a-zA-Z]+\*?\s*', '', text)
-            return text.strip()
+        strip_latex = strip_typst_for_html
 
         css = """
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -4435,9 +4527,8 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                                if si.leader else "")
                 lines.append(f"<div class='el'>"
                              f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
-                note_src = si.bulletin_note if si.bulletin_note else si.note
-                if note_src:
-                    clean = strip_latex(note_src)
+                if si.content_typst:
+                    clean = strip_latex(si.content_typst)
                     lines.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
                 lines.append("</div>")
@@ -4501,14 +4592,14 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         date_str = self.selected_date.strftime("%Y-%m-%d") if self.selected_date else "undated"
         church = config.bulletin.get("church_name", "").replace(" ", "_") or "Bulletin"
         suffix = "digital" if digital else "print"
-        default_name = f"{church}_{date_str}_{suffix}.tex"
+        default_name = f"{church}_{date_str}_{suffix}.typ"
         bul_dir = self._repo_subdir("bulletins")
-        tex_dir = self._repo_subdir("tex")
-        initial = str(bul_dir) if bul_dir else (str(tex_dir) if tex_dir else config.last_dir)
+        typ_dir = self._repo_subdir("typ")
+        initial = str(bul_dir) if bul_dir else (str(typ_dir) if typ_dir else config.last_dir)
         dlg = Gtk.FileDialog(title="Save bulletin as…", initial_name=default_name)
         dlg.set_initial_folder(Gio.File.new_for_path(initial))
         filters = Gio.ListStore.new(Gtk.FileFilter)
-        f = Gtk.FileFilter(); f.set_name("LaTeX (*.tex)"); f.add_pattern("*.tex")
+        f = Gtk.FileFilter(); f.set_name("Typst (*.typ)"); f.add_pattern("*.typ")
         filters.append(f); dlg.set_filters(filters)
         dlg.save(self, None, lambda d, r, dig=digital: self._on_bulletin_save(d, r, dig))
 
@@ -4519,27 +4610,20 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             return
         path = f.get_path()
         config.last_dir = str(Path(path).parent)
-        lines = self._build_bulletin_latex(digital=digital)
-        Path(path).write_text("\n".join(lines), encoding="utf-8")
+        typ_src = self._build_bulletin_typst(digital=digital)
+        Path(path).write_text(typ_src, encoding="utf-8")
         self._show_toast(f"Bulletin saved: {Path(path).name}")
-        self._compile_bulletin_pdf(path)
+        self._compile_bulletin_typst(path)
 
-    def _compile_bulletin_pdf(self, tex_path_str: str):
-        """Compile bulletin tex to PDF in background thread, then open it."""
-        tex_path = Path(tex_path_str)
-        xelatex = shutil.which("xelatex")
-        if not xelatex:
-            for candidate in [
-                Path.home() / "texlive/bin/x86_64-linux/xelatex",
-                Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
-                Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
-            ]:
-                if candidate.exists(): xelatex = str(candidate); break
-
-        if not xelatex:
-            self._show_toast("Bulletin saved — install xelatex to compile to PDF", timeout=6)
+    def _compile_bulletin_typst(self, typ_path_str: str):
+        """Compile bulletin .typ to PDF in background thread, then open it."""
+        typ_path = Path(typ_path_str)
+        typst = self._find_typst()
+        if not typst:
+            self._show_toast("Bulletin saved — install typst to compile to PDF", timeout=6)
             return
 
+        pdf_path = typ_path.with_suffix(".pdf")
         self._compiling_toast = Adw.Toast.new("Compiling bulletin…")
         self._compiling_toast.set_timeout(0)
         self._toast_overlay.add_toast(self._compiling_toast)
@@ -4547,12 +4631,11 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         def run():
             try:
                 result = subprocess.run(
-                    [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
-                    cwd=str(tex_path.parent),
+                    [typst, "compile", str(typ_path), str(pdf_path)],
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
-                GLib.idle_add(self._on_bulletin_compiled, result, tex_path)
+                GLib.idle_add(self._on_bulletin_compiled, result, typ_path, pdf_path)
             except subprocess.TimeoutExpired:
                 def _on_timeout():
                     try: self._compiling_toast.dismiss()
@@ -4568,40 +4651,31 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _on_bulletin_compiled(self, result, tex_path: Path):
+    def _on_bulletin_compiled(self, result, typ_path: Path, pdf_path: Path):
         try: self._compiling_toast.dismiss()
         except Exception: pass
 
         if result.returncode != 0:
-            combined = (result.stdout or "") + (result.stderr or "")
-            log_lines = combined.splitlines()
-            errors = [l for l in log_lines if l.startswith("!") or "Error" in l]
-            msg = " — ".join(errors[-2:]) if errors else "xelatex error (check .log file)"
-            self._show_toast(f"Bulletin compile failed: {msg[:80]}", timeout=10)
+            err = (result.stderr or result.stdout or "").strip()
+            msg = format_typst_error(err) if err else "typst error"
+            self._show_toast(f"Bulletin compile failed: {msg[:100]}", timeout=10)
             return
 
-        for ext in (".log", ".aux", ".out", ".dvi", ".synctex.gz",
-                    ".toc", ".lof", ".lot", ".fls", ".fdb_latexmk",
-                    ".maf", ".mtc", ".mtc0"):
-            try: tex_path.with_suffix(ext).unlink(missing_ok=True)
-            except OSError: pass
-
-        pdf = tex_path.with_suffix(".pdf")
-        pdf_dir = self._repo_subdir("bulletins")
-        if pdf_dir and pdf.exists():
-            dest = pdf_dir / pdf.name
+        dest_dir = self._repo_subdir("bulletins")
+        if dest_dir and pdf_path.exists():
+            dest = dest_dir / pdf_path.name
             try:
-                shutil.move(str(pdf), str(dest))
-                pdf = dest
+                shutil.move(str(pdf_path), str(dest))
+                pdf_path = dest
             except OSError:
                 pass
-        if pdf.exists():
-            toast = Adw.Toast.new(f"✓ {pdf.name}")
+        if pdf_path.exists():
+            toast = Adw.Toast.new(f"✓ {pdf_path.name}")
             toast.set_timeout(6)
             toast.set_button_label("Send by email…")
-            toast.connect("button-clicked", lambda _: self._show_send_bulletin_dialog(pdf))
+            toast.connect("button-clicked", lambda _: self._show_send_bulletin_dialog(pdf_path))
             self._toast_overlay.add_toast(toast)
-            Gtk.show_uri(None, pdf.as_uri(), 0)
+            Gtk.show_uri(None, pdf_path.as_uri(), 0)
         else:
             self._show_toast("Compiled — PDF not found.", timeout=6)
 
@@ -4666,220 +4740,155 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         tv.set_content(box)
         win.present()
 
-    def _build_bulletin_latex(self, digital: bool = False) -> list[str]:
-        """Build complete LaTeX for the congregational bulletin.
+    def _build_bulletin_typst(self, digital: bool = False) -> str:
+        """Build complete Typst source for the congregational bulletin.
 
-        Print mode: memoir class, half-letter (5.5x8.5in), fold for booklet.
-        Digital mode: extarticle, full letter, colour hyperlinks.
+        Print mode: half-letter (5.5×8.5 in), fold for booklet.
+        Digital mode: full letter, hyperlinks.
         """
         from datetime import date as pydate
         b = config.bulletin
-        church   = _latex_escape(b.get("church_name", ""))
-        address  = _latex_escape(b.get("address", ""))
-        svc_time = _latex_escape(b.get("service_time", ""))
-        website  = _latex_escape(b.get("website", ""))
-        email    = _latex_escape(b.get("email", ""))
-        phone    = _latex_escape(b.get("phone", ""))
-        mission  = _latex_escape(b.get("mission", ""))
-        welcome  = _latex_escape(b.get("welcome", ""))
-        access   = _latex_escape(b.get("accessibility", ""))
-        title    = _latex_escape(self.service_title_entry.get_text() or "Order of Service")
-        date_str = (self.selected_date.strftime("%-d %B %Y")
-                    if self.selected_date else "")
+        church   = _typst_escape(b.get("church_name", ""))
+        address  = _typst_escape(b.get("address", ""))
+        svc_time = _typst_escape(b.get("service_time", ""))
+        website  = b.get("website", "").strip()
+        email    = b.get("email", "").strip()
+        phone    = _typst_escape(b.get("phone", ""))
+        mission  = _typst_escape(b.get("mission", ""))
+        welcome  = _typst_escape(b.get("welcome", ""))
+        access   = _typst_escape(b.get("accessibility", ""))
+        title    = _typst_escape(self.service_title_entry.get_text() or "Order of Service")
+        date_str = _typst_escape(
+            self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
 
-        if digital:
-            # Full letter, colour hyperlinks, extarticle
-            lines = [
-                r"\documentclass[12pt,letterpaper]{extarticle}",
-                r"\usepackage{fontspec}",
-                r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
-                r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
-                r"\usepackage{geometry}",
-                r"\geometry{top=1in,bottom=1in,left=1in,right=1in}",
-                r"\usepackage{parskip,microtype,titlesec,multicol}",
-                r"\usepackage[dvipsnames]{xcolor}",
-                r"\usepackage{hyperref}",
-                r"\usepackage{graphicx}",
-                r"\hypersetup{colorlinks=true,linkcolor=MidnightBlue,urlcolor=MidnightBlue}",
-                r"",
-                r"% Section headings: centred small-caps",
-                r"\titleformat{\section}{\normalsize\scshape\centering}{}{0em}{}",
-                r"\titlespacing*{\section}{0pt}{10pt}{4pt}",
-                r"",
-            ]
-        else:
-            # Half-letter booklet via memoir (no titlesec, no geometry pkg)
-            lines = [
-                r"\documentclass[12pt,oneside]{memoir}",
-                r"\usepackage{fontspec}",
-                r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
-                r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
-                r"\usepackage{parskip,microtype,multicol}",
-                r"\usepackage[dvipsnames]{xcolor}",
-                r"\usepackage{hyperref}",
-                r"\usepackage{graphicx}",
-                r"\hypersetup{hidelinks}",
-                r"",
-                r"% Memoir layout: half-letter, fold for saddle-stitch booklet",
-                r"\setstocksize{8.5in}{5.5in}",
-                r"\settrimmedsize{\stockheight}{\stockwidth}{*}",
-                r"\setlrmarginsandblock{0.6in}{0.6in}{*}",
-                r"\setulmarginsandblock{0.6in}{0.7in}{*}",
-                r"\checkandfixthelayout",
-                r"",
-                r"% Section headings via memoir (not titlesec)",
-                r"\setsecheadstyle{\normalsize\scshape\centering}",
-                r"\setbeforesecskip{10pt}",
-                r"\setaftersecskip{4pt}",
-                r"",
-            ]
-
-        # Shared commands for both modes
-        lines += [
-            r"% Movement headings (Gathering, Word, Response, Sending)",
-            r"\newcommand{\movement}[1]{%",
-            r"  \vspace{8pt}%",
-            r"  \begin{center}{\large\bfseries\scshape #1}\end{center}%",
-            r"  \vspace{4pt}%",
-            r"}",
-            r"",
-            r"% Hymn: bold reference + italic title",
-            r"\newcommand{\hymnref}[2]{\textbf{#1}\enspace #2}",
-            r"",
-            r"% Responsive reading: both Leader and People in bold",
-            r"\newcommand{\ldr}[1]{\textbf{#1}\\}",
-            r"\newcommand{\ppl}[1]{\textbf{#1}\\}",
-            r"",
-            r"% Scripture environment: verse number + hanging indent",
-            r"\newenvironment{scripture}{%",
-            r"  \par\begingroup\setlength{\parskip}{0pt}%",
-            r"  \setlength{\parindent}{-2.4em}\leftskip=2.4em",
-            r"}{\par\endgroup\vspace{4pt}}",
-            r"\newcommand{\sverse}[2]{\textsuperscript{#1}\quad #2\par}",
-            r"",
+        template_name = "bulletin_digital" if digital else "bulletin_print"
+        parts: list[str] = [
+            "// Congregational Bulletin — generated by Rubric",
+            self._load_typst_preamble(template_name),
+            '',
+            TYPST_SHARED,
+            '',
         ]
-        lines += [r"\begin{document}", r"\pagestyle{empty}", r""]
 
         # ── Cover page ────────────────────────────────────────────────────────
         cover_img = b.get("cover_image", "").strip()
-        lines += [
-            r"\begin{center}",
-            r"\vspace*{1.5cm}",
-        ]
+        parts.append('#v(1.5cm)')
+        parts.append('#align(center)[')
         if cover_img and Path(cover_img).is_file():
-            safe_path = cover_img.replace("\\", "/")
-            lines.append(
-                r"\includegraphics[width=0.7\textwidth,height=5cm,keepaspectratio]{"
-                + safe_path + r"}\\[0.6em]"
-            )
-        lines.append(r"{\Large\bfseries\scshape " + church + r"}\\[0.4em]")
+            safe = cover_img.replace("\\", "/")
+            parts.append(
+                f'  #image("{safe}", width: 70%, height: 5cm, fit: "contain")')
+            parts.append('  #v(0.6em)')
+        parts.append(f'  #text(size: 1.5em, weight: "bold")[#smallcaps[{church}]]')
+        parts.append('  #linebreak()')
         if address:
-            lines.append(r"{\small " + address + r"}\\[0.2em]")
-        lines += [
-            r"{\small " + svc_time + r"}\\[2cm]",
-            r"{\LARGE\bfseries " + title + r"}\\[0.6em]",
-            r"{\large " + date_str + r"}\\[2cm]",
-        ]
+            parts.append(f'  #text(size: 0.85em)[{address}]')
+            parts.append('  #linebreak()')
+        parts.append(f'  #text(size: 0.85em)[{svc_time}]')
+        parts.append('  #v(2cm)')
+        parts.append(f'  #text(size: 1.5em, weight: "bold")[{title}]')
+        parts.append('  #linebreak()')
+        if date_str:
+            parts.append(f'  #text(size: 1.2em)[{date_str}]')
+            parts.append('  #linebreak()')
         if website or email or phone:
-            lines.append(r"{\small")
+            parts.append('  #v(1cm)')
+            parts.append('  #text(size: 0.85em)[')
             if website:
+                w_esc = _typst_escape(website)
                 if digital:
-                    lines.append(r"\href{https://" + b.get("website","") + r"}{" + website + r"}\\")
+                    parts.append(
+                        f'    #link("https://{website}")[{w_esc}] #linebreak()')
                 else:
-                    lines.append(website + r"\\")
+                    parts.append(f'    {w_esc} #linebreak()')
             if email:
+                e_esc = _typst_escape(email)
                 if digital:
-                    lines.append(r"\href{mailto:" + b.get("email","") + r"}{" + email + r"}\\")
+                    parts.append(
+                        f'    #link("mailto:{email}")[{e_esc}] #linebreak()')
                 else:
-                    lines.append(email + r"\\")
+                    parts.append(f'    {e_esc} #linebreak()')
             if phone:
-                lines.append(phone + r"\\")
-            lines.append(r"}")
+                parts.append(f'    {phone} #linebreak()')
+            parts.append('  ]')
         if welcome:
-            lines += [r"\\[1cm]", r"\textit{" + welcome + r"}"]
-        lines += [r"\end{center}", r"\newpage", r""]
+            parts += ['  #v(1cm)', f'  #emph[{welcome}]']
+        parts += [']', '#pagebreak()', '']
 
         # ── Service order ─────────────────────────────────────────────────────
-        current_section = None
-        in_multicols = False
+        in_columns = False
 
         for entry in self.service_entries:
             if isinstance(entry, SectionDivider):
-                if in_multicols:
-                    lines += [r"\end{multicols}", ""]
-                    in_multicols = False
-                current_section = entry.title
-                lines += [
-                    r"\vspace{8pt}",
-                    r"\movement{" + _latex_escape(entry.title) + r"}",
-                    r"\begin{multicols}{2}",
-                    "",
+                if in_columns:
+                    parts.append(']')
+                    parts.append('')
+                    in_columns = False
+                parts += [
+                    f'#movement[{_typst_escape(entry.title)}]',
+                    '#columns(2)[',
+                    '',
                 ]
-                in_multicols = True
+                in_columns = True
                 continue
 
             if not isinstance(entry, ServiceItem) or not entry.show_in_bulletin:
                 continue
 
-            lines += ["", r"\section*{" + _latex_escape(entry.name) + "}"]
+            parts += ['', f'=== {_typst_escape(entry.name)}', '']
 
-            # Hymn reference — always show in bulletin as bold reference + title
             name_lower = entry.name.lower()
-            is_hymn = any(k in name_lower for k in ("hymn","psalm","sung","song","anthem","gloria"))
-
-            # Determine what content to show
-            content = entry.bulletin_note if entry.bulletin_note else entry.note
+            is_hymn = any(k in name_lower
+                          for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
+            content = entry.content_typst
 
             if is_hymn and content:
-                # Bold the hymn reference (VU 145, MV 79, etc.)
-                m = re.match(r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)', content, re.DOTALL)
+                m = re.match(
+                    r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)',
+                    content, re.DOTALL)
                 if m:
-                    ref  = _latex_escape(m.group(1).strip())
-                    rest = _latex_escape(m.group(2).strip().split("\n")[0]) if m.group(2).strip() else ""
+                    ref  = _typst_escape(m.group(1).strip())
+                    rest = _typst_escape(
+                        m.group(2).strip().split("\n")[0]) if m.group(2).strip() else ""
                     if rest:
-                        lines.append(r"\hymnref{" + ref + r"}{\textit{``" + rest + r"''}}")
+                        parts.append(f'#hymnref[{ref}][_{rest}_]')
                     else:
-                        lines.append(r"\textbf{" + ref + r"}")
+                        parts.append(f'*{ref}*')
                 else:
-                    lines.append(_note_for_latex(content))
+                    parts.append(_note_for_typst(content))
             elif content:
-                # Check if it's a responsive reading
-                if r"\ldr{" in content or r"\ppl{" in content or r"\begin{verse}" in content:
-                    lines.append(content)
-                elif any(l.strip().startswith("\\") for l in content.splitlines()):
-                    lines.append(content)
-                else:
-                    lines.append(_latex_escape(content))
+                parts.append(_note_for_typst(content))
 
-        if in_multicols:
-            lines += ["", r"\end{multicols}"]
+        if in_columns:
+            parts += ['', ']', '']
 
         # ── Acknowledgements block ────────────────────────────────────────────
         staff = b.get("staff", [])
-        # Also harvest leader assignments from the service
         leaders: dict[str, list[str]] = {}
         for entry in self.service_entries:
             if isinstance(entry, ServiceItem) and entry.leader and entry.show_in_bulletin:
                 leaders.setdefault(entry.leader, []).append(entry.name)
 
         if staff or leaders:
-            lines += [
-                r"\vspace{12pt}",
-                r"\begin{center}\rule{0.4\linewidth}{0.4pt}\end{center}",
-                r"\begin{center}{\small",
+            parts += [
+                '#v(12pt)',
+                '#align(center, line(length: 40%, stroke: 0.4pt))',
+                '#align(center)[#text(size: 0.85em)[',
             ]
             for member in staff:
-                role = _latex_escape(member.get("role", ""))
-                name = _latex_escape(member.get("name", ""))
+                role = _typst_escape(member.get("role", ""))
+                name = _typst_escape(member.get("name", ""))
                 em   = member.get("email", "")
                 if digital and em:
-                    lines.append(r"\textit{" + role + r":} \href{mailto:" + em + r"}{" + name + r"}\\")
+                    parts.append(
+                        f'  #emph[{role}:] #link("mailto:{em}")[{name}] #linebreak()')
                 else:
-                    lines.append(r"\textit{" + role + r":} " + name + r"\\")
+                    parts.append(f'  #emph[{role}:] {name} #linebreak()')
             for person, roles in leaders.items():
-                lines.append(_latex_escape(person) + r" (\textit{" +
-                             _latex_escape(", ".join(roles)) + r"})\\")
-            lines += [r"}\end{center}", ""]
+                parts.append(
+                    f'  {_typst_escape(person)} '
+                    f'(#emph[{_typst_escape(", ".join(roles))}]) #linebreak()')
+            parts += [']]', '']
 
         # ── Announcements ─────────────────────────────────────────────────────
         if b.get("include_announcements", True):
@@ -4896,60 +4905,43 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                         pass
                 active.append(ann.get("text", "").strip())
             if active:
-                lines += [
-                    r"\newpage",
-                    r"\begin{center}{\large\bfseries\scshape Announcements}\end{center}",
-                    r"\vspace{4pt}",
-                    "",
+                parts += [
+                    '#pagebreak()',
+                    '#align(center, text(size: 1.2em, weight: "bold")[#smallcaps[Announcements]])',
+                    '#v(4pt)',
+                    '',
                 ]
                 for ann in active:
-                    if any(l.strip().startswith("\\") for l in ann.splitlines()):
-                        lines.append(ann)
-                    else:
-                        lines.append(_latex_escape(ann))
-                    lines.append(r"\vspace{6pt}")
+                    parts.append(_note_for_typst(ann))
+                    parts.append('#v(6pt)')
 
         # ── Back page: mission + contact ──────────────────────────────────────
         if mission or access or email or website:
-            lines += [
-                r"\newpage",
-                r"\begin{center}",
-                r"\vspace*{\fill}",
-            ]
+            parts += ['#pagebreak()', '#v(1fr)', '#align(center)[']
             if mission:
-                lines += [
-                    r"{\small\textit{" + mission + r"}}\\[0.8em]",
-                ]
+                parts.append(f'  #emph[#text(size: 0.9em)[{mission}]]')
+                parts.append('  #linebreak()')
             if access:
-                lines += [r"{\small " + access + r"}\\[0.4em]"]
+                parts.append(f'  #text(size: 0.9em)[{access}]')
+                parts.append('  #linebreak()')
             if website or email or phone:
-                lines.append(r"{\small ")
-                if website: lines.append(website + r"\\")
-                if email:   lines.append(email + r"\\")
-                if phone:   lines.append(phone + r"\\")
-                lines.append(r"}")
-            lines += [r"\vspace*{\fill}", r"\end{center}", ""]
+                parts.append('  #text(size: 0.85em)[')
+                if website:
+                    parts.append(f'    {_typst_escape(website)} #linebreak()')
+                if email:
+                    parts.append(f'    {_typst_escape(email)} #linebreak()')
+                if phone:
+                    parts.append(f'    {phone} #linebreak()')
+                parts.append('  ]')
+            parts += [']', '#v(1fr)']
 
-        lines += [r"\end{document}", ""]
-        return lines
+        return "\n".join(parts) + "\n"
 
     def export_html(self):
         title = self.service_title_entry.get_text() or "Order of Service"
         date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
 
         import tempfile, re as _re
-
-        def strip_latex(text: str) -> str:
-            """Remove common LaTeX markup for HTML display."""
-            text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}', lambda m: m.group(1), text, flags=_re.DOTALL)
-            text = _re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'<sup>\1</sup>&nbsp;\2', text)
-            text = _re.sub(r'\\textbf\{([^}]*)\}', r'<strong>\1</strong>', text)
-            text = _re.sub(r'\\textit\{([^}]*)\}', r'<em>\1</em>', text)
-            text = _re.sub(r'\\emph\{([^}]*)\}', r'<em>\1</em>', text)
-            text = _re.sub(r'\\\\', '<br>', text)
-            text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
-            text = _re.sub(r'\\[a-zA-Z]+\*?\s*', '', text)
-            return text.strip()
 
         css = """
     body { font-family: Georgia, 'Times New Roman', serif; max-width: 700px; margin: 0 auto; padding: 1.5em; color: #111; }
@@ -4994,16 +4986,10 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 leader_html = f"<span class='leader'>({_esc(si.leader)})</span>" if si.leader else ""
                 lines.append(f"<div class='element'>")
                 lines.append(f"<div class='element-name'>{_esc(si.name)}{leader_html}</div>")
-                if si.note:
-                    note = si.note
-                    note_html = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
-                        lambda m: "<div class='note'>" + _re.sub(r'\\sverse\{(\d+)\}\{([^}]+)\}',
-                            r"<sup class='verse-num'>\1</sup>\2 ", m.group(1).strip()) + "</div>",
-                        note, flags=_re.DOTALL)
-                    if note_html == note:
-                        clean = strip_latex(note)
-                        note_lines = clean.split('\n')
-                        note_html = "<div class='note'>" + "<br>".join(note_lines) + "</div>"
+                if si.content_typst:
+                    clean = strip_typst_for_html(si.content_typst)
+                    note_lines = clean.split('\n')
+                    note_html = "<div class='note'>" + "<br>".join(note_lines) + "</div>"
                     lines.append(note_html)
                 lines.append("</div>")
 
@@ -5033,170 +5019,139 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             lines.append(""); lines.append(sec.upper() if sec else "")
             for si in items:
                 line = f"  \u2022 {si.name}"
-                if si.note: line += f"  \u2014  {si.note.split(chr(10))[0]}"
+                _ct = strip_typst_plain(si.content_typst) if si.content_typst else ""
+                if _ct: line += f"  \u2014  {_ct.split(chr(10))[0]}"
                 lines.append(line)
         try:
             with open(path,"w",encoding="utf-8") as fp: fp.write("\n".join(lines))
         except Exception as e: self._error("Export error",str(e))
 
     def _update_tex_btn(self):
-        """Update the TeX button tooltip to reflect current link state."""
-        if self.tex_file:
-            name = Path(self.tex_file).name
+        """Update the Typst button tooltip to reflect current link state."""
+        if self.typ_file:
+            name = Path(self.typ_file).name
             self.tex_btn.set_tooltip_text(
                 f"Export to {name} (Ctrl+E)\nRight-click to change file"
             )
         else:
             self.tex_btn.set_tooltip_text(
-                "Export to LaTeX… (Ctrl+E)\nChoose a file to link"
+                "Export to Typst… (Ctrl+E)\nChoose a file to link"
             )
 
-    def _build_latex_lines(self) -> list[str]:
-        """Build the full list of LaTeX lines for the current service."""
-        title    = self.service_title_entry.get_text() or "Order of Service"
-        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
-        lines = [
-            config.preamble.rstrip(), "",
-            f"\\title{{{_latex_escape(title)}}}",
-            f"\\date{{{_latex_escape(date_str)}}}",
-            "",
-            "\\begin{document}",
-            "\\maketitle",
-            "\\thispagestyle{empty}",
+    def _build_manuscript_typst(self) -> str:
+        """Build Typst source for the service order / leader manuscript."""
+        title    = _typst_escape(self.service_title_entry.get_text() or "Order of Service")
+        date_str = _typst_escape(
+            self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
+
+        parts = [
+            "// Leader Manuscript — generated by Rubric",
+            self._load_typst_preamble("manuscript"),
+            '',
+            TYPST_SHARED,
+            '',
+            f'#align(center)[#text(size: 1.5em, weight: "bold")[{title}]]',
         ]
+        if date_str:
+            parts.append(f'#align(center)[#text(size: 1.1em, style: "italic")[{date_str}]]')
+        parts += ['#v(6pt)', '#line(length: 100%, stroke: 0.5pt)', '#v(8pt)', '']
 
-        groups = list(self._grouped_entries())
-        # Filter to non-empty groups only
-        groups = [(sec, items) for sec, items in groups if items]
+        groups = [(sec, items) for sec, items in self._grouped_entries() if items]
+        in_columns = False
 
-        in_multicols = False
-
-        for g_idx, (sec, items) in enumerate(groups):
-            lines.append("")
-
+        for sec, items in groups:
             if sec:
-                # Close any open multicols environment before starting new part
-                if in_multicols:
-                    lines.append("\\end{multicols}")
-                    in_multicols = False
-
-                esc = _latex_escape(sec)
-                lines.append("\\newpage")
-                # Full-width centred part title — no rule, just spacing
-                lines.append("{\\centering\\large\\bfseries\\scshape " + esc + "\\par}")
-                lines.append("\\vspace{8pt}")
-                # Open two-column environment for the part's content
-                lines.append("\\begin{multicols}{2}")
-                in_multicols = True
+                if in_columns:
+                    parts.append(']')
+                    in_columns = False
+                parts += [
+                    '#pagebreak(weak: true)',
+                    f'#align(center, text(size: 1.1em, weight: "bold")[#smallcaps[{_typst_escape(sec)}]])',
+                    '#v(6pt)',
+                    '#columns(2)[',
+                    '',
+                ]
+                in_columns = True
 
             for si in items:
-                lines.append("")
-                # Element heading — bold with rule below (from \titleformat), right-aligned leader
-                if si.leader:
-                    lines.append(
-                        f"\\section*{{{_latex_escape(si.name)}"
-                        f"\\hfill{{\\small\\normalfont\\textit{{{_latex_escape(si.leader)}}}}}}}"
-                    )
-                else:
-                    lines.append(f"\\section*{{{_latex_escape(si.name)}}}")
-                if si.note: lines.append(_note_for_latex(si.note))
+                leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
+                              if si.leader else "")
+                parts.append(f'=== {_typst_escape(si.name)}{leader_str}')
+                if si.content_typst:
+                    parts.append(_note_for_typst(si.content_typst))
+                parts.append('')
 
-        # Close trailing multicols if open
-        if in_multicols:
-            lines.append("")
-            lines.append("\\end{multicols}")
+        if in_columns:
+            parts.append(']')
 
-        lines += ["", "\\end{document}", ""]
-        return lines
+        return "\n".join(parts) + "\n"
 
-    def _write_latex(self, path: str):
-        """Write LaTeX to path, record as linked file, save the .liturgy."""
+    def _write_typst(self, path: str):
+        """Write manuscript Typst to path, record as linked file, save the .liturgy."""
         try:
-            with open(path, "w", encoding="utf-8") as fp:
-                fp.write("\n".join(self._build_latex_lines()))
-            self.tex_file = path
+            Path(path).write_text(self._build_manuscript_typst(), encoding="utf-8")
+            self.typ_file = path
             self._update_tex_btn()
-            # Persist the link — save the .liturgy if it has a path
             if self.current_file:
                 with open(self.current_file, "w", encoding="utf-8") as f:
                     json.dump(self._service_data(), f, indent=2, ensure_ascii=False)
         except Exception as e:
             self._error("Export error", str(e))
 
-    def quick_export_latex(self):
+    def quick_export_typst(self):
         """One-click export: write directly if linked, else ask for a file."""
-        if self.tex_file:
-            self._write_latex(self.tex_file)
+        if self.typ_file:
+            self._write_typst(self.typ_file)
         else:
-            self.export_latex()
+            self.export_typst()
 
-    def compile_pdf(self):
-        """Export to .tex then compile with xelatex, open the resulting PDF."""
-        if not self.tex_file:
-            self.export_latex()
-            self._show_toast("Link a .tex file first, then compile again.", timeout=5)
+    def compile_typst_pdf(self):
+        """Export to .typ then compile with typst, open the resulting PDF."""
+        if not self.typ_file:
+            self.export_typst()
+            self._show_toast("Link a .typ file first, then compile again.", timeout=5)
             return
 
-        self._write_latex(self.tex_file)
-        tex_path = Path(self.tex_file)
-        tex_dir  = str(tex_path.parent)
-        tex_name = tex_path.name
+        self._write_typst(self.typ_file)
+        typ_path = Path(self.typ_file)
+        pdf_path = typ_path.with_suffix(".pdf")
 
-        xelatex = shutil.which("xelatex")
-        if not xelatex:
-            for candidate in [
-                Path.home() / "texlive/bin/x86_64-linux/xelatex",
-                Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
-                Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
-            ]:
-                if candidate.exists(): xelatex = str(candidate); break
-
-        if not xelatex:
-            self._show_toast("xelatex not found — add TeX Live to PATH", timeout=8)
+        typst = self._find_typst()
+        if not typst:
+            self._show_toast("typst not found — install typst or add it to PATH", timeout=8)
             return
 
-        # Show persistent "Compiling…" toast (timeout=0 keeps it until replaced)
         self._compiling_toast = Adw.Toast.new("Compiling PDF…")
         self._compiling_toast.set_timeout(0)
         self._toast_overlay.add_toast(self._compiling_toast)
         self.pdf_btn.set_sensitive(False)
 
-        def run_xelatex():
+        def run_typst():
             try:
                 result = subprocess.run(
-                    [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_name],
-                    cwd=tex_dir, capture_output=True, text=True, timeout=60,
+                    [typst, "compile", str(typ_path), str(pdf_path)],
+                    capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
-                GLib.idle_add(self._on_compile_done, result, tex_path)
+                GLib.idle_add(self._on_compile_done, result, typ_path, pdf_path)
             except subprocess.TimeoutExpired:
-                GLib.idle_add(self._on_compile_error, "xelatex timed out after 60 seconds.")
+                GLib.idle_add(self._on_compile_error, "typst timed out after 60 seconds.")
             except Exception as e:
                 GLib.idle_add(self._on_compile_error, str(e))
 
-        threading.Thread(target=run_xelatex, daemon=True).start()
+        threading.Thread(target=run_typst, daemon=True).start()
 
-    def _on_compile_done(self, result, tex_path: Path):
+    def _on_compile_done(self, result, typ_path: Path, pdf_path: Path):
         self.pdf_btn.set_sensitive(True)
-        # Dismiss the "Compiling…" toast
         try: self._compiling_toast.dismiss()
         except Exception: pass
 
         if result.returncode != 0:
-            combined = (result.stdout or "") + (result.stderr or "")
-            log_lines = combined.splitlines()
-            errors = [l for l in log_lines if l.startswith("!") or "Error" in l]
-            msg = " — ".join(errors[-2:]) if errors else "xelatex error (check .log file)"
-            self._show_toast(f"Compilation failed: {msg[:80]}", timeout=10)
+            err = (result.stderr or result.stdout or "").strip()
+            msg = format_typst_error(err) if err else "typst error"
+            self._show_toast(f"Compilation failed: {msg[:100]}", timeout=10)
             return
 
-        # Clean up helper files
-        for ext in (".log",".aux",".out",".dvi",".synctex.gz",
-                    ".toc",".lof",".lot",".fls",".fdb_latexmk"):
-            try: tex_path.with_suffix(ext).unlink(missing_ok=True)
-            except OSError: pass
-
-        pdf_path = tex_path.with_suffix(".pdf")
         pdf_dir = self._repo_subdir("pdf")
         if pdf_dir and pdf_path.exists():
             dest = pdf_dir / pdf_path.name
@@ -5221,34 +5176,34 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         except Exception: pass
         self._show_toast(f"Compile error: {message[:80]}", timeout=10)
 
-    def _unlink_tex(self):
-        self.tex_file = None
+    def _unlink_typ(self):
+        self.typ_file = None
         self._update_tex_btn()
 
-    def export_latex(self):
-        """Full file-chooser export (also called by quick_export when no link exists)."""
-        tex_dir = self._repo_subdir("tex")
+    def export_typst(self):
+        """Full file-chooser export for the manuscript Typst file."""
+        typ_dir = self._repo_subdir("typ")
         if self.current_file:
-            default = Path(self.current_file).stem + ".tex"
+            default = Path(self.current_file).stem + ".typ"
         else:
             title   = self.service_title_entry.get_text() or "service"
-            default = title.replace(" ", "_").lower() + ".tex"
-        folder = str(tex_dir) if tex_dir else (
+            default = title.replace(" ", "_").lower() + ".typ"
+        folder = str(typ_dir) if typ_dir else (
             str(Path(self.current_file).parent) if self.current_file else config.last_dir
         )
-        dlg = Gtk.FileDialog(title="Export LaTeX", initial_name=default)
+        dlg = Gtk.FileDialog(title="Export Typst", initial_name=default)
         dlg.set_initial_folder(Gio.File.new_for_path(folder))
         filters = Gio.ListStore.new(Gtk.FileFilter)
-        f = Gtk.FileFilter(); f.set_name("TeX files (*.tex)"); f.add_pattern("*.tex")
+        f = Gtk.FileFilter(); f.set_name("Typst files (*.typ)"); f.add_pattern("*.typ")
         filters.append(f); dlg.set_filters(filters)
-        dlg.save(self, None, self._on_export_latex_response)
+        dlg.save(self, None, self._on_export_typst_response)
 
-    def _on_export_latex_response(self, dlg, result):
+    def _on_export_typst_response(self, dlg, result):
         try: f = dlg.save_finish(result)
         except GLib.Error: return
         path = f.get_path()
-        if not path.endswith(".tex"): path += ".tex"
-        self._write_latex(path)
+        if not path.endswith(".typ"): path += ".typ"
+        self._write_typst(path)
 
     # ── Leader ────────────────────────────────────────────────────────────────
 
@@ -5417,20 +5372,19 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             entry = self.service_entries[idx]
             if isinstance(entry, ServiceItem):
                 self._push_undo()
-                # Prepend to notes — hymn ref goes at the top
-                entry.note = ref + ("\n" + entry.note if entry.note else "")
-                self._updating_note = True
-                self.notes_view.get_buffer().set_text(entry.note, -1)
-                self._updating_note = False
+                # Prepend to content — hymn ref goes at the top
+                entry.content_typst = ref + ("\n" + entry.content_typst
+                                             if entry.content_typst else "")
+                self._content_widget.set_content(entry.content_typst)
                 row = self._find_row_for_index(idx)
                 if isinstance(row, Adw.ActionRow):
-                    row.set_subtitle(self._note_preview(entry.note))
+                    row.set_subtitle(self._note_preview(entry.content_typst))
                 self._mark_modified()
                 return
         # Nothing selected — create a new Hymn element as fallback
         self._push_undo()
         si = ServiceItem("Hymn", list(self._palette_listboxes.keys())[0] if self._palette_listboxes else "")
-        si.note = ref
+        si.content_typst = ref
         self._add_entry(si)
 
     # ── Scripture search ──────────────────────────────────────────────────────
@@ -5503,47 +5457,43 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             self._export_reading_cards(buf.get_text(s, e, False))
 
         cards_btn.connect("clicked", on_cards); btn_row.append(cards_btn)
-        insert_btn = Gtk.Button(label="Insert as LaTeX"); insert_btn.add_css_class("suggested-action")
+        insert_btn = Gtk.Button(label="Insert as Typst"); insert_btn.add_css_class("suggested-action")
 
         def on_insert(_b):
             s, e = buf.get_bounds()
             raw = buf.get_text(s, e, False)
-            latex = self._build_responsive_latex(raw)
-            self._on_bible_insert(latex)
+            typst = self._build_responsive_typst(raw)
+            self._on_bible_insert(typst)
             dlg.close()
 
         insert_btn.connect("clicked", on_insert); btn_row.append(insert_btn)
         outer.append(btn_row)
         tv.set_content(outer); dlg.set_content(tv); dlg.present()
 
-    def _build_responsive_latex(self, raw: str) -> str:
-        """Convert L: / P: annotated text to LaTeX verse environment."""
-        lines = raw.strip().splitlines()
-        latex_lines = [
-            "% Responsive reading",
-            "\\begin{verse}",
-        ]
-        auto_leader = True  # alternating mode when no prefix
-        for line in lines:
+    def _build_responsive_typst(self, raw: str) -> str:
+        """Convert L: / P: annotated text to Typst using #ldr / #ppl."""
+        lines_out = ["// Responsive reading"]
+        auto_leader = True
+        for line in raw.strip().splitlines():
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
             if line.lower().startswith("l:"):
-                text = _latex_escape(line[2:].strip())
-                latex_lines.append(f"\\textbf{{Leader:}} {text}\\\\")
+                text = _typst_escape(line[2:].strip())
+                lines_out.append(f"#ldr[Leader: {text}]")
                 auto_leader = False
             elif line.lower().startswith("p:"):
-                text = _latex_escape(line[2:].strip())
-                latex_lines.append(f"\\textit{{People:}} {text}\\\\")
+                text = _typst_escape(line[2:].strip())
+                lines_out.append(f"#ppl[People: {text}]")
                 auto_leader = True
             else:
-                text = _latex_escape(line)
+                text = _typst_escape(line)
                 if auto_leader:
-                    latex_lines.append(f"\\textbf{{Leader:}} {text}\\\\")
+                    lines_out.append(f"#ldr[Leader: {text}]")
                 else:
-                    latex_lines.append(f"\\textit{{People:}} {text}\\\\")
+                    lines_out.append(f"#ppl[People: {text}]")
                 auto_leader = not auto_leader
-        latex_lines.append("\\end{verse}")
-        return "\n".join(latex_lines)
+        return "\n".join(lines_out)
 
     def _export_reading_cards(self, raw: str):
         """Generate printable HTML role cards from the responsive reading text."""
@@ -5702,7 +5652,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     f"<tr class='section-row'><td colspan='5'>{esc(current_section)}</td></tr>"
                 )
             elif isinstance(entry, ServiceItem):
-                note_src = entry.bulletin_note if entry.bulletin_note else entry.note
+                note_src = entry.content_typst
                 rows.append(
                     f"<tr><td>{esc(current_section)}</td>"
                     f"<td><strong>{esc(entry.name)}</strong></td>"
@@ -5745,87 +5695,79 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         path = Path(f.get_path())
         if path.suffix.lower() != ".pdf":
             path = path.with_suffix(".pdf")
-        tex_path = path.with_suffix(".tex")
-        lines = self._build_minister_latex()
+        typ_path = path.with_suffix(".typ")
+        src = self._build_minister_typst()
         try:
-            tex_path.write_text("\n".join(lines), encoding="utf-8")
+            typ_path.write_text(src, encoding="utf-8")
         except Exception as e:
             self._error("Export error", str(e)); return
-        self._compile_minister_pdf(tex_path)
+        self._compile_minister_typst(typ_path, path)
 
-    def _build_minister_latex(self) -> list[str]:
-        title    = _latex_escape(self.service_title_entry.get_text() or "Order of Service")
-        date_str = _latex_escape(
+    def _build_minister_typst(self) -> str:
+        """Build Typst source for the leader/minister's order with prep notes."""
+        title  = _typst_escape(self.service_title_entry.get_text() or "Order of Service")
+        date_str = _typst_escape(
             self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
-        church   = _latex_escape(config.bulletin.get("church_name", ""))
+        church = _typst_escape(config.bulletin.get("church_name", ""))
 
-        lines = [
-            r"\documentclass[10pt,letterpaper]{extarticle}",
-            r"\usepackage{fontspec}",
-            r"\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,"
-            r"ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]",
-            r"\usepackage{geometry}",
-            r"\geometry{top=0.75in,bottom=0.75in,left=0.7in,right=0.7in}",
-            r"\usepackage{parskip,microtype,multicol,titlesec,xcolor}",
-            r"\usepackage{hyperref}",
-            r"\hypersetup{hidelinks}",
-            r"",
-            r"\titleformat{\section}{\normalsize\bfseries\scshape}{}{0em}{}[\titlerule]",
-            r"\titlespacing*{\section}{0pt}{8pt}{3pt}",
-            r"",
-            r"\begin{document}",
-            r"\pagestyle{empty}",
-            r"",
-            r"\begin{center}",
-            r"{\large\bfseries\scshape " + church + r"}\\[0.3em]" if church else "",
-            r"{\Large\bfseries " + title + r"}\\[0.2em]",
-            r"{\normalsize " + date_str + r"}",
-            r"\end{center}",
-            r"\vspace{6pt}\hrule\vspace{10pt}",
-            r"",
-            r"\begin{multicols}{2}",
-            r"",
+        parts = [
+            "// Leader's Order — generated by Rubric",
+            '#set page(paper: "us-letter",'
+            ' margin: (top: 0.75in, bottom: 0.75in, left: 0.7in, right: 0.7in))',
+            '#set text(size: 10pt)',
+            '#set par(justify: false)',
+            '',
+            TYPST_SHARED,
+            '',
+            '#align(center)[',
+        ]
+        if church:
+            parts.append(f'  #text(size: 1.2em, weight: "bold")[#smallcaps[{church}]]')
+            parts.append('  #linebreak()')
+        parts += [
+            f'  #text(size: 1.4em, weight: "bold")[{title}]',
+            '  #linebreak()',
+        ]
+        if date_str:
+            parts.append(f'  {date_str}')
+        parts += [
+            ']',
+            '#v(6pt)',
+            '#line(length: 100%, stroke: 0.5pt)',
+            '#v(8pt)',
+            '#columns(2)[',
+            '',
         ]
 
         for entry in self.service_entries:
             if isinstance(entry, SectionDivider):
-                lines += [
-                    r"\columnbreak" if entry.title in ("Word", "Response", "Sending") else "",
-                    r"\section*{\textsc{" + _latex_escape(entry.title) + r"}}",
-                    "",
-                ]
+                if entry.title in ("Word", "Response", "Sending"):
+                    parts.append('#colbreak()')
+                parts.append(f'=== {_typst_escape(entry.title)}')
+                parts.append('')
             elif isinstance(entry, ServiceItem):
-                name_line = r"\textbf{" + _latex_escape(entry.name) + r"}"
-                if entry.leader:
-                    name_line += r"\quad{\small\textit{(" + _latex_escape(entry.leader) + r")}}"
+                leader_str = (
+                    f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(entry.leader)}_)]'
+                    if entry.leader else "")
                 dur = getattr(entry, "duration", 0)
-                if dur:
-                    name_line += r"\hfill{\footnotesize\textcolor{gray}{" + str(dur) + r"min}}"
-                lines.append(name_line + r"\\")
-                if entry.note:
-                    clean = entry.note.strip()
-                    lines.append(r"{\small " + clean + r"}")
-                    lines.append("")
-                lines.append(r"\vspace{4pt}")
-                lines.append("")
+                dur_str = (
+                    f' #h(1fr) #text(size: 0.8em, fill: luma(120))[{dur}min]'
+                    if dur else "")
+                parts.append(f'*{_typst_escape(entry.name)}*{leader_str}{dur_str}')
+                parts.append('')
+                if entry.content_typst:
+                    parts.append(f'#text(size: 0.9em)[{_note_for_typst(entry.content_typst)}]')
+                    parts.append('')
+                parts.append('#v(4pt)')
+                parts.append('')
 
-        lines += [
-            r"\end{multicols}",
-            r"\end{document}",
-        ]
-        return [l for l in lines if l is not None]
+        parts.append(']')
+        return "\n".join(parts) + "\n"
 
-    def _compile_minister_pdf(self, tex_path: Path):
-        xelatex = shutil.which("xelatex")
-        if not xelatex:
-            for candidate in [
-                Path.home() / "texlive/bin/x86_64-linux/xelatex",
-                Path("/usr/local/texlive/2024/bin/x86_64-linux/xelatex"),
-                Path("/usr/local/texlive/2023/bin/x86_64-linux/xelatex"),
-            ]:
-                if candidate.exists(): xelatex = str(candidate); break
-        if not xelatex:
-            self._show_toast("LaTeX saved — install xelatex to compile to PDF", 6); return
+    def _compile_minister_typst(self, typ_path: Path, pdf_path: Path):
+        typst = self._find_typst()
+        if not typst:
+            self._show_toast("Typst saved — install typst to compile to PDF", 6); return
 
         toast = Adw.Toast.new("Compiling leader's order…")
         toast.set_timeout(0)
@@ -5834,25 +5776,20 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         def run():
             try:
                 result = subprocess.run(
-                    [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
-                    cwd=str(tex_path.parent),
+                    [typst, "compile", str(typ_path), str(pdf_path)],
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
-                GLib.idle_add(_done, result, toast, tex_path)
+                GLib.idle_add(_done, result, toast, pdf_path)
             except Exception as e:
                 GLib.idle_add(lambda msg=str(e): (
                     toast.dismiss(), self._show_toast(f"Compile error: {msg}", 8)))
 
-        def _done(result, t, tp):
+        def _done(result, t, pdf):
             try: t.dismiss()
             except Exception: pass
-            for ext in (".log", ".aux", ".out"):
-                try: tp.with_suffix(ext).unlink(missing_ok=True)
-                except Exception: pass
             if result.returncode != 0:
-                self._show_toast("Leader's order compile failed — check .log file", 8); return
-            pdf = tp.with_suffix(".pdf")
+                self._show_toast("Leader's order compile failed", 8); return
             done_toast = Adw.Toast.new(f"✓ {pdf.name}")
             done_toast.set_timeout(6)
             done_toast.set_button_label("Open")
@@ -5929,18 +5866,16 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             if entry.is_divider:
                 current_section = entry.title
             else:
-                # Detect hymn ref: first line of note that matches VU/MV/LUS pattern
+                # Detect hymn ref: first line of content that matches VU/MV/LUS pattern
                 hymn_ref = ""
-                if entry.note:
-                    m = re.match(r'^(VU|MV|LUS)\s+\d+[^$]*', entry.note.split('\n')[0])
+                _plain = strip_typst_plain(entry.content_typst) if entry.content_typst else ""
+                if _plain:
+                    m = re.match(r'^(VU|MV|LUS)\s+\d+[^$]*', _plain.split('\n')[0])
                     if m: hymn_ref = m.group(0)[:40]
-                # Note preview: first line, not the hymn ref, stripped of LaTeX
                 note_preview = ""
-                if entry.note:
-                    first = entry.note.split('\n')[0]
-                    if not first.startswith(("VU ","MV ","LUS ")):
-                        first = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', first)
-                        first = re.sub(r'\\[a-zA-Z]+\*?\s*', '', first).strip()
+                if _plain:
+                    first = _plain.split('\n')[0]
+                    if not first.startswith(("VU ", "MV ", "LUS ")):
                         note_preview = first[:60]
                 rows.append([current_section, entry.name, entry.leader, hymn_ref, note_preview])
 
@@ -6264,7 +6199,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         dlg.add_response("minister",  "Leader's order PDF")
         dlg.add_response("av",        "AV team sheet")
         if not simple:
-            dlg.add_response("latex", "LaTeX")
+            dlg.add_response("typst", "Typst")
             dlg.add_response("text",  "Plain text")
             dlg.add_response("csv",   "CSV")
         dlg.set_response_appearance("html",      Adw.ResponseAppearance.SUGGESTED)
@@ -6275,7 +6210,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             elif r == "bulletin": self.export_bulletin()
             elif r == "minister": self.export_minister_pdf()
             elif r == "av":     self.export_av_sheet()
-            elif r == "latex":  self.export_latex()
+            elif r == "typst":  self.export_typst()
             elif r == "text":   self.export_text()
             elif r == "csv":    self.export_csv()
         dlg.connect("response", on_resp)
@@ -6849,23 +6784,13 @@ class ServicesWindow(Adw.Window):
         entry = win.service_entries[idx]
         if not isinstance(entry, ServiceItem):
             self._show_toast("Select an element (not a section header)"); return
-        win._updating_note = True
-        entry.note = note; win.notes_view.get_buffer().set_text(note, -1)
-        win._leader_tab_btn.set_active(True)
-        win._updating_note = False; win._mark_modified()
+        entry.content_typst = note
+        win._content_widget.set_content(note)
+        win._mark_modified()
         self._show_toast(f'Inserted into "{entry.name}"')
 
     def _strip_latex(self, text: str) -> str:
-        text = re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
-            lambda m: re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'\1 \2 ', m.group(1).strip()),
-            text, flags=re.DOTALL)
-        text = re.sub(r'\\(?:textbf|textit|emph|small)\{([^}]*)\}', r'\1', text)
-        text = re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
-        text = re.sub(r'\\\\', '\n', text)
-        text = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
-        text = re.sub(r'\\[a-zA-Z@]+\*?', '', text)
-        text = re.sub(r'\{|\}', '', text)
-        return text.strip()
+        return strip_typst_plain(text)
 
     def _status_row(self, msg: str) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row.set_activatable(False)
@@ -7566,11 +7491,8 @@ class LibraryWindow(Adw.Window):
         if not isinstance(entry, ServiceItem):
             self._show_toast("Select an element (not a section header)")
             return
-        win._updating_note = True
-        entry.note = note
-        win.notes_view.get_buffer().set_text(note, -1)
-        win._leader_tab_btn.set_active(True)
-        win._updating_note = False
+        entry.content_typst = note
+        win._content_widget.set_content(note)
         win._mark_modified()
         self._show_toast(f'Inserted into “{entry.name}”')
 
@@ -7628,18 +7550,7 @@ class ArchiveWindow(Adw.Window):
         self._rebuild(self._search_text)
 
     def _strip_latex(self, text: str) -> str:
-        import re as _re
-        text = _re.sub(r'\\begin\{scripture\}(.*?)\\end\{scripture\}',
-            lambda m: _re.sub(r'\\sverse\{(\d+)\}\{([^}]*)\}', r'\1 \2 ', m.group(1).strip()),
-            text, flags=_re.DOTALL)
-        text = _re.sub(r'\\(?:textbf|textit|emph|small)\{([^}]*)\}', r'\1', text)
-        text = _re.sub(r'\\(?:hspace|vspace)\*?\{[^}]*\}', '', text)
-        text = _re.sub(r'\\\\', '\n', text)
-        text = _re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
-        text = _re.sub(r'\\[a-zA-Z@]+\*?', '', text)
-        text = _re.sub(r'\{|\}', '', text)
-        text = _re.sub(r'%[^\n]*', '', text)
-        return text.strip()
+        return strip_typst_plain(text)
 
     def _rebuild(self, query: str):
         while self._list_box.get_first_child():
@@ -7810,11 +7721,8 @@ class ArchiveWindow(Adw.Window):
         if not isinstance(entry, ServiceItem):
             self._show_toast("Select an element (not a section header)")
             return
-        win._updating_note = True
-        entry.note = note
-        win.notes_view.get_buffer().set_text(note, -1)
-        win._leader_tab_btn.set_active(True)
-        win._updating_note = False
+        entry.content_typst = note
+        win._content_widget.set_content(note)
         win._mark_modified()
         self._show_toast(f'Inserted into "{entry.name}"')
 

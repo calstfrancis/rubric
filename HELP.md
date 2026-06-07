@@ -37,19 +37,16 @@ Rubric launches in **Simple mode** by default. This keeps the interface clean fo
 | Feature | Simple mode | Advanced mode |
 |---------|-------------|---------------|
 | Service planning | ✓ | ✓ |
-| HTML export | ✓ | ✓ |
+| Rich text content editor | ✓ | ✓ |
 | Bulletin → HTML | ✓ | ✓ |
+| Bulletin → PDF (Typst) | ✓ | ✓ |
 | Bible viewer | ✓ | ✓ |
 | Hymn lookup and suggestions | ✓ | ✓ |
 | Service Planner | ✓ | ✓ |
-| GitHub sync | ✓ | ✓ |
-| LaTeX export | — | ✓ |
-| PDF compilation | — | ✓ |
-| Bulletin → PDF (LaTeX) | — | ✓ |
+| GitHub sync | — | ✓ |
 | Snippets library | — | ✓ |
 | Responsive reading builder | — | ✓ |
 | CSV export | — | ✓ |
-| LaTeX preamble editor | — | ✓ |
 
 Toggle simple mode in **Preferences → View → Simple mode**. All keyboard shortcuts work regardless of mode.
 
@@ -62,8 +59,8 @@ The header bar shows (left to right):
 - **Window title** (centre, click to open service info popover)
 - **Lectionary year tracker** — coloured dot + "Year A · Advent" showing today's RCL year and season. Hover for the full week name.
 - **GitHub sync button** (⟳) — push the current service to GitHub (advanced mode / GitHub configured)
-- **Document icon** — quick LaTeX export (Ctrl+E) — advanced mode only
-- **Print icon** — compile to PDF via xelatex (Ctrl+Shift+P) — advanced mode only
+- **Document icon** — quick Typst export (Ctrl+E) — saves and compiles the leader's order
+- **Print icon** — compile bulletin to PDF via Typst (Ctrl+Shift+P)
 - **Save** button
 - **Hamburger menu**
 
@@ -171,20 +168,22 @@ Appears when any service element is selected. The toolbar has two rows:
 | Snippet | Insert a snippet (Ctrl+Shift+I) — advanced mode |
 | Reading | Open the Responsive Reading builder (Ctrl+R) — advanced mode |
 
-### Notes panel — Leader notes / Bulletin text
+### Content editor
 
-Below the toolbar, two tabs hold separate text areas:
+Below the toolbar is the element content editor. It stores a single Typst string used for both the leader copy and the bulletin. Two editing modes:
 
-- **Leader notes** — free-form text that exports to the leader copy (LaTeX/HTML). RCL reading references injected from a loaded file appear here. This is where you type sermon notes, prayers, responsive reading text, etc.
-- **Bulletin text** — separate text that appears in the congregational bulletin in place of the leader notes (optional). Leave blank to use leader notes content in the bulletin.
+- **Rich text mode** (default) — formatting toolbar with **B** (bold), **I** (italic), **H1/H2/H3** (headings), **•** (bullet list), **1.** (numbered list), and **Ldr** (leader note — grey box, omitted from the congregational bulletin). Keyboard shortcuts: Ctrl+B, Ctrl+I.
+- **Typst mode** — raw Typst source editor (monospace, syntax-highlighted). Toggle with the **Typst** button at the top right.
 
-Rubric always switches to **Leader notes** when you select an item, so injected content is never hidden.
+Switching modes preserves content exactly. A small notice appears if you switch from Typst to rich text and the source contains markup outside the supported subset — those constructs are displayed as literal text (no data is lost).
+
+**Leader notes** (the `#leader-note[…]` block, added with the **Ldr** button) appear in the leader copy but are stripped from the congregational bulletin automatically.
 
 ---
 
 ## Bible Viewer
 
-Fetches passages in your chosen translation (WEB by default; set in **Preferences → Scripture**). Click **Insert as LaTeX** to add a formatted `{scripture}` block to the selected element's Notes/Content.
+Fetches passages in your chosen translation (WEB by default; set in **Preferences → Scripture**). Click **Insert scripture** to add a formatted `#scripture[…]` block to the selected element's content editor.
 
 ### ESV
 ESV requires a free API key from api.esv.org. Ministry and bulletin use is explicitly permitted by the ESV licence. Enter your key in **Preferences → Scripture**.
@@ -210,10 +209,10 @@ The HTML export includes:
 
 ## Bulletin Preview Panel
 
-Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit.
+Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit (debounced to avoid constant recompilation).
 
-- **Simple mode** — renders the bulletin as HTML.
-- **Advanced mode with xelatex** — compiles a real PDF in the background. A spinner appears while compiling.
+- **With typst installed** — compiles a real PDF in the background. A spinner appears while compiling; errors appear as a brief toast.
+- **Without typst** — falls back to the HTML preview.
 - **⚙ gear icon** in the preview header — quick access to Print/Digital mode toggle and the church name field without opening the full preferences dialog.
 - **Popout button** — opens the preview in a separate floating window so you can see it alongside your editing.
 
@@ -221,21 +220,14 @@ Click the **bulletin preview button** in the header bar (or toggle via the menu)
 
 ## Bulletin Export
 
-### Simple mode (default)
-**Export Bulletin** (Ctrl+Shift+B) generates an HTML bulletin and opens it in your browser. Includes:
-- Church name, service details, welcome line
-- Order of service (bulletin-visible elements only — controlled by the Bulletin toggle in the item toolbar)
-- Active announcements (expired ones are filtered automatically)
-- Staff list, mission statement, accessibility note
+**Export Bulletin** (Ctrl+Shift+B) opens the export dialog. Choose one or more outputs:
+- **Bulletin — print (booklet)** — Typst-compiled PDF, half-letter (5.5 × 8.5 in), fold for saddle-stitch
+- **Bulletin — digital (screen)** — Typst-compiled PDF, full letter, colour hyperlinks
+- **HTML** — opens in your browser; use File → Print to produce a PDF without Typst
 
-Use File → Print in the browser to produce a print-ready PDF.
+All outputs filter to bulletin-visible elements only (controlled by the Bulletin toggle in the item toolbar). Active announcements are included; expired announcements are filtered automatically.
 
-### Advanced mode
-**Export Bulletin** opens the LaTeX bulletin dialog. Choose **Print (booklet)** or **Digital (screen)**:
-- **Print/booklet** — `memoir` class, half-letter (5.5 × 8.5 in), fold for saddle-stitch
-- **Digital/screen** — `extarticle`, full letter, colour hyperlinks
-
-Both formats require TeX Live with xelatex and the `memoir` package.
+If Typst is not found, only HTML export is available.
 
 ---
 
@@ -313,26 +305,27 @@ Manage in **Preferences → Snippets**.
 
 ## Responsive Reading Builder
 
-**℟** button or Ctrl+R (advanced mode). Prefix lines `L:` (Leader) or `P:` (People); unprefixed lines alternate automatically. Inserts formatted LaTeX into Notes/Content.
+**℟** button or Ctrl+R (advanced mode). Prefix lines `L:` (Leader) or `P:` (People); unprefixed lines alternate automatically. Inserts formatted Typst into the element content editor.
 
 ---
 
-## LaTeX Export
+## Typst Templates
 
-*Advanced mode only.*
+Rubric exports bulletins and manuscripts as Typst (`.typ`) files compiled by the bundled `typst` binary.
 
-### Quick export (Ctrl+E)
-Click the document icon. First use opens a file chooser; the path is remembered. Subsequent presses overwrite immediately. Right-click to change or unlink.
+### Editing templates
 
-### Structure
-- `extarticle`, 12pt, 0.5in margins, Junicode font
-- Each divider → new page, centred small-caps heading
-- Each element → `\section*` with optional right-aligned leader name
-- Two-column layout per movement (`multicol`)
-- Scripture in `{scripture}` environment with hanging verse indent
+**Preferences → Typst Files** shows the four template files:
+- **Bulletin — print/booklet** (`bulletin_print.typ`) — page size, margins, fonts for folded bulletins
+- **Bulletin — digital/screen** (`bulletin_digital.typ`) — full-letter layout with coloured hyperlinks
+- **Manuscript** (`manuscript.typ`) — leader copy layout
+- **Shared functions** (`_shared.typ`) — Rubric's custom Typst functions (`#movement`, `#sverse`, `#scripture`, `#leader-note`, etc.)
 
-### Compile to PDF (Ctrl+Shift+P)
-Runs `xelatex` in a background thread. "Compiling PDF…" toast stays until done; success opens the PDF automatically. Helper files (`.log`, `.aux`, etc.) are cleaned up automatically.
+Click **Edit…** to open the template in an in-app editor (with Typst syntax highlighting if GtkSourceView is installed). Click **Save override** to write your version to `~/.config/rubric/templates/`. Rubric checks that folder before the bundled copies, so your overrides persist across upgrades. Click **Reset to default** to remove your override and restore the bundled version.
+
+### Custom Typst in element content
+
+Switch any element to **Typst mode** (toggle button top-right of the content editor) to enter raw Typst. You can use any Typst function, not just the Rubric subset. Out-of-subset constructs are passed through to the compiled document unchanged — only the rich-text editor won't render them visually.
 
 ---
 

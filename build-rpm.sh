@@ -37,6 +37,16 @@ done
 cp -r rubric_package "$SRCDIR/"
 find "$SRCDIR/rubric_package" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 find "$SRCDIR/rubric_package" -name "*.pyc" -delete 2>/dev/null || true
+
+# Typst binary — bundled in rubric_package/bin/ or copied from system
+if [ -f "rubric_package/bin/typst" ]; then
+    mkdir -p "$SRCDIR/rubric_package/bin"
+    install -m 755 rubric_package/bin/typst "$SRCDIR/rubric_package/bin/typst"
+elif command -v typst &>/dev/null; then
+    mkdir -p "$SRCDIR/bin"
+    install -m 755 "$(command -v typst)" "$SRCDIR/bin/typst"
+fi
+
 cp io.github.calstfrancis.rubric.desktop "$SRCDIR/"
 cp io.github.calstfrancis.rubric.metainfo.xml "$SRCDIR/"
 cp rubric.svg rubric-symbolic.svg "$SRCDIR/"
@@ -84,10 +94,10 @@ Canada ministry. It integrates the Revised Common Lectionary, hymn lookup for
 Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and
 export options for bulletin production.
 
-Simple mode keeps things focused with no LaTeX required — plan service orders,
-look up RCL readings, find hymns, fetch Bible passages, and export HTML
-bulletins. Advanced mode adds PDF compilation via xelatex, LaTeX export,
-snippets, and a responsive reading builder.
+Plan service orders, look up RCL readings, find hymns, fetch Bible passages,
+and export polished bulletins — HTML or PDF (compiled with the bundled Typst
+typesetter, no LaTeX required). Includes rich text and raw Typst editing per
+element, live PDF preview, and optional GitHub sync.
 
 %prep
 %setup -q
@@ -111,6 +121,15 @@ done
 cp -r rubric_package %{buildroot}/usr/share/rubric/
 find %{buildroot}/usr/share/rubric/rubric_package -name "*.pyc" -delete 2>/dev/null || true
 find %{buildroot}/usr/share/rubric/rubric_package -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Typst binary (bundled)
+if [ -f rubric_package/bin/typst ]; then
+    install -d %{buildroot}/usr/share/rubric/rubric_package/bin
+    install -m 755 rubric_package/bin/typst %{buildroot}/usr/share/rubric/rubric_package/bin/typst
+elif [ -f bin/typst ]; then
+    install -d %{buildroot}/usr/share/rubric/bin
+    install -m 755 bin/typst %{buildroot}/usr/share/rubric/bin/typst
+fi
 
 # Documentation bundled in app dir
 for f in HELP.md FAQ.md CHANGELOG.md; do

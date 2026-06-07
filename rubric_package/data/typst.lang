@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language SYSTEM "language.dtd">
+<!--
+  GtkSourceView language definition for Typst markup.
+  Covers the subset used in Rubric element content.
+-->
+<language id="typst" name="Typst" version="2.0" _section="Markup">
+  <metadata>
+    <property name="mimetypes">text/x-typst</property>
+    <property name="globs">*.typ</property>
+    <property name="line-comment-start">//</property>
+  </metadata>
+
+  <styles>
+    <style id="comment"       name="Comment"           map-to="def:comment"/>
+    <style id="function"      name="Function"          map-to="def:function"/>
+    <style id="keyword"       name="Keyword"           map-to="def:keyword"/>
+    <style id="heading"       name="Heading"           map-to="def:type"/>
+    <style id="bold"          name="Bold"              map-to="def:statement"/>
+    <style id="italic"        name="Italic"            map-to="def:string"/>
+    <style id="raw"           name="Raw"               map-to="def:constant"/>
+    <style id="label"         name="Label/Reference"   map-to="def:preprocessor"/>
+    <style id="math"          name="Math"              map-to="def:number"/>
+    <style id="string"        name="String"            map-to="def:string"/>
+    <style id="escape"        name="Escape"            map-to="def:special-char"/>
+  </styles>
+
+  <definitions>
+    <!-- Line comments -->
+    <context id="line-comment" style-ref="comment" end-at-line-end="true">
+      <start>//</start>
+    </context>
+
+    <!-- Block comments /* ... */ (non-nestable approximation) -->
+    <context id="block-comment" style-ref="comment">
+      <start>/\*</start>
+      <end>\*/</end>
+    </context>
+
+    <!-- Headings: = / == / === at start of line -->
+    <context id="heading-1" style-ref="heading" end-at-line-end="true">
+      <start>^=(?!=)</start>
+    </context>
+    <context id="heading-2" style-ref="heading" end-at-line-end="true">
+      <start>^==(?!=)</start>
+    </context>
+    <context id="heading-3" style-ref="heading" end-at-line-end="true">
+      <start>^===</start>
+    </context>
+
+    <!-- Bold: *text* -->
+    <context id="bold" style-ref="bold">
+      <match>\*[^*\n]+\*</match>
+    </context>
+
+    <!-- Italic: _text_ -->
+    <context id="italic" style-ref="italic">
+      <match>_[^_\n]+_</match>
+    </context>
+
+    <!-- Inline raw: `code` -->
+    <context id="raw-inline" style-ref="raw">
+      <start>`</start>
+      <end>`</end>
+    </context>
+
+    <!-- Raw block: ``` ... ``` -->
+    <context id="raw-block" style-ref="raw">
+      <start>```</start>
+      <end>```</end>
+    </context>
+
+    <!-- Math: $...$ -->
+    <context id="math" style-ref="math">
+      <start>\$</start>
+      <end>\$</end>
+    </context>
+
+    <!-- Labels: <label-name> -->
+    <context id="label" style-ref="label">
+      <match>&lt;[a-zA-Z][a-zA-Z0-9_-]*&gt;</match>
+    </context>
+
+    <!-- References: @label-name -->
+    <context id="reference" style-ref="label">
+      <match>@[a-zA-Z][a-zA-Z0-9_-]*</match>
+    </context>
+
+    <!-- Escape sequences: \# \@ \* \_ etc. -->
+    <context id="escape" style-ref="escape">
+      <match>\\[#@*_~$`&lt;&gt;\\]</match>
+    </context>
+
+    <!-- Built-in Rubric functions (highlighted as keywords) -->
+    <context id="rubric-functions" style-ref="keyword">
+      <keyword>movement</keyword>
+      <keyword>hymnref</keyword>
+      <keyword>ldr</keyword>
+      <keyword>ppl</keyword>
+      <keyword>sverse</keyword>
+      <keyword>scripture</keyword>
+      <keyword>leader-note</keyword>
+    </context>
+
+    <!-- Generic function call: #name[ or #name( -->
+    <context id="function-call" style-ref="function">
+      <match>#[a-zA-Z][a-zA-Z0-9_-]*</match>
+    </context>
+
+    <context id="typst">
+      <include>
+        <context ref="line-comment"/>
+        <context ref="block-comment"/>
+        <context ref="heading-3"/>
+        <context ref="heading-2"/>
+        <context ref="heading-1"/>
+        <context ref="raw-block"/>
+        <context ref="raw-inline"/>
+        <context ref="math"/>
+        <context ref="bold"/>
+        <context ref="italic"/>
+        <context ref="label"/>
+        <context ref="reference"/>
+        <context ref="escape"/>
+        <context ref="rubric-functions"/>
+        <context ref="function-call"/>
+      </include>
+    </context>
+  </definitions>
+</language>

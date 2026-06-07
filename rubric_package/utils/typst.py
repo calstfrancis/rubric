@@ -1,0 +1,284 @@
+"""Typst utility functions for Rubric."""
+
+from __future__ import annotations
+
+import re
+
+
+# Characters that have special meaning in Typst markup mode.
+_TYPST_ESCAPES = [
+    ("\\", "\\u{5c}"),   # literal backslash — must be first
+    ("#",  "\\#"),
+    ("@",  "\\@"),
+    ("*",  "\\*"),
+    ("_",  "\\_"),
+    ("~",  "\\~"),
+    ("$",  "\\$"),
+    ("`",  "\\`"),
+    ("<",  "\\<"),
+    (">",  "\\>"),
+]
+
+
+def typst_escape(text: str) -> str:
+    """Escape special Typst markup characters in plain text."""
+    for char, escaped in _TYPST_ESCAPES:
+        text = text.replace(char, escaped)
+    return text
+
+
+def note_for_typst(note: str) -> str:
+    """Prepare a note for Typst insertion.
+
+    If the note already contains Typst function calls (lines starting with #
+    followed by a letter), pass through as-is so hand-written Typst works.
+    Otherwise escape special characters.
+    """
+    if not note:
+        return ""
+    if re.search(r"(?m)^#[a-zA-Z]", note):
+        return note
+    return typst_escape(note)
+
+
+def passage_to_typst(reference: str, text: str, translation: str = "web") -> str:
+    """Convert Bible verse text to a Typst scripture block.
+
+    Args:
+        reference:   Bible reference, e.g. "John 3:16"
+        text:        Verse text from the Bible API
+        translation: Translation key (web, kjv, asv, esv)
+
+    Returns:
+        Typst source string for the scripture block.
+    """
+    lines = text.strip().splitlines()
+
+    verses: list[tuple[str, str]] = []
+    current_num: str | None = None
+    current_parts: list[str] = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^(\d+)\s*(.*)", line)
+        if m:
+            if current_num is not None:
+                verses.append((current_num, " ".join(current_parts)))
+            current_num = m.group(1)
+            current_parts = [m.group(2).strip()] if m.group(2).strip() else []
+        else:
+            if current_num is not None:
+                current_parts.append(line)
+
+    if current_num is not None:
+        verses.append((current_num, " ".join(current_parts)))
+
+    ref_esc = typst_escape(reference)
+    trl_label = translation.upper()
+
+    verse_lines = [f"  #sverse({vnum})[{typst_escape(vtext)}]" for vnum, vtext in verses]
+    verse_block = "\n".join(verse_lines)
+
+    return (
+        f"#text(size: 0.85em, style: \"italic\")[{ref_esc} ({trl_label})]\n"
+        f"#scripture[\n{verse_block}\n]"
+    )
+
+
+def strip_typst_for_html(text: str) -> str:
+    """Strip Typst (or legacy LaTeX) markup, returning HTML-safe text.
+
+    Used by the HTML bulletin preview where markup should be rendered
+    as formatted HTML, not raw Typst source.
+    """
+    import re as _re
+
+    # ── Typst scripture → HTML ────────────────────────────────────────────────
+    def _render_scripture(m: re.Match) -> str:
+        inner = m.group(1)
+        inner = _re.sub(
+            r"#sverse\((\d+)\)\[([^\]]*)\]",
+            r"<sup>\1</sup>&nbsp;\2",
+            inner,
+        )
+        return inner
+
+    text = _re.sub(r"#scripture\[((?:[^[\]]|\[[^\]]*\])*)\]", _render_scripture, text, flags=_re.DOTALL)
+
+    # ── Typst inline formatting → HTML ────────────────────────────────────────
+    text = _re.sub(r"#strong\[([^\]]*)\]", r"<strong>\1</strong>", text)
+    text = _re.sub(r"#emph\[([^\]]*)\]",   r"<em>\1</em>",         text)
+    text = _re.sub(r"\*([^*\n]+)\*",        r"<strong>\1</strong>", text)
+    text = _re.sub(r"_([^_\n]+)_",          r"<em>\1</em>",         text)
+
+    # Strip leader-note blocks entirely (congregation HTML)
+    text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+
+    # Strip remaining Typst function calls — emit their content arg if present
+    text = _re.sub(r"#[a-z][a-z-]*\((?:[^()]*)\)", "", text)
+    text = _re.sub(r"#[a-z][a-z-]*\[([^\]]*)\]",    r"\1", text)
+    text = _re.sub(r"#[a-z][a-z-]*",                 "",    text)
+
+    # ── Legacy LaTeX → HTML (backward compat for existing .liturgy files) ─────
+    text = _re.sub(
+        r"\\begin\{scripture\}(.*?)\\end\{scripture\}",
+        lambda m: _re.sub(
+            r"\\sverse\{(\d+)\}\{([^}]+)\}",
+            r"<sup>\1</sup>&nbsp;\2",
+            m.group(1).strip(),
+        ),
+        text,
+        flags=_re.DOTALL,
+    )
+    text = _re.sub(r"\\textbf\{([^}]*)\}", r"<strong>\1</strong>", text)
+    text = _re.sub(r"\\textit\{([^}]*)\}", r"<em>\1</em>",         text)
+    text = _re.sub(r"\\emph\{([^}]*)\}",   r"<em>\1</em>",         text)
+    text = _re.sub(r"\\\\",                 "<br>",                 text)
+    text = _re.sub(r"\\(?:hspace|vspace)\*?\{[^}]*\}", "", text)
+    text = _re.sub(
+        r"\\(?:noindent|newline|newpage|pagebreak|clearpage|par"
+        r"|medskip|bigskip|smallskip|linebreak|centering)\b\s*",
+        " ", text,
+    )
+    text = _re.sub(r"\\[a-zA-Z]+\*?\{([^}]*)\}", r"\1", text)
+    text = _re.sub(r"\\[a-zA-Z]+\*?\s*",          "",   text)
+
+    return text.strip()
+
+
+def parse_typst_errors(stderr: str) -> list[dict]:
+    """Parse typst compile stderr into a list of structured error dicts.
+
+    Each dict has keys: message (str), file (str|None), line (int|None), col (int|None).
+
+    Example stderr line:
+        error: unclosed delimiter
+          --> rubric_preview_xxx.typ:42:15
+    """
+    errors: list[dict] = []
+    lines = stderr.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("error:"):
+            msg = line[6:].strip()
+            entry: dict = {"message": msg, "file": None, "line": None, "col": None}
+            if i + 1 < len(lines):
+                m = re.match(r"\s+-->\s+(.+):(\d+):(\d+)", lines[i + 1])
+                if m:
+                    entry["file"] = m.group(1)
+                    entry["line"] = int(m.group(2))
+                    entry["col"] = int(m.group(3))
+                    i += 1
+            errors.append(entry)
+        i += 1
+    return errors
+
+
+def format_typst_error(stderr: str) -> str:
+    """Return a short human-readable error string from typst stderr."""
+    errors = parse_typst_errors(stderr)
+    if not errors:
+        last = stderr.strip().splitlines()
+        return last[-1][:120] if last else "typst error"
+    e = errors[0]
+    loc = f" (line {e['line']})" if e["line"] else ""
+    return f"{e['message']}{loc}"
+
+
+def strip_typst_plain(text: str) -> str:
+    """Strip Typst (or legacy LaTeX) markup, returning plain text.
+
+    Used for plain-text contexts (CSV export, copy-as-text, etc.).
+    """
+    import re as _re
+
+    # Typst scripture
+    text = _re.sub(
+        r"#scripture\[((?:[^[\]]|\[[^\]]*\])*)\]",
+        lambda m: _re.sub(r"#sverse\((\d+)\)\[([^\]]*)\]", r"\1 \2 ", m.group(1).strip()),
+        text, flags=_re.DOTALL,
+    )
+    # Leader note — strip
+    text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+    # Typst formatting — keep content
+    text = _re.sub(r"#[a-z][a-z-]*\[([^\]]*)\]", r"\1", text)
+    text = _re.sub(r"#[a-z][a-z-]*\((?:[^()]*)\)", "", text)
+    text = _re.sub(r"#[a-z][a-z-]*", "", text)
+    text = _re.sub(r"\*([^*\n]+)\*", r"\1", text)
+    text = _re.sub(r"_([^_\n]+)_",   r"\1", text)
+    # Legacy LaTeX
+    text = _re.sub(
+        r"\\begin\{scripture\}(.*?)\\end\{scripture\}",
+        lambda m: _re.sub(r"\\sverse\{(\d+)\}\{([^}]*)\}", r"\1 \2 ", m.group(1).strip()),
+        text, flags=_re.DOTALL,
+    )
+    text = _re.sub(r"\\(?:textbf|textit|emph|small)\{([^}]*)\}", r"\1", text)
+    text = _re.sub(r"\\(?:hspace|vspace)\*?\{[^}]*\}", "", text)
+    text = _re.sub(r"\\\\", "\n", text)
+    text = _re.sub(r"\\[a-zA-Z]+\*?\{([^}]*)\}", r"\1", text)
+    text = _re.sub(r"\\[a-zA-Z@]+\*?", "", text)
+    text = _re.sub(r"[{}]", "", text)
+    return text.strip()
+
+
+# ── Shared Typst function definitions ─────────────────────────────────────────
+# Inlined into every generated .typ document.
+
+TYPST_SHARED = r"""
+// ── Rubric shared functions ───────────────────────────────────────────────────
+
+#let movement(title) = {
+  v(8pt)
+  align(center, text(weight: "bold", size: 1.2em, smallcaps(title)))
+  v(4pt)
+}
+
+#let hymnref(ref, title) = {
+  strong(ref)
+  h(0.3em)
+  emph(title)
+}
+
+#let ldr(content) = { strong(content); linebreak() }
+#let ppl(content) = { strong(content); linebreak() }
+
+#let sverse(num, content) = {
+  super(str(num))
+  h(0.25em)
+  content
+  linebreak()
+}
+
+#let scripture(content) = block(
+  inset: (left: 1.5em),
+  above: 4pt,
+  below: 4pt,
+  content,
+)
+
+#let leader-note(content) = block(
+  fill: luma(235),
+  inset: 8pt,
+  radius: 4pt,
+  text(size: 0.9em, content),
+)
+
+// Element heading: bold small-caps with a thin rule below
+#show heading.where(level: 3): it => {
+  v(6pt, weak: true)
+  text(weight: "bold", smallcaps(it.body))
+  v(1pt, weak: true)
+  line(length: 100%, stroke: 0.4pt + luma(160))
+  v(4pt, weak: true)
+}
+
+// Movement heading: centred bold larger text
+#show heading.where(level: 2): it => {
+  v(8pt, weak: true)
+  align(center, text(size: 1.1em, weight: "bold", it.body))
+  v(4pt, weak: true)
+}
+""".strip()

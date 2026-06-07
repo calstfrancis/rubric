@@ -10,22 +10,21 @@
   <description>
     <p>
       Rubric is a GNOME-native worship service planning tool for United Church
-      of Canada ministry. Simple mode keeps things focused: plan service orders,
-      look up RCL readings, find hymns, fetch Bible passages, and export HTML
-      bulletins — no LaTeX required. Advanced mode adds PDF compilation,
-      LaTeX export, snippets, and a responsive reading builder.
+      of Canada ministry. Plan service orders, look up RCL readings, find
+      hymns, fetch Bible passages, and export polished bulletins — HTML or
+      PDF. PDF export uses the bundled Typst typesetter; no LaTeX required.
     </p>
     <p>Features include:</p>
     <ul>
       <li>Revised Common Lectionary readings, liturgical colour, and per-Proper hymn suggestions</li>
       <li>Hymn lookup from Voices United, More Voices, and Let Us Sing via Hymnary.org</li>
       <li>Bible passage viewer (WEB, KJV, ASV, ESV) with one-click scripture insertion</li>
+      <li>Rich text and raw Typst editing per service element</li>
+      <li>Live PDF bulletin preview with bundled Typst compiler</li>
       <li>HTML bulletin export — print to PDF directly from your browser</li>
       <li>Service Planner to browse and open all your saved services</li>
       <li>GitHub sync to back up and share services across machines</li>
-      <li>LaTeX export with two-column layout and scripture environment (advanced mode)</li>
-      <li>One-click PDF compilation via xelatex (advanced mode)</li>
-      <li>Snippets library and responsive reading builder (advanced mode)</li>
+      <li>Snippets library and responsive reading builder</li>
       <li>Named service order templates</li>
     </ul>
   </description>
@@ -42,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.0" date="2026-06-07">
+      <description>
+        <p>Phase 4 — Polish and Packaging. Typst syntax highlighting in the element editor (GtkSourceView). Structured error parsing for compilation failures. In-app Typst template editor in Preferences → Typst Files with Reset to default. Bundled typst binary included in deb and rpm packages. Documentation updated throughout.</p>
+      </description>
+    </release>
     <release version="0.14.8" date="2026-06-06">
       <description>
         <p>Sidebar starts fully visible. Autosave restore dialog now appears after the changelog, not over it. Hymn downloads continue in the background if you close the wizard; toast notification when done. Hymn scraping now uses og:title for reliability.</p>

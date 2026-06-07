@@ -14,32 +14,6 @@ AUTOSAVE_SECS = 180
 CONFIG_PATH = Path.home() / ".config/rubric/config.json"
 AUTOSAVE_PATH = Path.home() / ".local/share/rubric/autosave.liturgy"
 
-DEFAULT_PREAMBLE = r"""\documentclass[12pt, letterpaper]{extarticle}
-\usepackage{fontspec}
-\setmainfont{Junicode}[UprightFont=*,BoldFont=*-Bold,ItalicFont=*-Italic,BoldItalicFont=*-BoldItalic]
-\usepackage{geometry}
-\geometry{top=1in,bottom=1in,left=0.5in,right=0.5in}
-\usepackage{parskip,microtype,titlesec}
-\usepackage{multicol}
-\setlength{\columnsep}{1.5em}
-% Elements: bold left-aligned with rule below
-\titleformat{\section}{\normalsize\bfseries}{}{0em}{}[\titlerule]
-\titlespacing*{\section}{0pt}{10pt}{4pt}
-% Scripture block: suppresses parskip between verses, hanging indent.
-% \sverse just emits text; the scripture environment handles all spacing/indent.
-\newenvironment{scripture}{%
-  \par\begingroup
-  \setlength{\parskip}{0pt}%
-  \setlength{\parindent}{-2.4em}%
-  \leftskip=2.4em
-}{%
-  \par\endgroup\vspace{4pt}%
-}
-\newcommand{\sverse}[2]{\textsuperscript{#1}\quad #2\par}
-\usepackage{hyperref}
-\hypersetup{hidelinks}
-"""
-
 SECTIONS = [
     ("Gathering", ["Prelude","Welcome","Land acknowledgement","Announcements",
                    "Call to worship","Opening hymn","Prayer of approach",
@@ -57,7 +31,6 @@ class Config:
     """Application configuration manager."""
 
     def __init__(self) -> None:
-        self.preamble: str = DEFAULT_PREAMBLE
         self.templates: dict[str, list[dict]] = {}
         self.default_template: str = ""
         self.palette: list[dict] | None = None
@@ -105,7 +78,6 @@ class Config:
         if CONFIG_PATH.exists():
             try:
                 d = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-                self.preamble          = d.get("preamble", DEFAULT_PREAMBLE)
                 self.palette           = d.get("palette", None)
                 self.last_dir          = d.get("last_dir", str(Path.home()))
                 self.recent_files      = d.get("recent_files", [])
@@ -141,7 +113,6 @@ class Config:
     def save(self) -> None:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         p: dict[str, Any] = {
-            "preamble":              self.preamble,
             "templates":             self.templates,
             "default_template":      self.default_template,
             "last_dir":              self.last_dir,

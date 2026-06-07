@@ -2,14 +2,14 @@
 Rubric - A GNOME-native worship service planning tool.
 
 This package provides the core functionality for the Rubric application,
-including data models, LaTeX export, and utility functions.
+including data models, Typst export, and utility functions.
 """
 
 __version__ = "0.12"
 
-from .models.config import Config, get_palette, SECTIONS, DEFAULT_PREAMBLE
+from .models.config import Config, get_palette, SECTIONS
 from .models.service import ServiceItem, SectionDivider, entry_from_dict
-from .utils.latex import latex_escape, note_for_latex, passage_to_latex, migrate_scripture_note
+from .utils.typst import typst_escape, note_for_typst, passage_to_typst
 from .utils.colors import section_colour, hex_to_rgb
 from .utils.helpers import is_hymn_element
 
@@ -17,14 +17,12 @@ __all__ = [
     "Config",
     "get_palette",
     "SECTIONS",
-    "DEFAULT_PREAMBLE",
     "ServiceItem",
     "SectionDivider",
     "entry_from_dict",
-    "latex_escape",
-    "note_for_latex",
-    "passage_to_latex",
-    "migrate_scripture_note",
+    "typst_escape",
+    "note_for_typst",
+    "passage_to_typst",
     "section_colour",
     "hex_to_rgb",
     "is_hymn_element",
