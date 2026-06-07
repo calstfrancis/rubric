@@ -21,7 +21,7 @@ try:
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
     from rubric_package.utils.typst import (
         typst_escape, note_for_typst, passage_to_typst,
-        strip_typst_for_html, strip_typst_plain, TYPST_SHARED,
+        strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
         format_typst_error,
     )
     from rubric_package.utils.colors import section_colour, hex_to_rgb
@@ -87,7 +87,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.15.0"
+APP_VERSION = "0.15.1"
 
 
 config = Config()
@@ -1646,8 +1646,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._preview_visible = False
         self._preview_pending_id = None
+        self._preview_mode = "bulletin"
         self._preview_btn = Gtk.ToggleButton(icon_name="document-print-preview-symbolic",
-                                             tooltip_text="Toggle live bulletin preview")
+                                             tooltip_text="Toggle live preview")
         self._preview_btn.connect("toggled", self._toggle_preview_panel)
         hdr.pack_end(self._preview_btn)
 
@@ -2432,6 +2433,9 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Order actions ─────────────────────────────────────────────────────────
 
     def remove_item(self):
+        focus = self.get_focus()
+        if isinstance(focus, (Gtk.Text, Gtk.TextView, Gtk.Entry, Gtk.SearchEntry)):
+            return
         idx = self._selected_index()
         if idx < 0: return
         self._push_undo(); del self.service_entries[idx]; self._refresh_order_list(idx); self._mark_modified()
@@ -2829,14 +2833,35 @@ class MainWindow(Adw.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_size_request(320, -1)
 
-        # Header — clickable "Bulletin Preview ▾" heading opens options popover
+        # Preview panel header
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         hdr.set_margin_start(6); hdr.set_margin_end(6)
         hdr.set_margin_top(6); hdr.set_margin_bottom(6)
 
-        lbl = Gtk.Label(label="Bulletin Preview")
+        lbl = Gtk.Label(label="Preview")
         lbl.add_css_class("heading"); lbl.set_hexpand(True); lbl.set_xalign(0)
         hdr.append(lbl)
+
+        # Bulletin / Manuscript toggle
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        mode_box.add_css_class("linked")
+        self._preview_bulletin_btn = Gtk.ToggleButton(label="Bulletin")
+        self._preview_bulletin_btn.set_active(True)
+        self._preview_bulletin_btn.set_tooltip_text("Show congregation bulletin")
+        self._preview_manuscript_btn = Gtk.ToggleButton(label="Manuscript")
+        self._preview_manuscript_btn.set_group(self._preview_bulletin_btn)
+        self._preview_manuscript_btn.set_tooltip_text("Show leader manuscript")
+
+        def _on_preview_mode(btn, mode):
+            if btn.get_active():
+                self._preview_mode = mode
+                self._do_preview_update()
+
+        self._preview_bulletin_btn.connect("toggled", _on_preview_mode, "bulletin")
+        self._preview_manuscript_btn.connect("toggled", _on_preview_mode, "manuscript")
+        mode_box.append(self._preview_bulletin_btn)
+        mode_box.append(self._preview_manuscript_btn)
+        hdr.append(mode_box)
 
         self._bulletin_edit_btn = Gtk.ToggleButton(icon_name="document-edit-symbolic",
                                                    tooltip_text="Edit bulletin text for this service")
@@ -3130,16 +3155,24 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_pending_id = None
         if not getattr(self, "_preview_visible", False):
             return False
-        if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
+        mode = getattr(self, "_preview_mode", "bulletin")
+        if mode == "bulletin" and hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             return False
         if self._preview_webview is None:
             return False
+
+        # Hide the bulletin edit button in manuscript mode
+        if hasattr(self, "_bulletin_edit_btn"):
+            self._bulletin_edit_btn.set_visible(mode == "bulletin")
 
         typst = self._find_typst()
         if typst and not getattr(self, "_preview_compiling", False):
             # Capture Typst source in main thread (GTK widget access required)
             try:
-                typ_src = self._build_bulletin_typst(digital=False)
+                if mode == "manuscript":
+                    typ_src = self._build_manuscript_typst()
+                else:
+                    typ_src = self._build_bulletin_typst(digital=False)
             except Exception:
                 return False
             self._preview_compiling = True
@@ -3154,11 +3187,21 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Typst not found or compile in progress — HTML fallback
         try:
-            html = self._build_bulletin_html()
+            if mode == "manuscript":
+                html = self._build_manuscript_html()
+            else:
+                html = self._build_bulletin_html()
             self._preview_webview.load_html(html, None)
         except Exception:
             pass
         return False
+
+    def _preview_pdf_path(self) -> Path:
+        """Return the stable path used for the live preview PDF."""
+        mode = getattr(self, "_preview_mode", "bulletin")
+        cache = Path(GLib.get_user_cache_dir()) / "rubric"
+        cache.mkdir(parents=True, exist_ok=True)
+        return cache / f"preview_{mode}.pdf"
 
     def _run_preview_compile(self, typ_src: str, typst_bin: str) -> None:
         """Background thread: compile bulletin Typst to PDF for live preview."""
@@ -3170,7 +3213,7 @@ class MainWindow(Adw.ApplicationWindow):
             ) as f:
                 f.write(typ_src)
                 typ_path = Path(f.name)
-            pdf_path = typ_path.with_suffix(".pdf")
+            pdf_path = self._preview_pdf_path()
             result = subprocess.run(
                 [typst_bin, "compile", str(typ_path), str(pdf_path)],
                 capture_output=True, text=True, timeout=60,
@@ -3229,10 +3272,15 @@ class MainWindow(Adw.ApplicationWindow):
         return _fallbacks.get(name, "")
 
     def _load_preview_pdf(self, pdf_path: str):
-        self._preview_pdf_path = pdf_path
+        self._preview_pdf_loaded = pdf_path
         self._preview_compile_done()
         if self._preview_webview:
-            self._preview_webview.load_uri(f"file://{pdf_path}")
+            uri = f"file://{pdf_path}"
+            current = self._preview_webview.get_uri() or ""
+            if current == uri:
+                self._preview_webview.reload()
+            else:
+                self._preview_webview.load_uri(uri)
         return False
 
     def _preview_compile_done(self):
@@ -3243,22 +3291,27 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def _popout_preview(self):
-        """Open the current bulletin preview in a separate window."""
+        """Open the current preview in a separate window."""
         if not _WEBKIT_OK:
             return
-        win = Adw.Window(title="Bulletin Preview", transient_for=self)
+        mode = getattr(self, "_preview_mode", "bulletin")
+        title = "Manuscript Preview" if mode == "manuscript" else "Bulletin Preview"
+        win = Adw.Window(title=title, transient_for=self)
         win.set_default_size(720, 960)
         tv = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
         tv.add_top_bar(hdr)
         wv = _WebKit.WebView()
         wv.set_vexpand(True); wv.set_hexpand(True)
-        pdf_path = getattr(self, "_preview_pdf_path", None)
+        pdf_path = getattr(self, "_preview_pdf_loaded", None)
         if pdf_path and Path(pdf_path).exists():
             wv.load_uri(f"file://{pdf_path}")
         else:
             try:
-                wv.load_html(self._build_bulletin_html(), None)
+                if mode == "manuscript":
+                    wv.load_html(self._build_manuscript_html(), None)
+                else:
+                    wv.load_html(self._build_bulletin_html(), None)
             except Exception:
                 pass
         tv.set_content(wv)
@@ -4483,10 +4536,22 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         def esc(s):
             return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
+        scroll_script = (
+            "<script>"
+            "document.addEventListener('DOMContentLoaded',function(){"
+            "var k='rubric_scroll_y';"
+            "var s=sessionStorage.getItem(k);"
+            "if(s)window.scrollTo(0,parseInt(s,10));"
+            "window.addEventListener('scroll',function(){"
+            "sessionStorage.setItem(k,window.scrollY);});"
+            "});"
+            "</script>"
+        )
+
         lines = [
             "<!DOCTYPE html><html lang='en'>",
             f"<head><meta charset='utf-8'><title>{esc(church)} – {esc(title)}</title>",
-            f"<style>{css}</style></head><body>",
+            f"<style>{css}</style>{scroll_script}</head><body>",
         ]
 
         if church:
@@ -4554,6 +4619,68 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             back.append(f"<div>{esc(access)}</div>")
         if back:
             lines.append("<hr><div class='back'>" + "\n".join(back) + "</div>")
+
+        lines.append("</body></html>")
+        return "\n".join(lines)
+
+    def _build_manuscript_html(self) -> str:
+        """Build a simple HTML preview of the leader manuscript (fallback for no typst)."""
+        def esc(s):
+            return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+        title    = self.service_title_entry.get_text() or "Order of Service"
+        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
+
+        css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, serif; font-size: 11pt; color: #111;
+       max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }
+.title { font-size: 15pt; font-weight: bold; text-align: center; margin-bottom: 4px; }
+.date  { font-size: 11pt; font-style: italic; text-align: center; color: #555; margin-bottom: 16px; }
+hr     { border: none; border-top: 1px solid #bbb; margin: 12px 0; }
+h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-align: center;
+         margin: 18px 0 6px; border-top: 1px solid #ccc; padding-top: 10px; }
+.el-name { font-weight: bold; font-variant: small-caps; font-size: 11pt;
+            border-bottom: 0.5px solid #bbb; margin: 10px 0 2px; padding-bottom: 2px; }
+.leader { font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }
+.note   { font-size: 10pt; margin: 4px 0 0 0; line-height: 1.6; white-space: pre-wrap; }
+.leader-note { background: #f0f0f0; padding: 6px 8px; border-radius: 3px;
+               font-size: 9.5pt; margin: 4px 0; }
+"""
+        scroll_script = (
+            "<script>"
+            "document.addEventListener('DOMContentLoaded',function(){"
+            "var k='rubric_scroll_y_ms';"
+            "var s=sessionStorage.getItem(k);"
+            "if(s)window.scrollTo(0,parseInt(s,10));"
+            "window.addEventListener('scroll',function(){"
+            "sessionStorage.setItem(k,window.scrollY);});"
+            "});"
+            "</script>"
+        )
+
+        lines = [
+            "<!DOCTYPE html><html lang='en'>",
+            f"<head><meta charset='utf-8'><title>Manuscript – {esc(title)}</title>",
+            f"<style>{css}</style>{scroll_script}</head><body>",
+            f"<div class='title'>{esc(title)}</div>",
+        ]
+        if date_str:
+            lines.append(f"<div class='date'>{esc(date_str)}</div>")
+        lines.append("<hr>")
+
+        for sec, items in self._grouped_entries():
+            if sec:
+                lines.append(f"<h2>{esc(sec)}</h2>")
+            for si in items:
+                if not isinstance(si, ServiceItem):
+                    continue
+                leader_html = (f"<span class='leader'>({esc(si.leader)})</span>"
+                               if si.leader else "")
+                lines.append(f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
+                if si.content_typst:
+                    clean = strip_typst_for_html(si.content_typst)
+                    lines.append(f"<div class='note'>{clean.replace(chr(10), '<br>')}</div>")
 
         lines.append("</body></html>")
         return "\n".join(lines)
@@ -4825,7 +4952,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                     parts.append('')
                     in_columns = False
                 parts += [
-                    f'#movement[{_typst_escape(entry.title)}]',
+                    f'= {_typst_escape(entry.title)}',
                     '#columns(2)[',
                     '',
                 ]
@@ -4835,7 +4962,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             if not isinstance(entry, ServiceItem) or not entry.show_in_bulletin:
                 continue
 
-            parts += ['', f'=== {_typst_escape(entry.name)}', '']
+            parts += ['', f'== {_typst_escape(entry.name)}', '']
 
             name_lower = entry.name.lower()
             is_hymn = any(k in name_lower
@@ -4855,9 +4982,9 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                     else:
                         parts.append(f'*{ref}*')
                 else:
-                    parts.append(_note_for_typst(content))
+                    parts.append(strip_leader_notes(content))
             elif content:
-                parts.append(_note_for_typst(content))
+                parts.append(strip_leader_notes(content))
 
         if in_columns:
             parts += ['', ']', '']
@@ -5066,8 +5193,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                     in_columns = False
                 parts += [
                     '#pagebreak(weak: true)',
-                    f'#align(center, text(size: 1.1em, weight: "bold")[#smallcaps[{_typst_escape(sec)}]])',
-                    '#v(6pt)',
+                    f'= {_typst_escape(sec)}',
                     '#columns(2)[',
                     '',
                 ]
@@ -5076,9 +5202,9 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
             for si in items:
                 leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
                               if si.leader else "")
-                parts.append(f'=== {_typst_escape(si.name)}{leader_str}')
+                parts.append(f'== {_typst_escape(si.name)}{leader_str}')
                 if si.content_typst:
-                    parts.append(_note_for_typst(si.content_typst))
+                    parts.append(si.content_typst)
                 parts.append('')
 
         if in_columns:
@@ -5756,7 +5882,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 parts.append(f'*{_typst_escape(entry.name)}*{leader_str}{dur_str}')
                 parts.append('')
                 if entry.content_typst:
-                    parts.append(f'#text(size: 0.9em)[{_note_for_typst(entry.content_typst)}]')
+                    parts.append(f'#text(size: 0.9em)[{entry.content_typst}]')
                     parts.append('')
                 parts.append('#v(4pt)')
                 parts.append('')

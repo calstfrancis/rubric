@@ -11,8 +11,8 @@
     <p>
       Rubric is a GNOME-native worship service planning tool for United Church
       of Canada ministry. Plan service orders, look up RCL readings, find
-      hymns, fetch Bible passages, and export polished bulletins — HTML or
-      PDF. PDF export uses the bundled Typst typesetter; no LaTeX required.
+      hymns, fetch Bible passages, and export polished bulletins as HTML or PDF.
+      PDF export uses the bundled Typst typesetter — no external tools required.
     </p>
     <p>Features include:</p>
     <ul>
@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.1" date="2026-06-07">
+      <description>
+        <p>Bulletin and Manuscript preview toggle. Delete key no longer removes service elements while typing in a text field. Preview scroll position preserved across recompiles. Typst markup (italic, bold, headings) in element notes now renders correctly. Heading hierarchy fixed: = section, == element with rule, === sub-heading.</p>
+      </description>
+    </release>
     <release version="0.15.0" date="2026-06-07">
       <description>
         <p>Phase 4 — Polish and Packaging. Typst syntax highlighting in the element editor (GtkSourceView). Structured error parsing for compilation failures. In-app Typst template editor in Preferences → Typst Files with Reset to default. Bundled typst binary included in deb and rpm packages. Documentation updated throughout.</p>
@@ -63,7 +68,7 @@
     </release>
     <release version="0.12" date="2026-05-16">
       <description>
-        <p>Simple mode (HTML-only workflow, no LaTeX required), Service Planner, GitHub sync, redo support, translation selector (WEB/KJV/ASV/ESV), and HTML bulletin export.</p>
+        <p>Service Planner, GitHub sync, redo support, translation selector (WEB/KJV/ASV/ESV), and HTML bulletin export.</p>
       </description>
     </release>
     <release version="0.11" date="2026-04-24">

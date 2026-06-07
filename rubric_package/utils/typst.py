@@ -41,6 +41,13 @@ def note_for_typst(note: str) -> str:
     return typst_escape(note)
 
 
+def strip_leader_notes(text: str) -> str:
+    """Remove #leader-note[...] blocks for congregation-facing Typst output."""
+    return re.sub(
+        r'#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]', '', text, flags=re.DOTALL
+    ).strip()
+
+
 def passage_to_typst(reference: str, text: str, translation: str = "web") -> str:
     """Convert Bible verse text to a Typst scripture block.
 
@@ -144,6 +151,21 @@ def strip_typst_for_html(text: str) -> str:
     )
     text = _re.sub(r"\\[a-zA-Z]+\*?\{([^}]*)\}", r"\1", text)
     text = _re.sub(r"\\[a-zA-Z]+\*?\s*",          "",   text)
+
+    # ── Typst heading syntax → HTML (after all # stripping so styles survive) ─
+    text = _re.sub(r"^=== (.+)$", r"<strong>\1</strong>", text, flags=_re.MULTILINE)
+    text = _re.sub(
+        r"^== (.+)$",
+        r"<b style='display:block;font-variant:small-caps;"
+        r"border-bottom:1px solid silver;margin:6px 0 2px'>\1</b>",
+        text, flags=_re.MULTILINE,
+    )
+    text = _re.sub(
+        r"^= (.+)$",
+        r"<b style='display:block;font-size:1.15em;text-align:center;margin:10px 0 4px'>\1</b>",
+        text, flags=_re.MULTILINE,
+    )
+
 
     return text.strip()
 
@@ -266,8 +288,15 @@ TYPST_SHARED = r"""
   text(size: 0.9em, content),
 )
 
-// Element heading: bold small-caps with a thin rule below
-#show heading.where(level: 3): it => {
+// Section heading: centred large bold small-caps (= Section)
+#show heading.where(level: 1): it => {
+  v(10pt, weak: true)
+  align(center, text(size: 1.3em, weight: "bold", smallcaps(it.body)))
+  v(6pt, weak: true)
+}
+
+// Element heading: bold small-caps with a thin rule below (== Item)
+#show heading.where(level: 2): it => {
   v(6pt, weak: true)
   text(weight: "bold", smallcaps(it.body))
   v(1pt, weak: true)
@@ -275,10 +304,10 @@ TYPST_SHARED = r"""
   v(4pt, weak: true)
 }
 
-// Movement heading: centred bold larger text
-#show heading.where(level: 2): it => {
-  v(8pt, weak: true)
-  align(center, text(size: 1.1em, weight: "bold", it.body))
+// Sub-heading: medium bold (=== Subitem)
+#show heading.where(level: 3): it => {
   v(4pt, weak: true)
+  text(size: 0.95em, weight: "bold", it.body)
+  v(2pt, weak: true)
 }
 """.strip()

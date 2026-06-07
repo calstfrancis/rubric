@@ -4,6 +4,19 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.1 — Preview panel, heading hierarchy, and editing fixes
+
+### Added
+- **Manuscript preview** — the live preview panel now has a "Bulletin | Manuscript" toggle. Switching to Manuscript compiles the leader copy (full notes, leader-note blocks included) instead of the congregation bulletin. Bulletin edit mode is hidden when Manuscript is active.
+
+### Fixed
+- **Delete key no longer removes service elements while typing** — the Delete accelerator now checks whether a text widget (`GtkText`, `GtkTextView`, `GtkEntry`, `GtkSearchEntry`) has focus; if so, the key behaves as a normal delete character and does not remove the selected element.
+- **Preview no longer jumps to top on every compile** — the HTML bulletin preview uses `sessionStorage` to save and restore the scroll position across reloads. The PDF preview writes to a stable fixed path (`~/.cache/rubric/preview_bulletin.pdf` / `preview_manuscript.pdf`) and calls `reload()` instead of `load_uri()` when the URI hasn't changed, preserving the viewer's scroll state.
+- **Typst markup in element notes now renders correctly** — `_italic_`, `*bold*`, headings (`= …`, `== …`) and other Typst markup entered in the content editor were being escaped before insertion into the generated `.typ` file, producing literal `\_italic\_`. Content is now inserted verbatim (it is already stored as Typst). `#leader-note[…]` blocks are stripped from bulletin output but preserved in the manuscript.
+- **Heading hierarchy corrected** — `TYPST_SHARED` previously had level 2 and 3 swapped relative to normal expectations. Now: `=` (level 1) → large centred bold small-caps section heading (1.3 em); `==` (level 2) → bold small-caps with thin rule below (element heading); `===` (level 3) → slightly smaller plain bold. Service section dividers (`= Gathering`) and item names (`== Prelude`) are generated at the appropriate levels in both the bulletin and manuscript. The HTML fallback also renders Typst heading syntax as styled HTML instead of literal `= text`.
+
+---
+
 ## 0.15.0 — Typst polish, packaging, and documentation
 
 ### Added
