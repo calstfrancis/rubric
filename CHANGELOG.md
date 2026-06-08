@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.2 — Flatpak typst fix
+
+### Fixed
+- **Flatpak: PDF preview and export now work** — the bundled Typst binary was installed to `/app/share/rubric/bin/typst` which is not on `$PATH` and was never found by `_find_typst()`. It is now installed to `/app/bin/typst` where `shutil.which` can locate it. All PDF compilation was silently failing in the flatpak build.
+
+---
+
 ## 0.15.1 — Preview panel, heading hierarchy, and editing fixes
 
 ### Added

@@ -1,4 +1,4 @@
-# Rubric v0.15.1
+# Rubric v0.15.2
 
 Install with pipx (recommended):
 
@@ -11,6 +11,12 @@ Or download a native package below (see Assets).
 ---
 
 ### What's new
+
+**Flatpak: PDF preview and export fixed** — the bundled Typst binary was installed to a path not on `$PATH`, silently breaking all PDF compilation in the flatpak. Moved to `/app/bin/typst` so it is found correctly.
+
+---
+
+### Also in 0.15.1
 
 **Manuscript preview** — the preview panel now has a Bulletin | Manuscript toggle. Switch to Manuscript to see the full leader copy (with leader-note blocks) compiled as a PDF, without leaving Rubric.
 
