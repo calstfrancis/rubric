@@ -50,4 +50,4 @@ where = ["."]
 include = ["rubric_package*"]
 
 [tool.setuptools.package-data]
-rubric_package = ["py.typed", "data/*.json", "data/*.svg", "data/*.md", "data/*.lang", "templates/*.typ", "bin/typst"]
+rubric_package = ["py.typed", "data/*.json", "data/*.svg", "data/*.md", "data/*.lang", "data/fonts/*.ttf", "templates/*.typ", "bin/typst"]
