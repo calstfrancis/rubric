@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.4" date="2026-06-08">
+      <description>
+        <p>Delete key now works correctly in the element content editor — deletes the character to the right of the cursor rather than being swallowed by the window accelerator.</p>
+      </description>
+    </release>
     <release version="0.15.3" date="2026-06-08">
       <description>
         <p>Flatpak fix: git sync (commit, push, pull) now works inside the sandbox via flatpak-spawn --host.</p>

@@ -90,7 +90,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.15.3"
+APP_VERSION = "0.15.4"
 
 
 config = Config()
@@ -1481,7 +1481,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("add-divider",   self.add_divider,       "<Ctrl>d"),
             ("move-up",       self.move_up,           "<Ctrl>Up"),
             ("move-down",     self.move_down,         "<Ctrl>Down"),
-            ("remove-item",   self.remove_item,       "Delete"),
+            ("remove-item",   self.remove_item,       None),
             ("undo",          self.undo,              "<Ctrl>z"),
             ("redo",          self.redo,              "<Ctrl><Shift>z"),
             ("preferences",   self.open_preferences,  "<Ctrl>comma"),
@@ -1936,6 +1936,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.order_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.order_listbox.add_css_class("boxed-list")
         self.order_listbox.connect("row-selected", self._on_flat_row_selected)
+        _list_key = Gtk.EventControllerKey()
+        _list_key.connect("key-pressed", lambda ctrl, keyval, *_:
+            (self.remove_item(), True)[1]
+            if keyval == Gdk.KEY_Delete else False)
+        self.order_listbox.add_controller(_list_key)
         placeholder = Adw.StatusPage(title="No elements yet",
             description="Double-click an element in the palette to add it.",
             icon_name="rubric-symbolic")
@@ -2436,9 +2441,6 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Order actions ─────────────────────────────────────────────────────────
 
     def remove_item(self):
-        focus = self.get_focus()
-        if isinstance(focus, (Gtk.Text, Gtk.TextView, Gtk.Entry, Gtk.SearchEntry)):
-            return
         idx = self._selected_index()
         if idx < 0: return
         self._push_undo(); del self.service_entries[idx]; self._refresh_order_list(idx); self._mark_modified()

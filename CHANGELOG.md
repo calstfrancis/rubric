@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.4 — Delete key fix in writing space
+
+### Fixed
+- **Delete key now works in text fields** — pressing Delete in the element content editor now deletes the character to the right of the cursor as expected. Previously, a window-level accelerator consumed the keystroke before the text widget saw it. The binding has been moved to a key controller scoped to the service order list, so it only removes list items when the list itself has focus.
+
+---
+
 ## 0.15.3 — Flatpak git sync fix
 
 ### Fixed
