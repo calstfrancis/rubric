@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.3 — Flatpak git sync fix
+
+### Fixed
+- **Flatpak: git sync now works** — `git` is not available in the GNOME Platform runtime. Rubric now uses `flatpak-spawn --host git` when running inside the sandbox, and requires `--talk-name=org.freedesktop.Flatpak` in finish-args. All git operations (commit, push, pull) now work from the flatpak.
+
+---
+
 ## 0.15.2 — Flatpak typst fix
 
 ### Fixed

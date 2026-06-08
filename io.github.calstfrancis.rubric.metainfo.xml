@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.3" date="2026-06-08">
+      <description>
+        <p>Flatpak fix: git sync (commit, push, pull) now works inside the sandbox via flatpak-spawn --host.</p>
+      </description>
+    </release>
     <release version="0.15.2" date="2026-06-08">
       <description>
         <p>Flatpak fix: the bundled Typst binary was not being found, silently breaking all PDF preview and export. Now installed to /app/bin where it is on PATH.</p>
