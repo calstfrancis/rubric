@@ -4,18 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.15.6-rc1 — Status bar, GOST Type B, and panel polish
+## 0.15.6 — Status bar, GOST Type B, observances, Focus/Git buttons
 
 ### Added
 - **Status bar** — persistent bar across the bottom of the window (Zerkalo-style)
-- **Simple mode toggle** moved from the header Switch to a text button in the status bar (bold = on, dim = off), matching Zerkalo's pattern
-- **GOST Type B toggle** — new text button in the status bar; switches the entire GTK UI to the GOST Type B engineering font. Bundled font is registered from the app data directory on first launch
+- **SIMPLE button** — replaces the header toggle; text button in the status bar (bold = on, dim = off)
+- **GOST button** — new text button in the status bar; switches the entire GTK UI to GOST Type B engineering font. Font bundled and registered from the app data directory on first launch. Persists between sessions.
+- **Focus button** — hides the palette and element list for distraction-free editing; status bar remains accessible. Bold when on.
+- **Git button** — commits and pushes the current service to GitHub with one click; runs `pull --rebase` first to avoid conflicts
+- **Observance chips** — feast days and liturgical commemorations for the service date now appear as clickable chips in the centre of the status bar (previously shown in the readings card)
+- **Observance Wikipedia window** — clicking any chip opens a built-in window that loads the Wikipedia article for that observance (article text only; no sidebars, infoboxes, or navigation)
 - **Version chip** — right end of the status bar shows the current version; clicking opens the changelog
+- **Opens last file on launch** — Rubric now reopens the most recently saved file automatically on startup
 
 ### Changed
+- **Hymn lookup** redesigned as a linked pill (text entry + search icon button)
 - **Focus mode icon** updated to `eye-not-looking-symbolic` (cleaner BW icon)
 - **Service planner icons** bumped from 14 → 18 px (more visible in the panel)
-- GOST mode persists between sessions (saved to config.json)
+- **Documentation** updated to flatpak-only installation throughout
 
 ---
 
