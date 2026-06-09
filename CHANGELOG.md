@@ -4,6 +4,21 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.6-rc1 — Status bar, GOST Type B, and panel polish
+
+### Added
+- **Status bar** — persistent bar across the bottom of the window (Zerkalo-style)
+- **Simple mode toggle** moved from the header Switch to a text button in the status bar (bold = on, dim = off), matching Zerkalo's pattern
+- **GOST Type B toggle** — new text button in the status bar; switches the entire GTK UI to the GOST Type B engineering font. Bundled font is registered from the app data directory on first launch
+- **Version chip** — right end of the status bar shows the current version; clicking opens the changelog
+
+### Changed
+- **Focus mode icon** updated to `eye-not-looking-symbolic` (cleaner BW icon)
+- **Service planner icons** bumped from 14 → 18 px (more visible in the panel)
+- GOST mode persists between sessions (saved to config.json)
+
+---
+
 ## 0.15.5 — Bug fixes and UX polish
 
 ### Fixed

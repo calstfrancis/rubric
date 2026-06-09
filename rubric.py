@@ -90,7 +90,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.15.5"
+APP_VERSION = "0.15.6-rc1"
 
 
 config = Config()
@@ -1410,21 +1410,38 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Simple mode ───────────────────────────────────────────────────────────
 
-    def _on_simple_btn_toggled(self, sw, _param):
-        config.simple_mode = sw.get_active()
+    def _on_simple_status_clicked(self, _btn):
+        config.simple_mode = not config.simple_mode
         config.save()
-        self._apply_simple_mode(skip_btn_sync=True)
+        self._apply_simple_mode()
+
+    def _on_gost_status_clicked(self, _btn):
+        config.gost_mode = not config.gost_mode
+        config.save()
+        self._apply_gost_mode()
 
     def _apply_simple_mode(self, skip_btn_sync: bool = False):
-        if not skip_btn_sync and hasattr(self, "_simple_btn"):
-            GObject.signal_handler_block(self._simple_btn, self._simple_btn_handler)
-            self._simple_btn.set_active(config.simple_mode)
-            GObject.signal_handler_unblock(self._simple_btn, self._simple_btn_handler)
+        if hasattr(self, "_simple_status_lbl"):
+            if config.simple_mode:
+                self._simple_status_lbl.set_markup("<b>simple</b>")
+            else:
+                self._simple_status_lbl.set_text("simple")
         if hasattr(self, "_rr_btn"):
             self._rr_btn.set_visible(not config.simple_mode)
         if hasattr(self, "_snip_btn"):
             self._snip_btn.set_visible(not config.simple_mode)
         self._refresh_menu()
+
+    def _apply_gost_mode(self):
+        if hasattr(self, "_gost_status_lbl"):
+            if config.gost_mode:
+                self._gost_status_lbl.set_markup("<b>gost type b</b>")
+            else:
+                self._gost_status_lbl.set_text("gost type b")
+        if config.gost_mode:
+            self._gost_css.load_from_data(b"* { font-family: 'GOST type B'; }")
+        else:
+            self._gost_css.load_from_data(b"")
 
     def _apply_density(self):
         if config.compact_mode:
@@ -1633,23 +1650,6 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
 
-        self._simple_btn = Gtk.Switch(valign=Gtk.Align.CENTER)
-        self._simple_btn.set_active(config.simple_mode)
-        self._simple_btn.set_tooltip_text(
-            "Simple mode — hides Typst export, GitHub sync, and advanced features.\n"
-            "Toggle to switch modes and watch what changes."
-        )
-        self._simple_btn_handler = self._simple_btn.connect(
-            "notify::active", self._on_simple_btn_toggled
-        )
-        _simple_lbl = Gtk.Label(label="Simple", valign=Gtk.Align.CENTER)
-        _simple_lbl.add_css_class("caption")
-        _simple_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5,
-                              valign=Gtk.Align.CENTER)
-        _simple_box.append(_simple_lbl)
-        _simple_box.append(self._simple_btn)
-        hdr.pack_end(_simple_box)
-
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_mode = "bulletin"
@@ -1658,13 +1658,59 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_btn.connect("toggled", self._toggle_preview_panel)
         hdr.pack_end(self._preview_btn)
 
-        self._focus_btn = Gtk.ToggleButton(icon_name="view-paged-symbolic",
+        self._focus_btn = Gtk.ToggleButton(icon_name="eye-not-looking-symbolic",
                                            tooltip_text="Focus mode — hide palette and element list")
         self._focus_btn.add_css_class("flat")
         self._focus_btn.connect("toggled", lambda btn: self._toggle_focus_mode())
         hdr.pack_end(self._focus_btn)
 
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
+
+        # ── Status bar ────────────────────────────────────────────────────────
+        status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        status_bar.add_css_class("toolbar")
+
+        def _status_toggle_btn(label_text, tooltip):
+            lbl = Gtk.Label(); lbl.add_css_class("caption"); lbl.set_use_markup(True)
+            lbl.set_margin_top(3); lbl.set_margin_bottom(3)
+            lbl.set_text(label_text)
+            btn = Gtk.Button(); btn.set_child(lbl); btn.add_css_class("flat")
+            btn.set_tooltip_text(tooltip); btn.set_margin_start(2); btn.set_margin_end(2)
+            return btn, lbl
+
+        self._simple_status_btn, self._simple_status_lbl = _status_toggle_btn(
+            "simple", "Simple mode — hides Typst export, GitHub sync, and advanced features")
+        self._simple_status_btn.connect("clicked", self._on_simple_status_clicked)
+        status_bar.append(self._simple_status_btn)
+
+        _sb_sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        _sb_sep.add_css_class("rubric-statusbar-sep")
+        _sb_sep.set_margin_start(4); _sb_sep.set_margin_end(4)
+        _sb_sep.set_margin_top(6); _sb_sep.set_margin_bottom(6)
+        status_bar.append(_sb_sep)
+
+        self._gost_status_btn, self._gost_status_lbl = _status_toggle_btn(
+            "gost type b", "Toggle GOST Type B engineering font for the whole UI")
+        self._gost_status_btn.connect("clicked", self._on_gost_status_clicked)
+        status_bar.append(self._gost_status_btn)
+
+        _spacer = Gtk.Box(); _spacer.set_hexpand(True)
+        status_bar.append(_spacer)
+
+        ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
+        ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")
+        ver_btn.set_margin_end(4); ver_btn.set_tooltip_text("View changelog")
+        ver_btn.connect("clicked", lambda _: self.open_help("changelog"))
+        status_bar.append(ver_btn)
+
+        tv.add_bottom_bar(status_bar)
+
+        # GOST CSS provider (priority above application so it overrides theme fonts)
+        self._gost_css = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self._gost_css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+
         self._toast_overlay = Adw.ToastOverlay()
 
         # Outer paned: palette | content
@@ -1689,6 +1735,7 @@ class MainWindow(Adw.ApplicationWindow):
         tv.set_content(self._toast_overlay)
         self.set_content(tv)
         self._apply_simple_mode()
+        self._apply_gost_mode()
 
     # ── Palette panel ─────────────────────────────────────────────────────────
 
@@ -7214,7 +7261,7 @@ class PlannerWindow(Adw.Window):
             row.add_prefix(dot)
             icon = Gtk.Image.new_from_icon_name(
                 "emblem-ok-symbolic" if planned else "list-add-symbolic")
-            icon.set_pixel_size(14)
+            icon.set_pixel_size(18)
             icon.add_css_class("success" if planned else "dim-label")
             row.add_prefix(icon)
             row._svc_date = svc_date
@@ -7888,6 +7935,7 @@ class LiturgyPlannerApp(Adw.Application):
             migrate_from_json()
         except Exception:
             pass
+        _ensure_gost_font()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
 /* Compact mode: item rows (Adw.ActionRow) */
@@ -7895,11 +7943,38 @@ class LiturgyPlannerApp(Adw.Application):
 .compact-mode .boxed-list actionrow > box { padding-top: 3px; padding-bottom: 3px; min-height: 24px; }
 /* Compact mode: divider rows (custom Gtk.ListBoxRow > Gtk.Box) */
 .compact-mode .boxed-list row > box { margin-top: 3px; margin-bottom: 3px; }
+/* Status bar separator */
+.rubric-statusbar-sep { opacity: 0.25; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         MainWindow(application=app).present()
+
+def _ensure_gost_font():
+    """Copy the bundled GOST Type B font to the user font dir and refresh fc cache."""
+    import shutil
+    import subprocess
+    import threading
+    font_src = Path(__file__).parent / "rubric_package" / "data" / "fonts" / "gosttypeb.ttf"
+    if not font_src.exists():
+        return
+    font_dir = Path.home() / ".local" / "share" / "rubric" / "fonts"
+    font_dst = font_dir / "gosttypeb.ttf"
+    if not font_dst.exists():
+        try:
+            font_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(font_src, font_dst)
+            def _cache():
+                try:
+                    subprocess.run(["fc-cache", "-f", str(font_dir)],
+                                   capture_output=True, timeout=10)
+                except Exception:
+                    pass
+            threading.Thread(target=_cache, daemon=True).start()
+        except Exception:
+            pass
+
 
 def _ensure_desktop_integration():
     desktop = Path.home() / ".local/share/applications/rubric.desktop"

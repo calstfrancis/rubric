@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.6" date="2026-06-09">
+      <description>
+        <p>Status bar with Simple mode and GOST Type B toggles (text buttons, Zerkalo-style). GOST Type B engineering font bundled and applied globally when toggled. Version chip opens changelog. Focus mode icon updated. Service planner panel icons enlarged.</p>
+      </description>
+    </release>
     <release version="0.15.5" date="2026-06-09">
       <description>
         <p>Bug fixes and UX polish: ESV translation no longer silently falls back to WEB; bulletin hymn Typst syntax corrected; bulletin toggle opacity works in tab view; bulletin save errors surfaced; hymn lookup injection is undoable; snippet button hidden in simple mode; ESV key saves live in Preferences; section-delete dialog corrected; all remaining "LaTeX" labels updated to "Typst".</p>

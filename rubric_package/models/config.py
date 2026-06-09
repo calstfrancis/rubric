@@ -49,6 +49,7 @@ class Config:
         # UI modes
         self.simple_mode: bool = True
         self.compact_mode: bool = False
+        self.gost_mode: bool = False
         # Advanced
         self.recurring_elements: list[str] = []
         self.element_defaults: dict[str, str] = {}
@@ -95,6 +96,7 @@ class Config:
                 self.bible_api_key_esv = d.get("bible_api_key_esv", "")
                 self.simple_mode       = d.get("simple_mode", True)
                 self.compact_mode      = d.get("compact_mode", False)
+                self.gost_mode         = d.get("gost_mode", False)
                 self.recurring_elements = d.get("recurring_elements", [])
                 self.element_defaults  = d.get("element_defaults", {})
                 # migrate old single template
@@ -128,6 +130,7 @@ class Config:
             "bible_api_key_esv":     self.bible_api_key_esv,
             "simple_mode":           self.simple_mode,
             "compact_mode":          self.compact_mode,
+            "gost_mode":             self.gost_mode,
             "recurring_elements":    self.recurring_elements,
             "element_defaults":      self.element_defaults,
         }
