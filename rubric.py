@@ -90,7 +90,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.15.4"
+APP_VERSION = "0.15.5"
 
 
 config = Config()
@@ -175,7 +175,7 @@ class BibleViewer(Adw.Window):
         attr = Gtk.Label(label=trl_label)
         attr.add_css_class("caption"); attr.add_css_class("dim-label")
         attr.set_hexpand(True); attr.set_xalign(0); self._bot.append(attr)
-        ins = Gtk.Button(label="Insert as LaTeX"); ins.add_css_class("suggested-action")
+        ins = Gtk.Button(label="Insert as Typst"); ins.add_css_class("suggested-action")
         ins.connect("clicked", self._on_insert); self._bot.append(ins); outer.append(self._bot)
         tv.set_content(outer)
         if _BIBLE_OK: fetch_passage(reference, self._on_fetched, translation=translation, esv_key=esv_key)
@@ -914,6 +914,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         self._esv_key_row = Adw.EntryRow(title="ESV API key")
         self._esv_key_row.set_text(config.bible_api_key_esv)
+        self._esv_key_row.connect("changed", lambda r: setattr(config, "bible_api_key_esv", r.get_text().strip()))
         esv_grp.add(self._esv_key_row)
 
         note_row = Adw.ActionRow(title="api.esv.org",
@@ -1145,7 +1146,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         loc_grp = Adw.PreferencesGroup(
             title="Repository folder",
             description="A folder on this computer that is (or will become) a git repository. "
-                        "Rubric will save liturgy files, LaTeX, and PDFs in subfolders here."
+                        "Rubric will save liturgy files, Typst exports, and PDFs in subfolders here."
         )
         page.add(loc_grp)
 
@@ -1421,6 +1422,8 @@ class MainWindow(Adw.ApplicationWindow):
             GObject.signal_handler_unblock(self._simple_btn, self._simple_btn_handler)
         if hasattr(self, "_rr_btn"):
             self._rr_btn.set_visible(not config.simple_mode)
+        if hasattr(self, "_snip_btn"):
+            self._snip_btn.set_visible(not config.simple_mode)
         self._refresh_menu()
 
     def _apply_density(self):
@@ -1633,7 +1636,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._simple_btn = Gtk.Switch(valign=Gtk.Align.CENTER)
         self._simple_btn.set_active(config.simple_mode)
         self._simple_btn.set_tooltip_text(
-            "Simple mode — hides LaTeX, GitHub sync, and advanced features.\n"
+            "Simple mode — hides Typst export, GitHub sync, and advanced features.\n"
             "Toggle to switch modes and watch what changes."
         )
         self._simple_btn_handler = self._simple_btn.connect(
@@ -2094,9 +2097,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Action buttons
         sep_act = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         sep_act.set_margin_start(6); sep_act.set_margin_end(2); row2.append(sep_act)
-        snip_btn = Gtk.Button(label="Snippet", tooltip_text="Insert snippet (Ctrl+Shift+I)")
-        snip_btn.add_css_class("flat")
-        snip_btn.connect("clicked", lambda _: self.open_snippets()); row2.append(snip_btn)
+        self._snip_btn = Gtk.Button(label="Snippet", tooltip_text="Insert snippet (Ctrl+Shift+I)")
+        self._snip_btn.add_css_class("flat")
+        self._snip_btn.connect("clicked", lambda _: self.open_snippets()); row2.append(self._snip_btn)
         self._rr_btn = Gtk.Button(label="Reading", tooltip_text="Responsive reading builder (Ctrl+R)")
         self._rr_btn.add_css_class("flat")
         self._rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); row2.append(self._rr_btn)
@@ -2525,6 +2528,7 @@ class MainWindow(Adw.ApplicationWindow):
             if not (0 <= idx < len(self.service_entries)): return
             entry = self.service_entries[idx]
             if not isinstance(entry, ServiceItem): return
+            self._push_undo()
             entry.content_typst = (hymn_line + "\n" + entry.content_typst
                                    if entry.content_typst else hymn_line)
             self._content_widget.set_content(entry.content_typst)
@@ -2747,7 +2751,7 @@ class MainWindow(Adw.ApplicationWindow):
             reading_date = override_sunday if override_sunday else d
             info = get_liturgical_info(reading_date)
             self._readings_sunday = reading_date
-            show_stepper = bool(override_sunday) or (not is_sunday and is_special is False)
+            show_stepper = bool(override_sunday) or (not is_sunday and not is_special)
         else:
             # Weekday: jump to next Sunday by default
             days_until_sunday = (6 - weekday) % 7 or 7
@@ -3401,7 +3405,7 @@ class MainWindow(Adw.ApplicationWindow):
         lbl1 = Gtk.Label(label="Choose a folder for your files")
         lbl1.add_css_class("title-2"); lbl1.set_margin_bottom(2)
         p1.append(lbl1)
-        sub1 = Gtk.Label(label="Rubric will store your liturgy files, LaTeX, and PDFs here.\n"
+        sub1 = Gtk.Label(label="Rubric will store your liturgy files, Typst exports, and PDFs here.\n"
                                 "Choose an empty folder — it will become your liturgy repository.")
         sub1.set_wrap(True); sub1.set_justify(Gtk.Justification.CENTER)
         sub1.add_css_class("dim-label"); sub1.set_margin_bottom(10)
@@ -3615,7 +3619,7 @@ class MainWindow(Adw.ApplicationWindow):
         "Type in the Notes area to add content for each element. Leader notes go to the PDF; "
             "Bulletin text appears in the congregational bulletin.",
         "Save (Ctrl+S) often. Use Menu → Save as template to reuse this order every week.",
-        "Ctrl+E exports to LaTeX; Ctrl+Shift+P compiles a PDF. "
+        "Ctrl+E exports to Typst; Ctrl+Shift+P compiles a PDF. "
             "Open Preferences (Ctrl+,) to customise your palette and bulletin.",
     ]
 
@@ -4322,7 +4326,7 @@ class MainWindow(Adw.ApplicationWindow):
         dlg = Adw.MessageDialog(
             transient_for=self,
             heading=f"Delete \u201c{div.title}\u201d?",
-            body="This will remove the section divider and all its elements. This cannot be undone after saving.",
+            body="This will remove the section divider and all its elements. Use Undo (Ctrl+Z) to reverse before saving.",
         )
         dlg.add_response("cancel", "Cancel")
         dlg.add_response("delete", "Delete section")
@@ -4739,11 +4743,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         try:
             f = dlg.save_finish(result)
         except Exception:
-            return
+            return  # User cancelled
         path = f.get_path()
         config.last_dir = str(Path(path).parent)
         typ_src = self._build_bulletin_typst(digital=digital)
-        Path(path).write_text(typ_src, encoding="utf-8")
+        try:
+            Path(path).write_text(typ_src, encoding="utf-8")
+        except Exception as e:
+            self._error("Could not save bulletin", str(e))
+            return
         self._show_toast(f"Bulletin saved: {Path(path).name}")
         self._compile_bulletin_typst(path)
 
@@ -4983,7 +4991,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     rest = _typst_escape(
                         m.group(2).strip().split("\n")[0]) if m.group(2).strip() else ""
                     if rest:
-                        parts.append(f'#hymnref[{ref}][_{rest}_]')
+                        parts.append(f'#hymnref("{ref}", [_{rest}_])')
                     else:
                         parts.append(f'*{ref}*')
                 else:
@@ -5226,6 +5234,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             if self.current_file:
                 with open(self.current_file, "w", encoding="utf-8") as f:
                     json.dump(self._service_data(), f, indent=2, ensure_ascii=False)
+            else:
+                self._show_toast("Typst exported — save your service (Ctrl+S) to persist the link.", timeout=5)
         except Exception as e:
             self._error("Export error", str(e))
 
@@ -5239,8 +5249,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
     def compile_typst_pdf(self):
         """Export to .typ then compile with typst, open the resulting PDF."""
         if not self.typ_file:
-            self.export_typst()
-            self._show_toast("Link a .typ file first, then compile again.", timeout=5)
+            self._show_toast("Export to Typst first (Ctrl+E), then compile again.", timeout=5)
             return
 
         self._write_typst(self.typ_file)
@@ -5354,7 +5363,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         e = self.service_entries[idx]
         if not isinstance(e, ServiceItem): return
         e.show_in_bulletin = btn.get_active()
-        row = self.order_listbox.get_row_at_index(idx) if not config.use_tabs else None
+        row = self._find_row_for_index(idx)
         if row:
             row.set_opacity(1.0 if btn.get_active() else 0.45)
         self._mark_modified()

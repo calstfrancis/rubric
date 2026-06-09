@@ -1,4 +1,4 @@
-# Rubric v0.15.4
+# Rubric v0.15.5
 
 Install with pipx (recommended):
 
@@ -12,7 +12,18 @@ Or download a native package below (see Assets).
 
 ### What's new
 
-**Delete key fixed in writing space** — pressing Delete in the element content editor now deletes the character to the right of the cursor, as it does in any text editor or terminal. Previously a window-level keyboard accelerator was consuming the keystroke before the text widget received it.
+**Bug fixes and UX polish** — this release fixes several issues found in a comprehensive code audit:
+
+- **ESV translation** no longer silently falls back to WEB when no API key is set — now shows a clear error.
+- **Bulletin hymn export** Typst syntax corrected (could cause compile errors in some Typst versions).
+- **Bulletin toggle** opacity feedback now works in tabbed view as well as flat-list view.
+- **Bulletin save errors** (disk full, permissions) now shown in a dialog instead of silently failing.
+- **Hymn lookup** injection is now undoable with Ctrl+Z.
+- **Ctrl+Shift+P** (compile PDF) no longer opens a file dialog and shows a toast at the same time.
+- **Snippet button** now correctly hidden in Simple mode.
+- **ESV API key** saves live in Preferences — no need to close and reopen.
+- **Section delete dialog** now correctly states that Undo is available.
+- All remaining "LaTeX" labels updated to "Typst" throughout the UI.
 
 ---
 

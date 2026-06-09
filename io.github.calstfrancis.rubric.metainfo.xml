@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.5" date="2026-06-09">
+      <description>
+        <p>Bug fixes and UX polish: ESV translation no longer silently falls back to WEB; bulletin hymn Typst syntax corrected; bulletin toggle opacity works in tab view; bulletin save errors surfaced; hymn lookup injection is undoable; snippet button hidden in simple mode; ESV key saves live in Preferences; section-delete dialog corrected; all remaining "LaTeX" labels updated to "Typst".</p>
+      </description>
+    </release>
     <release version="0.15.4" date="2026-06-08">
       <description>
         <p>Delete key now works correctly in the element content editor — deletes the character to the right of the cursor rather than being swallowed by the window accelerator.</p>

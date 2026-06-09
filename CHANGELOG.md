@@ -4,6 +4,26 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.5 — Bug fixes and UX polish
+
+### Fixed
+- **ESV translation no longer silently falls back to WEB** — selecting ESV with no API key now shows a clear error message instead of returning World English Bible text without warning.
+- **Bulletin `#hymnref` Typst syntax corrected** — hymn lines in the bulletin were emitted with content-block syntax (`[ref][_title_]`) instead of argument syntax (`"ref", [_title_]`), risking compile errors and double-italics.
+- **Bulletin toggle opacity now works in tab view** — toggling the 📋 button now correctly dims the row in both flat-list and tabbed service views.
+- **Bulletin save errors now surfaced** — disk-full or permissions errors when saving a bulletin `.typ` file are now shown in a dialog instead of being silently swallowed.
+- **Hymn lookup injection is now undoable** — inserting a hymn title via the lookup bar now pushes an undo snapshot, so Ctrl+Z reverses it.
+- **`compile_typst_pdf` no longer opens file dialog and shows a toast simultaneously** — Ctrl+Shift+P when no `.typ` file is linked now shows a clear instruction toast only.
+- **Typst export now warns when service is unsaved** — exporting to `.typ` without a saved `.liturgy` file now shows a toast reminding you to save so the link persists.
+- **Snippet button now hidden in Simple mode** — the Snippet button in the item toolbar was always visible; it now hides alongside the Responsive Reading button when Simple mode is on.
+- **ESV API key takes effect immediately** — the key now saves on every keystroke in Preferences, so opening the Bible viewer without closing Preferences first uses the correct key.
+- **Section delete dialog no longer says "cannot be undone"** — the dialog now correctly states that Undo (Ctrl+Z) is available before saving.
+
+### Changed
+- All remaining "LaTeX" labels updated to "Typst" (BibleViewer Insert button, simple-mode tooltip, quickstart tip, folder-picker descriptions).
+- `is_special is False` antipattern replaced with `not is_special`.
+
+---
+
 ## 0.15.4 — Delete key fix in writing space
 
 ### Fixed

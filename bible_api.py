@@ -122,7 +122,11 @@ def fetch_passage(reference: str, callback, translation: str = "web", esv_key: s
                 _idle_add(callback, cached, None)
                 return
 
-        if translation == "esv" and esv_key:
+        if translation == "esv":
+            if not esv_key:
+                _idle_add(callback, None,
+                          "ESV API key not set — add it in Preferences → Scripture")
+                return
             _fetch_esv(cleaned, callback, esv_key, cache_key if _CACHE_OK else None)
             return
 
