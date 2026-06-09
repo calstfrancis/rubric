@@ -43,7 +43,16 @@
   <releases>
     <release version="0.15.6" date="2026-06-09">
       <description>
-        <p>Status bar with Simple mode and GOST Type B toggles (text buttons, Zerkalo-style). GOST Type B engineering font bundled and applied globally when toggled. Version chip opens changelog. Focus mode icon updated. Service planner panel icons enlarged.</p>
+        <p>Status bar and UI polish.</p>
+        <ul>
+          <li>Status bar across the bottom of the window with text-style toggle buttons (Zerkalo-style): SIMPLE, GOST, Focus, Git, and a version chip that opens the changelog</li>
+          <li>GOST Type B engineering font bundled and applied globally when the GOST toggle is on</li>
+          <li>Liturgical observance chips in the centre of the status bar — click any chip to open a built-in Wikipedia article window</li>
+          <li>Focus mode button in the status bar — hides the palette and element list; status bar always remains accessible</li>
+          <li>Git button — commit and push to GitHub with one click (pull --rebase runs first)</li>
+          <li>Rubric now reopens the last file automatically on launch</li>
+          <li>Hymn lookup redesigned as a linked pill (entry field + search button)</li>
+        </ul>
       </description>
     </release>
     <release version="0.15.5" date="2026-06-09">

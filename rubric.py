@@ -1423,9 +1423,9 @@ class MainWindow(Adw.ApplicationWindow):
     def _apply_simple_mode(self, skip_btn_sync: bool = False):
         if hasattr(self, "_simple_status_lbl"):
             if config.simple_mode:
-                self._simple_status_lbl.set_markup("<b>simple</b>")
+                self._simple_status_lbl.set_markup("<b>SIMPLE</b>")
             else:
-                self._simple_status_lbl.set_text("simple")
+                self._simple_status_lbl.set_text("SIMPLE")
         if hasattr(self, "_rr_btn"):
             self._rr_btn.set_visible(not config.simple_mode)
         if hasattr(self, "_snip_btn"):
@@ -1435,9 +1435,9 @@ class MainWindow(Adw.ApplicationWindow):
     def _apply_gost_mode(self):
         if hasattr(self, "_gost_status_lbl"):
             if config.gost_mode:
-                self._gost_status_lbl.set_markup("<b>gost type b</b>")
+                self._gost_status_lbl.set_markup("<b>GOST</b>")
             else:
-                self._gost_status_lbl.set_text("gost type b")
+                self._gost_status_lbl.set_text("GOST")
         if config.gost_mode:
             self._gost_css.load_from_data(b"* { font-family: 'GOST type B'; }")
         else:
@@ -1658,12 +1658,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_btn.connect("toggled", self._toggle_preview_panel)
         hdr.pack_end(self._preview_btn)
 
-        self._focus_btn = Gtk.ToggleButton(icon_name="eye-not-looking-symbolic",
-                                           tooltip_text="Focus mode — hide palette and element list")
-        self._focus_btn.add_css_class("flat")
-        self._focus_btn.connect("toggled", lambda btn: self._toggle_focus_mode())
-        hdr.pack_end(self._focus_btn)
-
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
 
         # ── Status bar ────────────────────────────────────────────────────────
@@ -1678,24 +1672,52 @@ class MainWindow(Adw.ApplicationWindow):
             btn.set_tooltip_text(tooltip); btn.set_margin_start(2); btn.set_margin_end(2)
             return btn, lbl
 
+        def _sb_sep():
+            s = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+            s.add_css_class("rubric-statusbar-sep")
+            s.set_margin_start(4); s.set_margin_end(4)
+            s.set_margin_top(6); s.set_margin_bottom(6)
+            return s
+
         self._simple_status_btn, self._simple_status_lbl = _status_toggle_btn(
-            "simple", "Simple mode — hides Typst export, GitHub sync, and advanced features")
+            "SIMPLE", "Simple mode — hides Typst export, GitHub sync, and advanced features")
         self._simple_status_btn.connect("clicked", self._on_simple_status_clicked)
         status_bar.append(self._simple_status_btn)
 
-        _sb_sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        _sb_sep.add_css_class("rubric-statusbar-sep")
-        _sb_sep.set_margin_start(4); _sb_sep.set_margin_end(4)
-        _sb_sep.set_margin_top(6); _sb_sep.set_margin_bottom(6)
-        status_bar.append(_sb_sep)
+        status_bar.append(_sb_sep())
 
         self._gost_status_btn, self._gost_status_lbl = _status_toggle_btn(
-            "gost type b", "Toggle GOST Type B engineering font for the whole UI")
+            "GOST", "Toggle GOST Type B engineering font for the whole UI")
         self._gost_status_btn.connect("clicked", self._on_gost_status_clicked)
         status_bar.append(self._gost_status_btn)
 
-        _spacer = Gtk.Box(); _spacer.set_hexpand(True)
-        status_bar.append(_spacer)
+        # Centre: observances (hexpand spacers on each side to keep it centred)
+        _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
+        status_bar.append(_left_spacer)
+        self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._obs_status_box.set_halign(Gtk.Align.CENTER)
+        status_bar.append(self._obs_status_box)
+        _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
+        status_bar.append(_right_spacer)
+
+        self._focus_status_btn, self._focus_status_lbl = _status_toggle_btn(
+            "Focus", "Focus mode — hide palette and element list")
+        self._focus_status_btn.connect("clicked", lambda _: self._toggle_focus_mode())
+        status_bar.append(self._focus_status_btn)
+
+        status_bar.append(_sb_sep())
+
+        _git_btn = Gtk.Button(label="Git")
+        _git_btn.add_css_class("flat"); _git_btn.add_css_class("caption")
+        _git_btn_lbl = _git_btn.get_child()
+        if _git_btn_lbl:
+            _git_btn_lbl.set_margin_top(3); _git_btn_lbl.set_margin_bottom(3)
+        _git_btn.set_tooltip_text("Commit and push to GitHub (pull --rebase first)")
+        _git_btn.set_margin_start(2); _git_btn.set_margin_end(2)
+        _git_btn.connect("clicked", lambda _: self.git_push())
+        status_bar.append(_git_btn)
+
+        status_bar.append(_sb_sep())
 
         ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
         ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")
@@ -1914,18 +1936,7 @@ class MainWindow(Adw.ApplicationWindow):
         rcl_row.append(chips_box)
         self.readings_card.append(rcl_row)
 
-        # Observances row — chips for feasts, saints, justice days, ecological seasons
-        self._obs_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        self._obs_sep.set_visible(False)
-        self.readings_card.append(self._obs_sep)
-        self._obs_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        self._obs_row.set_margin_start(8); self._obs_row.set_margin_end(8)
-        self._obs_row.set_margin_top(3); self._obs_row.set_margin_bottom(4)
-        self._obs_row.set_visible(False)
-        self._obs_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        self._obs_inner.set_hexpand(True)
-        self._obs_row.append(self._obs_inner)
-        self.readings_card.append(self._obs_row)
+        # Observances now shown in the status bar centre — no in-card row needed
 
         # Weekday notice + Sunday stepper (shown when selected date is not Sunday/special)
         self._sunday_stepper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -2119,14 +2130,16 @@ class MainWindow(Adw.ApplicationWindow):
         sep_hymn.set_margin_start(6); sep_hymn.set_margin_end(6); row2.append(sep_hymn)
         hl = Gtk.Label(label="Hymn"); hl.add_css_class("dim-label")
         hl.set_margin_end(4); row2.append(hl)
+        hymn_pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        hymn_pill.add_css_class("linked")
         self.hymn_entry = Gtk.Entry()
         self.hymn_entry.set_placeholder_text("VU 16")
         self.hymn_entry.set_width_chars(8)
         self.hymn_entry.connect("activate", lambda _: self._do_hymn_lookup())
-        row2.append(self.hymn_entry)
-        hlb = Gtk.Button(label="↵", tooltip_text="Look up hymn (Enter)")
-        hlb.add_css_class("flat")
-        hlb.connect("clicked", lambda _: self._do_hymn_lookup()); row2.append(hlb)
+        hymn_pill.append(self.hymn_entry)
+        hlb = Gtk.Button(icon_name="system-search-symbolic", tooltip_text="Look up hymn (Enter)")
+        hlb.connect("clicked", lambda _: self._do_hymn_lookup()); hymn_pill.append(hlb)
+        row2.append(hymn_pill)
         self.hymn_status = Gtk.Label(); self.hymn_status.add_css_class("dim-label")
         self.hymn_status.set_max_width_chars(20); self.hymn_status.set_ellipsize(3)
         self.hymn_status.set_hexpand(True)
@@ -2838,40 +2851,41 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_observances_row(self._readings_sunday or d)
 
     def _refresh_observances_row(self, d) -> None:
-        """Rebuild the observances row for the given date."""
+        """Rebuild the observances chips in the status bar centre."""
+        box = getattr(self, "_obs_status_box", None)
+        if box is None:
+            return
+        while box.get_first_child():
+            box.remove(box.get_first_child())
         try:
             from observances import get_observances, TYPES
         except ImportError:
             return
         obs_list = get_observances(d)
-        while True:
-            ch = self._obs_inner.get_first_child()
-            if ch is None: break
-            self._obs_inner.remove(ch)
         if not obs_list:
-            self._obs_sep.set_visible(False)
-            self._obs_row.set_visible(False)
             return
-        self._obs_sep.set_visible(True)
-        self._obs_row.set_visible(True)
-        parts = []
-        for obs in obs_list:
+        for i, obs in enumerate(obs_list):
+            if i > 0:
+                dot = Gtk.Label(label="·")
+                dot.add_css_class("caption"); dot.add_css_class("dim-label")
+                dot.set_margin_start(2); dot.set_margin_end(2)
+                box.append(dot)
             ti = TYPES.get(obs.get("type", ""), {})
             colour = ti.get("colour", "#6B7280")
             tlabel = ti.get("label", "")
-            name = GLib.markup_escape_text(obs["name"])
-            if obs.get("proximity"):
-                name += f" <span alpha='70%'>({GLib.markup_escape_text(obs['proximity'])})</span>"
+            markup = ""
             if tlabel:
-                parts.append(f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> {name}')
-            else:
-                parts.append(name)
-        lbl = Gtk.Label()
-        lbl.set_markup("   ·   ".join(parts))
-        lbl.add_css_class("caption")
-        lbl.set_wrap(True)
-        lbl.set_xalign(0)
-        self._obs_inner.append(lbl)
+                markup = f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
+            markup += GLib.markup_escape_text(obs["name"])
+            if obs.get("proximity"):
+                markup += f' <span alpha="70%">({GLib.markup_escape_text(obs["proximity"])})</span>'
+            chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
+            chip_lbl.add_css_class("caption")
+            chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
+            chip_btn.add_css_class("flat")
+            chip_btn.set_tooltip_text(f"Open Wikipedia: {obs['name']}")
+            chip_btn.connect("clicked", lambda _b, n=obs["name"]: self._open_observance_wiki(n))
+            box.append(chip_btn)
 
     def _step_sunday(self, direction: int):
         """Move the readings display to the prev (-1) or next (+1) Sunday."""
@@ -3075,16 +3089,15 @@ class MainWindow(Adw.ApplicationWindow):
             self._palette_paned.set_position(0)
 
     def _toggle_focus_mode(self, *_):
-        if getattr(self, "_focus_mode_syncing", False):
-            return
         if not hasattr(self, "_order_hpaned"):
             return  # UI not fully built yet
         self._focus_mode = not getattr(self, "_focus_mode", False)
         active = self._focus_mode
-        if hasattr(self, "_focus_btn") and self._focus_btn.get_active() != active:
-            self._focus_mode_syncing = True
-            self._focus_btn.set_active(active)
-            self._focus_mode_syncing = False
+        if hasattr(self, "_focus_status_lbl"):
+            if active:
+                self._focus_status_lbl.set_markup("<b>Focus</b>")
+            else:
+                self._focus_status_lbl.set_text("Focus")
         if active:
             self._pre_focus_palette_pos = self._palette_paned.get_position()
             self._pre_focus_order_pos  = self._order_hpaned.get_position()
@@ -4044,15 +4057,26 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def _check_autosave(self):
-        if not AUTOSAVE_PATH.exists(): return False
-        dlg = Adw.MessageDialog(transient_for=self, heading="Restore unsaved work?",
-                                body="An autosave was found from a previous session. Restore it?")
-        dlg.add_response("discard","Discard"); dlg.add_response("restore","Restore")
-        dlg.set_response_appearance("restore", Adw.ResponseAppearance.SUGGESTED); dlg.set_default_response("restore")
-        def on_resp(d,r):
-            if r=="restore": self._load_file(str(AUTOSAVE_PATH), mark_unsaved=True)
-            else: self._clear_autosave()
-        dlg.connect("response", on_resp); dlg.present(); return False
+        if AUTOSAVE_PATH.exists():
+            dlg = Adw.MessageDialog(transient_for=self, heading="Restore unsaved work?",
+                                    body="An autosave was found from a previous session. Restore it?")
+            dlg.add_response("discard","Discard"); dlg.add_response("restore","Restore")
+            dlg.set_response_appearance("restore", Adw.ResponseAppearance.SUGGESTED); dlg.set_default_response("restore")
+            def on_resp(d,r):
+                if r=="restore": self._load_file(str(AUTOSAVE_PATH), mark_unsaved=True)
+                else:
+                    self._clear_autosave()
+                    self._open_last_file()
+            dlg.connect("response", on_resp); dlg.present()
+        else:
+            self._open_last_file()
+        return False
+
+    def _open_last_file(self):
+        for path in config.recent_files:
+            if Path(path).exists():
+                self._load_file(path)
+                break
 
     def _clear_autosave(self): AUTOSAVE_PATH.unlink(missing_ok=True)
 
@@ -4108,7 +4132,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_widget.set_content("")
         self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
-        self._obs_sep.set_visible(False); self._obs_row.set_visible(False)
+        if hasattr(self, "_obs_status_box"):
+            while self._obs_status_box.get_first_child():
+                self._obs_status_box.remove(self._obs_status_box.get_first_child())
         self.current_file=None; self.typ_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
         self.service_bulletin_text = ""
@@ -6441,6 +6467,10 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
     def open_library(self): self.open_services("library")
     def open_archive(self): self.open_services("archive")
 
+    def _open_observance_wiki(self, name: str):
+        win = ObservanceWikiWindow(name=name, transient_for=self)
+        win.present()
+
     def open_help(self, start_tab: str = "help"):
         win = getattr(self, "_help_win", None)
         if win and win.get_visible():
@@ -7919,6 +7949,112 @@ class ArchiveWindow(Adw.Window):
             self._main._toast_overlay.add_toast(toast)
         except Exception:
             pass
+
+
+# ── Observance Wikipedia Window ───────────────────────────────────────────────
+
+class ObservanceWikiWindow(Adw.Window):
+    """Shows the Wikipedia article for a liturgical observance."""
+
+    _CSS = b"""
+body { font-family: sans-serif; font-size: 15px; line-height: 1.7;
+       max-width: 680px; margin: 2em auto; padding: 0 1.5em;
+       color: #1a1a1a; background: #fff; }
+h1 { font-size: 1.6em; margin-bottom: 0.2em; }
+h2 { font-size: 1.2em; margin-top: 1.4em; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.2em; }
+h3 { font-size: 1.05em; }
+p  { margin: 0.7em 0; }
+a  { color: #1a6bb5; }
+figure, .mw-editsection, .mw-indicators, .noprint,
+.navbox, .infobox, .reflist, .references, sup.reference,
+.mw-references-wrap { display: none !important; }
+img { max-width: 100%; height: auto; border-radius: 4px; }
+"""
+
+    def __init__(self, name: str, **kw):
+        super().__init__(title=name, default_width=740, default_height=680, **kw)
+        self.set_modal(False)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        hdr.set_title_widget(Adw.WindowTitle(title=name, subtitle="Wikipedia"))
+        tv.add_top_bar(hdr)
+
+        if _WebKit is not None:
+            self._wv = _WebKit.WebView()
+            self._wv.set_vexpand(True); self._wv.set_hexpand(True)
+            # Inject CSS after page loads
+            self._wv.connect("load-changed", self._on_load_changed)
+            tv.set_content(self._wv)
+            self._fetch_article(name)
+        else:
+            sp = Adw.StatusPage(title="WebKit not available",
+                                description="Install python3-webkit2gtk to view Wikipedia articles.",
+                                icon_name="web-browser-symbolic")
+            open_btn = Gtk.Button(label="Open in browser")
+            open_btn.add_css_class("suggested-action")
+            import urllib.parse as _up
+            url = f"https://en.m.wikipedia.org/wiki/{_up.quote(name)}"
+            open_btn.connect("clicked", lambda _: Gio.AppInfo.launch_default_for_uri(url, None))
+            sp.set_child(open_btn)
+            tv.set_content(sp)
+
+        self.set_content(tv)
+
+    def _fetch_article(self, name: str):
+        import threading, urllib.request, urllib.parse, urllib.error
+        encoded = urllib.parse.quote(name.replace(" ", "_"))
+        url = f"https://en.wikipedia.org/api/rest_v1/page/html/{encoded}"
+
+        def fetch():
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Rubric/1.0 (liturgy planner; contact calstfrancis@gmail.com)",
+                    "Accept": "text/html"
+                })
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    html = r.read().decode("utf-8")
+                css_tag = f"<style>{self._CSS.decode()}</style>"
+                # Inject CSS into <head>
+                if "<head>" in html:
+                    html = html.replace("<head>", f"<head>{css_tag}", 1)
+                else:
+                    html = css_tag + html
+                GLib.idle_add(self._wv.load_html, html, f"https://en.wikipedia.org/wiki/{encoded}")
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    # Try search redirect
+                    search_url = (f"https://en.wikipedia.org/w/index.php?"
+                                  f"search={urllib.parse.quote(name)}&action=opensearch")
+                    GLib.idle_add(self._wv.load_uri,
+                                  f"https://en.m.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote(name)}")
+                else:
+                    GLib.idle_add(self._show_error, f"HTTP {e.code}")
+            except Exception as ex:
+                GLib.idle_add(self._show_error, str(ex))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _on_load_changed(self, wv, event):
+        if _WebKit and event == _WebKit.LoadEvent.FINISHED:
+            # Hide mobile header/footer via JS
+            js = ("var s=document.createElement('style');"
+                  "s.textContent='.header-container,.mw-footer,.mw-mf-page-center>div:not(#content){display:none}';"
+                  "document.head.appendChild(s);")
+            try:
+                wv.evaluate_javascript(js, -1, None, None, None, None, None)
+            except Exception:
+                try:
+                    wv.run_javascript(js, None, None, None)
+                except Exception:
+                    pass
+
+    def _show_error(self, msg: str):
+        sp = Adw.StatusPage(title="Could not load article", description=msg,
+                            icon_name="network-error-symbolic")
+        tv = self.get_content()
+        if tv:
+            tv.set_content(sp)
 
 
 # ── Application ───────────────────────────────────────────────────────────────

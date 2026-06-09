@@ -1,29 +1,33 @@
-# Rubric v0.15.5
+# Rubric v0.15.6
 
-Install with pipx (recommended):
+Install via Flatpak:
 
 ```bash
-pipx install --system-site-packages rubric-liturgy
+flatpak remote-add --user calstfrancis \
+  https://calstfrancis.github.io/flatpak/calstfrancis.flatpakrepo
+flatpak install calstfrancis io.github.calstfrancis.rubric
 ```
 
-Or download a native package below (see Assets).
+Already installed? Update with:
+
+```bash
+flatpak update io.github.calstfrancis.rubric
+```
 
 ---
 
 ### What's new
 
-**Bug fixes and UX polish** — this release fixes several issues found in a comprehensive code audit:
+**Status bar and UI polish** — a persistent status bar replaces toolbar toggles with text buttons, adds new features, and reduces visual noise:
 
-- **ESV translation** no longer silently falls back to WEB when no API key is set — now shows a clear error.
-- **Bulletin hymn export** Typst syntax corrected (could cause compile errors in some Typst versions).
-- **Bulletin toggle** opacity feedback now works in tabbed view as well as flat-list view.
-- **Bulletin save errors** (disk full, permissions) now shown in a dialog instead of silently failing.
-- **Hymn lookup** injection is now undoable with Ctrl+Z.
-- **Ctrl+Shift+P** (compile PDF) no longer opens a file dialog and shows a toast at the same time.
-- **Snippet button** now correctly hidden in Simple mode.
-- **ESV API key** saves live in Preferences — no need to close and reopen.
-- **Section delete dialog** now correctly states that Undo is available.
-- All remaining "LaTeX" labels updated to "Typst" throughout the UI.
+- **SIMPLE button** — toggle Simple mode directly from the status bar (bold = on); was in Preferences only
+- **GOST button** — toggles GOST Type B engineering font globally (bold = on); bundled TTF, no separate install
+- **Observance chips** (centre) — feast days and liturgical commemorations for the service date now appear as clickable chips in the middle of the status bar; click any chip to open a built-in Wikipedia window showing the article text
+- **Focus button** — hides the palette and element list for distraction-free editing; status bar always remains accessible
+- **Git button** — commit and push the current service to GitHub in one click (pull --rebase first)
+- **Version chip** (right) — shows the current version; click to open the changelog
+- **Last file on startup** — Rubric now reopens the most recently saved file automatically
+- **Hymn lookup** redesigned as a linked pill (entry + search button)
 
 ---
 

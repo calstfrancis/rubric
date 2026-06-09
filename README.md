@@ -1,7 +1,6 @@
 # Rubric
 
 [![Tests](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml/badge.svg)](https://github.com/calstfrancis/rubric/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/pypi/v/rubric-liturgy)](https://pypi.org/project/rubric-liturgy/)
 
 A GNOME-native worship service planning tool for United Church of Canada ministry.
 
@@ -11,7 +10,11 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 
 ## Features
 
-- **Simple mode** (on by default) — keeps the interface focused for everyday planning. Toggle in **Preferences → View → Simple mode**.
+- **Simple mode** (on by default) — keeps the interface focused for everyday planning. Toggle with the **SIMPLE** button in the status bar or in **Preferences → View**.
+- **GOST Type B font** — toggle the engineering-style monoline font globally with the **GOST** button in the status bar
+- **Focus mode** — hide the palette and element list for distraction-free editing (**Focus** button in the status bar)
+- **Observance chips** — feast days and commemorations appear in the centre of the status bar as clickable chips; click any to open a Wikipedia article window
+- **Git push** — commit and push the current service to GitHub with the **Git** button in the status bar
 - **RCL integration** — lectionary readings, liturgical colour, and season for any Sunday; weekday services default to the coming Sunday with a stepper
 - **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header, updated daily
 - **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
@@ -23,7 +26,7 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
   - **Digital (screen PDF)** — full letter, colour hyperlinks
 - **Rich text editor** — per-element formatting toolbar (bold, italic, headings, lists, leader notes) with a Typst toggle for raw source editing; both modes store the same Typst content
 - **Live PDF preview** — bulletin compiles in the background as you edit
-- **Per-element bulletin toggle** — the 📋 button marks each element shown or hidden in the bulletin independently of the leader copy
+- **Per-element bulletin toggle** — marks each element shown or hidden in the bulletin independently of the leader copy
 - **Bulletin preferences** — church name, address, service time, website, email, phone, welcome line, accessibility note, mission statement, staff/contact list, and announcements — all in **Preferences → Bulletin**
 - **Announcement expiry** — each announcement carries an optional `YYYY-MM-DD` expiry date; expired announcements are omitted automatically
 - **Past Liturgies archive** — browse every saved service in a read-only viewer; insert any past element's text into the current service with one click
@@ -31,7 +34,7 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **Bulletin preview panel** — live preview of the congregational bulletin as you edit; popout to a floating window
 - **Service Planner** — scans the `liturgy/` folder and lists all services grouped into Upcoming and Past
 - **GitHub repository sync** — push/pull services to a GitHub repository with one click
-- **Repository-aware save paths** — Save As, LaTeX export, and bulletin export default to the right subfolder when a repository is configured
+- **Repository-aware save paths** — Save As, Typst export, and bulletin export default to the right subfolder when a repository is configured
 - **Scripture translation selector** — choose WEB, KJV, ASV, or ESV in **Preferences → Scripture**
 - **Undo / Redo** — Ctrl+Z and Ctrl+Shift+Z
 - **Snippets library** — reusable liturgical texts (advanced mode)
@@ -40,102 +43,40 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 
 ---
 
-## Requirements
-
-- Python 3.10+
-- GTK4 + libadwaita + python3-gobject (system packages)
-
-**openSUSE / Leap / Tumbleweed:**
-```bash
-sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0
-```
-
-**Ubuntu / Debian:**
-```bash
-sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
-```
-
-**Fedora:**
-```bash
-sudo dnf install python3-gobject gtk4 libadwaita
-```
-
-**PDF compilation** uses the bundled [Typst](https://typst.app/) typesetter — no LaTeX or TeX Live required. If Typst is not bundled in your install, it also accepts a system `typst` binary on your PATH.
-
----
-
 ## Installation
 
-### Debian/Ubuntu (recommended)
+Rubric is distributed as a Flatpak via a self-hosted repository.
 
-Download `rubric-liturgy_<version>_all.deb` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
-
-```bash
-sudo apt install ./rubric-liturgy_*.deb
-```
-
-Installs system-wide to `/usr/share/rubric/` with a launcher at `/usr/bin/rubric`. Registers the `.desktop` entry, icons, MIME type, and AppStream metainfo automatically.
-
-### openSUSE / Fedora (recommended)
-
-Download `rubric-liturgy-<version>-1.noarch.rpm` from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
+### Add the repository
 
 ```bash
-# openSUSE
-sudo zypper install ./rubric-liturgy-*.noarch.rpm
-
-# Fedora
-sudo dnf install ./rubric-liturgy-*.noarch.rpm
+flatpak remote-add --user calstfrancis \
+  https://calstfrancis.github.io/flatpak/calstfrancis.flatpakrepo
 ```
 
-### pipx
-
-[pipx](https://pipx.pypa.io) installs Rubric into an isolated environment and puts the `rubric` command on your PATH. Because Rubric uses system GTK libraries, pass `--system-site-packages`:
+### Install
 
 ```bash
-pipx install --system-site-packages rubric-liturgy
+flatpak install calstfrancis io.github.calstfrancis.rubric
 ```
 
-To update later: `pipx upgrade rubric-liturgy`
-
-Run `rubric-desktop-install` once after installing to register the `.desktop` entry, icon, and MIME type.
-
-### pip
+### Update
 
 ```bash
-pip install --user rubric-liturgy
+flatpak update io.github.calstfrancis.rubric
 ```
 
-Make sure `~/.local/bin` is on your PATH (`echo $PATH`). Add it permanently with:
+### Uninstall
 
 ```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+flatpak uninstall io.github.calstfrancis.rubric
 ```
-
-Run `rubric-desktop-install` once after installing to register the `.desktop` entry, icon, and MIME type.
-
-### git clone (development / manual install)
-
-```bash
-git clone https://github.com/calstfrancis/rubric.git
-cd rubric
-bash install.sh
-```
-
-The install script copies app files to `~/.local/share/rubric/`, creates a launcher at `~/.local/bin/rubric`, installs the `.desktop` entry and icons, and registers the `.liturgy` MIME type.
 
 ---
 
 ## Usage
 
-```bash
-rubric
-```
-
-Or search for **Rubric** in GNOME Shell or your desktop launcher.
-
-On first launch, a welcome wizard offers three starting points: today's lectionary, a blank service, or a guided tour.
+Launch from GNOME Shell or your desktop application launcher. On first launch, a welcome wizard offers three starting points: today's lectionary, a blank service, or a guided tour. Rubric remembers the last open file and reopens it automatically on subsequent launches.
 
 ---
 
@@ -164,11 +105,10 @@ bible_api.py           Bible passage fetcher (WEB, KJV, ASV, ESV)
 snippets.py            Default liturgical text snippets
 observances.py         Liturgical calendar and observances intelligence
 rubric_package/        Packaged models, utils, exporters, and data
-install.sh             Manual install script (git clone path)
 HELP.md                User guide
 FAQ.md                 Frequently asked questions
 CHANGELOG.md           Version history
-RELEASING.md           How to cut a release
+RELEASE.md             Release notes for the current version
 ```
 
 ---

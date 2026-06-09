@@ -2,111 +2,38 @@
 
 ## Installation
 
-**Q: What is the recommended way to install Rubric?**
+**Q: How do I install Rubric?**
 
-The native packages (deb or rpm) are the easiest — they handle desktop integration automatically and install like any other app. Download from the [latest release](https://github.com/calstfrancis/rubric/releases/latest):
-
-```bash
-# Debian/Ubuntu
-sudo apt install ./rubric-liturgy_*.deb
-
-# openSUSE
-sudo zypper install ./rubric-liturgy-*.noarch.rpm
-
-# Fedora
-sudo dnf install ./rubric-liturgy-*.noarch.rpm
-```
-
-pipx is the best option if you want to follow PyPI releases:
+Rubric is distributed as a Flatpak. Add the repository and install:
 
 ```bash
-pipx install --system-site-packages rubric-liturgy
-```
+flatpak remote-add --user calstfrancis \
+  https://calstfrancis.github.io/flatpak/calstfrancis.flatpakrepo
 
-**Q: What are the system dependencies?**
-
-GTK4, libadwaita, and python3-gobject. The deb and rpm packages declare these as dependencies and your package manager installs them automatically. For pipx/pip, install them first:
-
-| Distribution | Command |
-|---|---|
-| openSUSE | `sudo zypper install python3-gobject typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0` |
-| Ubuntu/Debian | `sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1` |
-| Fedora | `sudo dnf install python3-gobject gtk4 libadwaita` |
-
-**Q: I tried `pipx install rubric-liturgy` (without `--system-site-packages`) and it fails.**
-
-That is expected. GTK's Python bindings (`gi`) are a system package and are not on PyPI. `--system-site-packages` lets the pipx environment see them. Always use:
-
-```bash
-pipx install --system-site-packages rubric-liturgy
-```
-
-**Q: Can I use `pip install` instead of `pipx`?**
-
-Yes, though pipx is cleaner. Install with:
-
-```bash
-pip install --user rubric-liturgy
-```
-
-Then make sure `~/.local/bin` is on your PATH. You can check with `echo $PATH`. To add it permanently:
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+flatpak install calstfrancis io.github.calstfrancis.rubric
 ```
 
 **Q: How do I update to a new version?**
 
 ```bash
-# deb (Debian/Ubuntu) — download new .deb and reinstall:
-sudo apt install ./rubric-liturgy_*.deb
-
-# RPM (openSUSE) — download new .rpm and upgrade:
-sudo zypper install ./rubric-liturgy-*.noarch.rpm
-
-# pipx:
-pipx upgrade rubric-liturgy
-
-# pip:
-pip install --user --upgrade rubric-liturgy
+flatpak update io.github.calstfrancis.rubric
 ```
 
 **Q: How do I uninstall?**
 
 ```bash
-# deb:
-sudo apt remove rubric-liturgy
-
-# RPM (openSUSE):
-sudo zypper remove rubric-liturgy
-
-# RPM (Fedora):
-sudo dnf remove rubric-liturgy
-
-# pipx:
-pipx uninstall rubric-liturgy
-
-# pip:
-pip uninstall rubric-liturgy
+flatpak uninstall io.github.calstfrancis.rubric
 ```
 
 User data (config, saved services, hymn cache) stays in `~/.config/rubric/` and `~/.local/share/rubric/`. Delete those folders if you want a clean slate.
 
-**Q: The icon shows as a "W" or generic letter in the GNOME panel.**
+**Q: Does Rubric need GTK4 or any system libraries installed separately?**
 
-The deb and rpm packages register the `.desktop` entry and icon automatically — this should not happen with those installs. For pipx/pip installs, the `.desktop` entry is not registered. Run `rubric-desktop-install` once after installing to set up the icon, app launcher entry, and MIME type. The `rubric` command works in the terminal regardless.
-
-**Q: I get "Dependencies missing" when running install.sh.**
-
-```bash
-python3 -c "import gi; gi.require_version('Gtk','4.0'); gi.require_version('Adw','1'); from gi.repository import Gtk, Adw; print('OK')"
-```
-
-If you see symbol errors, run `sudo zypper dup` (or the equivalent for your distro) to sync GLib/GTK4 versions.
+No. Flatpak bundles all dependencies in a sandbox. GTK4, libadwaita, Python, and all libraries are included.
 
 **Q: I want the inline Hymnary preview but it opens in the browser instead.**
 
-Install WebKit: `sudo zypper install python3-webkit2` (or `sudo apt install python3-gi-webkit2`). After installing, restart Rubric — it detects WebKit at launch.
+WebKit is bundled in the Flatpak and should work automatically. If the preview opens in the browser anyway, check that you are running the Flatpak and not a development checkout.
 
 ---
 
@@ -114,9 +41,9 @@ Install WebKit: `sudo zypper install python3-webkit2` (or `sudo apt install pyth
 
 **Q: What is Simple mode?**
 
-Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes — no TeX Live required.
+Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes — no LaTeX required.
 
-Toggle it off any time in **Preferences → View → Simple mode**.
+Toggle it with the **SIMPLE** button in the status bar at the bottom of the window, or in **Preferences → View → Simple mode**.
 
 **Q: I turned off Simple mode. Where is everything?**
 
@@ -124,7 +51,36 @@ The toolbar gains the GitHub sync button and document/print icons. The hamburger
 
 **Q: I want to produce a proper print PDF for the bulletin. Do I need LaTeX?**
 
-No. Rubric includes a bundled [Typst](https://typst.app/) typesetter. PDF export works out of the box — no TeX Live, no LaTeX installation. If you prefer HTML, export as HTML and use File → Print in your browser.
+No. Rubric includes a bundled [Typst](https://typst.app/) typesetter. PDF export works out of the box — no TeX Live, no LaTeX installation.
+
+---
+
+## Status Bar
+
+**Q: What are the buttons at the bottom of the window?**
+
+The status bar (bottom of the window) contains:
+
+| Button | Function |
+|--------|---------|
+| SIMPLE | Toggle Simple mode (bold = on) |
+| GOST | Toggle GOST Type B engineering font globally (bold = on) |
+| *Observance chips* (centre) | Feast days and commemorations for the service date — click to open Wikipedia |
+| Focus | Hide the palette and element list for distraction-free editing (bold = on) |
+| Git | Commit and push the current service to GitHub |
+| v0.x.x | Version — click to open the changelog |
+
+**Q: What is the GOST Type B font?**
+
+GOST Type B is a Soviet engineering standard monoline lettering font. Toggling it applies the font to the entire Rubric interface. It is bundled and requires no separate installation.
+
+**Q: What are the observance chips in the centre of the status bar?**
+
+When a service date is set, Rubric checks for feasts, commemorations, and seasonal observances relevant to that date. They appear as small labelled chips. Click any chip to open a Wikipedia article about that observance in a built-in window (article text only, no sidebars).
+
+**Q: The observance Wikipedia window is blank or shows an error.**
+
+Rubric uses the Wikipedia REST API to load the article. If you have no internet connection, or Wikipedia is unreachable, an error page is shown instead with a button to open the article in your browser.
 
 ---
 
@@ -144,7 +100,7 @@ Bundled templates live inside the application package (read-only). Go to **Prefe
 
 **Q: Can I point Rubric at a different typst binary?**
 
-The app checks in order: `rubric_package/bin/typst` (bundled), `/usr/share/rubric/bin/typst` (system install path), `~/.local/share/rubric/bin/typst`, then `typst` on PATH. Place any compatible binary at one of those locations and it will be used automatically.
+The app checks in order: the bundled binary inside the Flatpak (`/app/bin/typst`), then `typst` on PATH. The bundled binary is used automatically in a normal Flatpak install.
 
 ---
 
@@ -225,9 +181,9 @@ The planner reads the `date` and `title` fields stored inside each `.liturgy` fi
 3. Click **Browse** and choose or create a local folder for the repository.
 4. Click **Set up** — Rubric creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a `.gitignore`, and runs `git init`.
 5. Paste the GitHub remote URL into the Remote URL field and click **Connect**.
-6. Click the **⟳** sync button in the toolbar (or Ctrl+Shift+G) to push for the first time.
+6. Click the **Git** button in the status bar (or Ctrl+Shift+G) to push for the first time.
 
-**Q: The sync button gives an authentication error.**
+**Q: The Git button gives an authentication error.**
 
 GitHub no longer accepts passwords over HTTPS. Use a Personal Access Token (PAT) or set up SSH keys. For HTTPS: go to github.com → Settings → Developer settings → Personal access tokens. Use the token as your password when prompted, or store it with `git credential-store`.
 
@@ -237,76 +193,11 @@ Open **Preferences → GitHub** and click **Pull**. Always pull before editing o
 
 **Q: What gets committed when I push?**
 
-The current service file (`.liturgy`) and its linked `.tex` file (if it exists) are staged and committed with the message `Service: Title – Date`. Then pushed to GitHub. The commit happens automatically — no commit message required.
+The current service file (`.liturgy`) is staged and committed with the message `Service: Title – Date`, then pushed. The commit happens automatically — no commit message required.
 
 **Q: Sync fails with "no upstream branch".**
 
 This is handled automatically on first push. If it keeps appearing, check that your remote URL is set correctly in **Preferences → GitHub** and that you have at least one commit on the branch.
-
----
-
-## LaTeX and PDF
-
-**Q: I don't see the LaTeX export buttons.**
-
-Simple mode is on (the default). Turn it off in **Preferences → View → Simple mode** to access LaTeX export, PDF compilation, and the LaTeX preamble editor.
-
-**Q: xelatex can't find Junicode.**
-
-```bash
-# Via tlmgr:
-tlmgr install junicode
-# Or via zypper:
-sudo zypper install junicode-fonts
-```
-
-Or change `\setmainfont{Junicode}` in Preferences → LaTeX to any font you have (e.g. `Linux Libertine O`, `Gentium Plus`).
-
-**Q: The PDF compile button is greyed out during compilation.**
-
-It re-enables automatically when xelatex finishes. If it stays greyed out, xelatex may have hung — kill it from a terminal and restart the app.
-
-**Q: xelatex not found.**
-
-Add TeX Live to your PATH:
-```bash
-# Add to ~/.bashrc:
-export PATH="$HOME/texlive/bin/x86_64-linux:$PATH"
-```
-
-**Q: Compilation fails with a multicol error.**
-
-```bash
-tlmgr install multicol
-```
-
-**Q: Bulletin export gives a memoir class error.**
-
-The print/booklet bulletin uses the `memoir` LaTeX class. Install it:
-```bash
-tlmgr install memoir
-```
-Or switch to simple mode — the HTML bulletin export requires no LaTeX at all.
-
-**Q: Helper files (.log, .aux etc.) are piling up.**
-
-They're cleaned automatically after a successful compile. If compilation fails they're left behind for diagnosis.
-
----
-
-## Scripture (LaTeX formatting)
-
-**Q: The scripture text is indented from the left margin.**
-
-Go to **Preferences → LaTeX → Reset to default** to get the current preamble with the `{scripture}` environment. Then delete the old scripture from Notes/Content and re-fetch via the Bible Viewer.
-
-**Q: Verse numbers and text run together without spacing.**
-
-The `\sverse` macro uses `\quad` (one em) between the superscript and text. If you see no gap, you may have an old preamble — Reset to default.
-
-**Q: The scripture is double-spaced between verses.**
-
-The `{scripture}` environment sets `\parskip=0pt`. If you see gaps, the old `\begin{quotation}` format is still in Notes/Content. Open the `.liturgy` file — migration runs automatically — then re-export.
 
 ---
 
@@ -325,19 +216,7 @@ Check that it's set as default in **Preferences → Templates** (look for the �
 
 **Q: I don't see the Snippets option in the menu.**
 
-Snippets are hidden in simple mode. Turn off simple mode in **Preferences → View** to access them.
-
----
-
-## Git (manual)
-
-**Q: I want to use git manually without the GitHub sync feature.**
-
-The hamburger menu's Git section (in advanced mode) offers a direct commit. Your `.liturgy` directory must already be a git repo (`git init`). The commit message is generated automatically from the service title and date.
-
-**Q: "Not a git repository" error.**
-
-The directory containing your `.liturgy` file must be inside a git repo. Run `git init` there, or move files into an existing repo.
+Snippets are hidden in simple mode. Turn off simple mode (SIMPLE button in the status bar, or **Preferences → View**) to access them.
 
 ---
 
@@ -356,3 +235,7 @@ The directory containing your `.liturgy` file must be inside a git repo. Run `gi
 **Q: Can I undo and redo changes?**
 
 Yes — Ctrl+Z to undo, Ctrl+Shift+Z to redo. The redo stack clears whenever you make a new change. Up to 50 undo steps are kept.
+
+**Q: Rubric didn't open my last file on launch.**
+
+Rubric automatically opens the most recently saved file. If that file has been moved or deleted, it falls back to a blank service. You can also use **File → Open Recent** to find it.
