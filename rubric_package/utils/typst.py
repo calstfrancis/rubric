@@ -288,10 +288,12 @@ TYPST_SHARED = r"""
 )
 
 #let leader-note(content) = block(
-  fill: luma(235),
-  inset: 8pt,
+  fill: rgb("#fff0f0"),
+  inset: (left: 10pt, right: 10pt, top: 6pt, bottom: 6pt),
   radius: 4pt,
-  text(size: 0.9em, content),
+  above: 4pt,
+  below: 4pt,
+  text(size: 0.9em, fill: rgb("#b91c1c"), style: "italic", content),
 )
 
 #let rubric-note(content) = block(

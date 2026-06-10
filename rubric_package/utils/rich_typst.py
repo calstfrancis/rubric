@@ -59,12 +59,16 @@ def ensure_tags(buf) -> None:
         _mk(TAG_H1,     weight=Pango.Weight.BOLD, scale=1.4)
         _mk(TAG_H2,     weight=Pango.Weight.BOLD, scale=1.2)
         _mk(TAG_H3,     weight=Pango.Weight.BOLD, scale=1.05)
+        _mk(TAG_LEADER,  background="#fff0f0", foreground="#b91c1c",
+            style=Pango.Style.ITALIC,
+            left_margin=12, right_margin=12,
+            pixels_above_lines=4, pixels_below_lines=4)
     except ImportError:
         for name in (TAG_BOLD, TAG_ITALIC, TAG_H1, TAG_H2, TAG_H3):
             _mk(name)
-
-    _mk(TAG_LEADER,  background="#EBEBEB", left_margin=12, right_margin=12,
-        pixels_above_lines=4, pixels_below_lines=4)
+        _mk(TAG_LEADER,  background="#fff0f0", foreground="#b91c1c",
+            left_margin=12, right_margin=12,
+            pixels_above_lines=4, pixels_below_lines=4)
     _mk(TAG_BULLET,  left_margin=24)
     _mk(TAG_ORDERED, left_margin=24)
 
@@ -187,22 +191,28 @@ def _insert_lines(buf, text: str, extra: frozenset[str] = frozenset()) -> bool:
             buf.insert(buf.get_end_iter(), '\n')
         first = False
 
+        # Strip Typst hard line-break suffix (appended by tags_to_typst)
+        if line.endswith(' \\'):
+            line = line[:-2]
+
         block_tag: str | None = None
         inline_text = line
+        # Convert Typst tab spacing back to actual tab characters
+        inline_text = re.sub(r'#h\([^)]+\)', '\t', inline_text)
 
-        if line.startswith('=== '):
-            block_tag, inline_text = TAG_H3, line[4:]
-        elif line.startswith('== '):
-            block_tag, inline_text = TAG_H2, line[3:]
-        elif line.startswith('= '):
-            block_tag, inline_text = TAG_H1, line[2:]
-        elif line.startswith('- '):
+        if inline_text.startswith('=== '):
+            block_tag, inline_text = TAG_H3, inline_text[4:]
+        elif inline_text.startswith('== '):
+            block_tag, inline_text = TAG_H2, inline_text[3:]
+        elif inline_text.startswith('= '):
+            block_tag, inline_text = TAG_H1, inline_text[2:]
+        elif inline_text.startswith('- '):
             block_tag = TAG_BULLET
-            inline_text = '• ' + line[2:]   # bullet character for display
-        elif line.startswith('+ ') or re.match(r'^\d+\.\s', line):
+            inline_text = '• ' + inline_text[2:]   # bullet character for display
+        elif inline_text.startswith('+ ') or re.match(r'^\d+\.\s', inline_text):
             block_tag = TAG_ORDERED
-            inline_text = re.sub(r'^[+\d]+[.) ]\s*', '', line)
-        elif re.search(r'#[a-zA-Z]', line):
+            inline_text = re.sub(r'^[+\d]+[.) ]\s*', '', inline_text)
+        elif re.search(r'#[a-zA-Z]', inline_text):
             has_unsupported = True
 
         tags = extra | ({block_tag} if block_tag else set())
@@ -249,7 +259,7 @@ def tags_to_typst(buf) -> str:
         inline = _inline_to_typst(buf, full_text, line_off, line_end, tag_table)
 
         if is_leader:
-            pending_leader.append(inline)
+            pending_leader.append(inline + (' \\' if inline.strip() else ''))
         else:
             if pending_leader:
                 out.append(f'#leader-note[{chr(10).join(pending_leader)}]')
@@ -267,7 +277,7 @@ def tags_to_typst(buf) -> str:
             elif _has(TAG_ORDERED):
                 out.append(f'+ {inline}')
             else:
-                out.append(inline)
+                out.append(inline + (' \\' if inline.strip() else ''))
 
         line_off = line_end + 1
 
@@ -308,13 +318,14 @@ def _inline_to_typst(buf, full_text: str, line_off: int, line_end: int,
         it = buf.get_iter_at_offset(s)
         bold   = bold_tag   is not None and it.has_tag(bold_tag)
         italic = italic_tag is not None and it.has_tag(italic_tag)
+        seg_t = seg.replace('\t', '#h(1.5em)')
         if bold and italic:
-            result.append(f'*_{seg}_*')
+            result.append(f'*_{seg_t}_*')
         elif bold:
-            result.append(f'*{seg}*')
+            result.append(f'*{seg_t}*')
         elif italic:
-            result.append(f'_{seg}_')
+            result.append(f'_{seg_t}_')
         else:
-            result.append(seg)
+            result.append(seg_t)
 
     return ''.join(result)

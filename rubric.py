@@ -1444,10 +1444,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self._simple_status_lbl.set_markup("<b>SIMPLE</b>")
             else:
                 self._simple_status_lbl.set_text("SIMPLE")
-        if hasattr(self, "_rr_btn"):
-            self._rr_btn.set_visible(not config.simple_mode)
-        if hasattr(self, "_snip_btn"):
-            self._snip_btn.set_visible(not config.simple_mode)
         self._refresh_menu()
 
     def _apply_gost_mode(self):
@@ -1477,6 +1473,35 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._compact_status_lbl.set_text("Compact")
 
+    def _on_dev_status_clicked(self, _btn):
+        self._dev_mode = not getattr(self, "_dev_mode", False)
+        self._apply_dev_mode()
+
+    def _apply_dev_mode(self):
+        dev = getattr(self, "_dev_mode", False)
+        if hasattr(self, "_dev_status_lbl"):
+            if dev:
+                self._dev_status_lbl.set_markup("<b>Dev</b>")
+            else:
+                self._dev_status_lbl.set_text("Dev")
+        if hasattr(self, "_preview_copy_typst_bar"):
+            self._preview_copy_typst_bar.set_visible(dev)
+
+    def _dev_copy_typst(self):
+        """Copy the current preview's Typst source to clipboard (Dev mode)."""
+        mode = getattr(self, "_preview_mode", "bulletin")
+        try:
+            if mode == "manuscript":
+                typ_src = self._build_manuscript_typst()
+            else:
+                typ_src = self._build_bulletin_typst(digital=False)
+            display = Gdk.Display.get_default()
+            if display:
+                display.get_clipboard().set(typ_src)
+            self._show_toast("Typst source copied to clipboard", timeout=2)
+        except Exception as e:
+            self._show_toast(f"Error: {e}", timeout=3)
+
     def _refresh_menu(self):
         simple = config.simple_mode
         menu = Gio.Menu()
@@ -1493,7 +1518,7 @@ class MainWindow(Adw.ApplicationWindow):
         file_sec.append("Services…", "win.open-services")
         menu.append_section(None, file_sec)
 
-        if config.github_repo:
+        if config.github_repo and not simple:
             git_sec = Gio.Menu()
             git_sec.append("Push to GitHub (Ctrl+Shift+G)", "win.git-push")
             git_sec.append("Pull from GitHub", "win.git-pull")
@@ -1733,6 +1758,14 @@ class MainWindow(Adw.ApplicationWindow):
         self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
         status_bar.append(self._compact_status_btn)
 
+        status_bar.append(_sb_sep())
+
+        self._dev_status_btn, self._dev_status_lbl = _status_toggle_btn(
+            "Dev", "Developer mode — shows 'Copy Typst' button in preview footer")
+        self._dev_status_btn.connect("clicked", self._on_dev_status_clicked)
+        self._dev_mode = False
+        status_bar.append(self._dev_status_btn)
+
         # Centre: prev event ← · season dot · → next event
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
         status_bar.append(_left_spacer)
@@ -1765,7 +1798,7 @@ class MainWindow(Adw.ApplicationWindow):
         _git_btn_lbl = _git_btn.get_child()
         if _git_btn_lbl:
             _git_btn_lbl.set_margin_top(1); _git_btn_lbl.set_margin_bottom(1)
-        _git_btn.set_tooltip_text("Commit and push to GitHub (pull --rebase first)")
+        _git_btn.set_tooltip_text("Commit and push to GitHub (Ctrl+Shift+G) — pull --rebase first")
         _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self.git_push())
         status_bar.append(_git_btn)
@@ -2205,7 +2238,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._snip_btn = Gtk.Button(label="Snippet", tooltip_text="Insert snippet (Ctrl+Shift+I)")
         self._snip_btn.add_css_class("flat")
         self._snip_btn.connect("clicked", lambda _: self.open_snippets()); row2.append(self._snip_btn)
-        self._rr_btn = Gtk.Button(label="Reading", tooltip_text="Responsive reading builder (Ctrl+R)")
+        self._rr_btn = Gtk.Button(label="Responsive", tooltip_text="Responsive reading builder (Ctrl+R)")
         self._rr_btn.add_css_class("flat")
         self._rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); row2.append(self._rr_btn)
         itb_rows.append(row2)
@@ -3378,6 +3411,25 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_stack.add_named(edit_box, "editor")
 
         box.append(self._preview_stack)
+
+        # Dev mode: "Copy Typst" footer (hidden until Dev toggle is on)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        self._preview_copy_typst_bar = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._preview_copy_typst_bar.set_margin_start(8)
+        self._preview_copy_typst_bar.set_margin_end(8)
+        self._preview_copy_typst_bar.set_margin_top(4)
+        self._preview_copy_typst_bar.set_margin_bottom(4)
+        self._preview_copy_typst_bar.set_visible(False)
+        _dev_lbl = Gtk.Label(label="Dev:")
+        _dev_lbl.add_css_class("caption"); _dev_lbl.add_css_class("dim-label")
+        self._preview_copy_typst_bar.append(_dev_lbl)
+        _copy_typst_btn = Gtk.Button(label="Copy Typst")
+        _copy_typst_btn.add_css_class("flat"); _copy_typst_btn.add_css_class("caption")
+        _copy_typst_btn.connect("clicked", lambda _: self._dev_copy_typst())
+        self._preview_copy_typst_bar.append(_copy_typst_btn)
+        box.append(self._preview_copy_typst_bar)
+
         return box
 
     def _build_preview_gear_popover(self) -> Gtk.Popover:
@@ -3490,10 +3542,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_panel.set_visible(visible)
         self._preview_visible = visible
         if visible:
-            # Position the pane so preview gets ~40% of content width
-            total = self._preview_paned.get_allocated_width()
-            pos = max(400, int(total * 0.6)) if total > 200 else 600
-            self._preview_paned.set_position(pos)
+            def _set_pos():
+                total = self._preview_paned.get_allocated_width()
+                pos = max(280, int(total * 0.55)) if total > 300 else 380
+                self._preview_paned.set_position(pos)
+                return False
+            GLib.idle_add(_set_pos)
             self._do_preview_update()
         else:
             if getattr(self, "_preview_pending_id", None) is not None:
@@ -3710,7 +3764,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_compile_done()
         if self._preview_webview:
             uri = f"file://{pdf_path}"
-            current = self._preview_webview.get_uri() or ""
+            current = (self._preview_webview.get_uri() or "").split("?")[0].split("#")[0]
             if current == uri:
                 self._preview_webview.reload()
             else:
@@ -5997,7 +6051,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
     def open_responsive_reading(self):
         dlg = Adw.Window(transient_for=self, modal=True)
         dlg.set_title("Responsive Reading Builder")
-        dlg.set_default_size(580, 560)
+        dlg.set_default_size(660, 580)
 
         tv = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
@@ -6007,10 +6061,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         # Instructions
         instr = Gtk.Label(
-            label='Each row is one line of the reading.\n'
-                  'Toggle "All" on a row to mark it as the congregation\'s response — '
-                  'it will be bolded in the bulletin, and the first in each consecutive '
-                  'group of "All" lines will be prefixed with "All: ".'
+            label='Press Enter to add a line. Toggle "All" on a line to mark it as the '
+                  'congregation\'s response — bold in the bulletin, prefixed "All: " on '
+                  'the first in each consecutive group.'
         )
         instr.add_css_class("caption"); instr.add_css_class("dim-label")
         instr.set_wrap(True); instr.set_xalign(0)
@@ -6024,43 +6077,78 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         scroll.set_vexpand(True)
         scroll.set_margin_start(12); scroll.set_margin_end(12); scroll.set_margin_bottom(4)
 
-        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         rows_box.set_margin_top(4); rows_box.set_margin_bottom(4)
         rows_box.set_margin_start(4); rows_box.set_margin_end(4)
 
-        # Each row_data: [entry_widget, toggle_btn, box_widget, is_all]
         rr_rows: list[dict] = []
+
+        def _renumber():
+            for i, rd in enumerate(rr_rows):
+                rd["num_lbl"].set_text(f"{i + 1:2d}")
 
         def _make_rr_row(text: str = "", is_all: bool = False) -> dict:
             row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            entry = Gtk.Entry(); entry.set_hexpand(True)
-            entry.set_placeholder_text("Enter line of text…")
-            if text: entry.set_text(text)
+            row_box.set_margin_top(1); row_box.set_margin_bottom(1)
+
+            num_lbl = Gtk.Label(label=" 1")
+            num_lbl.add_css_class("caption"); num_lbl.add_css_class("dim-label")
+            num_lbl.set_width_chars(3); num_lbl.set_xalign(1.0)
+            num_lbl.set_valign(Gtk.Align.START); num_lbl.set_margin_top(6)
+            row_box.append(num_lbl)
+
+            tv_widget = Gtk.TextView()
+            tv_widget.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            tv_widget.set_hexpand(True)
+            tv_widget.set_top_margin(4); tv_widget.set_bottom_margin(4)
+            tv_widget.set_left_margin(6); tv_widget.set_right_margin(6)
+            tv_widget.add_css_class("card")
+            if text:
+                tv_widget.get_buffer().set_text(text)
+            row_box.append(tv_widget)
+
             all_btn = Gtk.ToggleButton(label="All")
             all_btn.set_active(is_all)
             all_btn.add_css_class("flat")
-            all_btn.set_tooltip_text('Congregation response — bold in bulletin, "All: " on first')
-            del_btn = Gtk.Button(icon_name="list-remove-symbolic"); del_btn.add_css_class("flat")
-            row_box.append(entry); row_box.append(all_btn); row_box.append(del_btn)
+            all_btn.set_tooltip_text('Congregation response — bold, "All: " prefix on first in group')
+            all_btn.set_valign(Gtk.Align.START)
+            row_box.append(all_btn)
 
-            rd = {"entry": entry, "all_btn": all_btn, "box": row_box}
+            del_btn = Gtk.Button(icon_name="list-remove-symbolic")
+            del_btn.add_css_class("flat"); del_btn.set_valign(Gtk.Align.START)
+            row_box.append(del_btn)
+
+            rd = {"tv": tv_widget, "all_btn": all_btn, "box": row_box, "num_lbl": num_lbl}
 
             def on_delete(_b, rd=rd):
                 if len(rr_rows) > 1:
                     rr_rows.remove(rd)
                     rows_box.remove(rd["box"])
-
+                    _renumber()
             del_btn.connect("clicked", on_delete)
 
-            # Enter in entry = add new row below
-            def on_activate(_e, rd=rd):
-                idx = rr_rows.index(rd)
-                new_rd = _make_rr_row()
-                rr_rows.insert(idx + 1, new_rd)
-                rows_box.insert_child_after(new_rd["box"], rd["box"])
-                new_rd["entry"].grab_focus()
+            key_ctrl = Gtk.EventControllerKey()
+            def on_key(ctrl, keyval, keycode, state, rd=rd):
+                if keyval == Gdk.KEY_Return and not (state & Gdk.ModifierType.SHIFT_MASK):
+                    idx = rr_rows.index(rd)
+                    buf = rd["tv"].get_buffer()
+                    insert_mark = buf.get_insert()
+                    cursor_it = buf.get_iter_at_mark(insert_mark)
+                    end_it = buf.get_end_iter()
+                    after = buf.get_text(cursor_it, end_it, False)
+                    buf.delete(cursor_it, buf.get_end_iter())
+                    new_rd = _make_rr_row(after)
+                    rr_rows.insert(idx + 1, new_rd)
+                    rows_box.insert_child_after(new_rd["box"], rd["box"])
+                    new_rd["tv"].grab_focus()
+                    new_rd["tv"].get_buffer().place_cursor(
+                        new_rd["tv"].get_buffer().get_start_iter())
+                    _renumber()
+                    return True
+                return False
+            key_ctrl.connect("key-pressed", on_key)
+            tv_widget.add_controller(key_ctrl)
 
-            entry.connect("activate", on_activate)
             return rd
 
         def _add_rr_row(text: str = "", is_all: bool = False):
@@ -6077,15 +6165,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         ]
         for t, a in starters:
             _add_rr_row(t, a)
+        _renumber()
 
         scroll.set_child(rows_box); outer.append(scroll)
-
-        # Add row button
-        add_row_btn = Gtk.Button(label="+ Add line")
-        add_row_btn.add_css_class("flat")
-        add_row_btn.set_margin_start(16); add_row_btn.set_margin_top(4); add_row_btn.set_margin_bottom(4)
-        add_row_btn.connect("clicked", lambda _: _add_rr_row())
-        outer.append(add_row_btn)
 
         outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
@@ -6121,7 +6203,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         lines_out = []
         prev_all = False
         for rd in rr_rows:
-            text = rd["entry"].get_text().strip()
+            buf = rd["tv"].get_buffer()
+            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip()
             if not text:
                 continue
             is_all = rd["all_btn"].get_active()
@@ -6478,7 +6561,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         snippets: list[dict] = load_snippets()
 
         win = Adw.Window(transient_for=self, modal=False)
-        win.set_title("Snippets"); win.set_default_size(720, 540)
+        win.set_title("Snippets"); win.set_default_size(860, 640)
 
         tv = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
@@ -6495,7 +6578,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
 
         # ── Main split: list on left, editor on right ──────────────────────
         split = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        split.set_position(240)
+        split.set_position(270)
 
         # ── Left: tag filter + snippet list ───────────────────────────────
         left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -8723,16 +8806,92 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
             open_btn = Gtk.Button(label="Open in browser")
             open_btn.add_css_class("suggested-action")
             import urllib.parse as _up
-            url = f"https://en.m.wikipedia.org/wiki/{_up.quote(name)}"
+            clean_name = re.sub(r'\s+\([A-Za-z]{3,9}\s+\d{1,2}\)\s*$', '', name).strip()
+            article = self._WIKI_TITLES.get(clean_name) or self._WIKI_TITLES.get(name)
+            article_slug = article if article else _up.quote(clean_name.replace(" ", "_"))
+            url = f"https://en.m.wikipedia.org/wiki/{article_slug}"
             open_btn.connect("clicked", lambda _: Gio.AppInfo.launch_default_for_uri(url, None))
             sp.set_child(open_btn)
             tv.set_content(sp)
 
         self.set_content(tv)
 
+    # Mapping from observance display name to Wikipedia article title.
+    # Names not listed here are cleaned and used directly.
+    _WIKI_TITLES: dict[str, str] = {
+        "Epiphany of the Lord": "Epiphany_(holiday)",
+        "Presentation of Christ (Candlemas)": "Candlemas",
+        "Transfiguration of the Lord (Aug 6)": "Transfiguration_of_Jesus",
+        "Mary, Mother of Our Lord": "Mary,_mother_of_Jesus",
+        "Birth of John the Baptist": "Nativity_of_John_the_Baptist",
+        "Feast of Peter and Paul": "Feast_of_Saints_Peter_and_Paul",
+        "St Michael and All Angels (Michaelmas)": "Michaelmas",
+        "Holy Innocents": "Massacre_of_the_Innocents",
+        "All Hallows' Eve": "Halloween",
+        "St Francis of Assisi / Season of Creation ends": "Francis_of_Assisi",
+        "Season of Creation begins": "Season_of_Creation",
+        "Season of Creation": "Season_of_Creation",
+        "Season of Creation ends": "Season_of_Creation",
+        "World Day of Prayer for the Care of Creation": "World_Day_of_Prayer_for_the_Care_of_Creation",
+        "Week of Prayer for Christian Unity begins": "Week_of_Prayer_for_Christian_Unity",
+        "Week of Prayer for Christian Unity ends (St Paul)": "Week_of_Prayer_for_Christian_Unity",
+        "Week of Prayer for Christian Unity": "Week_of_Prayer_for_Christian_Unity",
+        "National Day for Truth and Reconciliation (Canada)": "National_Day_for_Truth_and_Reconciliation",
+        "National Day of Awareness for Missing and Murdered Indigenous Women and Girls (Canada)": "National_Inquiry_into_Missing_and_Murdered_Indigenous_Women_and_Girls",
+        "National Day of Remembrance (Montréal Massacre)": "École_Polytechnique_massacre",
+        "International Day for the Elimination of Racial Discrimination": "International_Day_for_the_Elimination_of_Racial_Discrimination",
+        "International Day for the Elimination of Violence Against Women": "International_Day_for_the_Elimination_of_Violence_against_Women",
+        "International Day for the Eradication of Poverty": "International_Day_for_the_Eradication_of_Poverty",
+        "International Day of Innocent Children Victims of Aggression": "International_Day_of_Innocent_Children_Victims_of_Aggression",
+        "International Day of Persons with Disabilities": "International_Day_of_Persons_with_Disabilities",
+        "International Day of Peace": "International_Day_of_Peace",
+        "International Day of the World's Indigenous Peoples": "International_Day_of_the_World%27s_Indigenous_Peoples",
+        "International Women's Day": "International_Women%27s_Day",
+        "16 Days of Activism Against Gender-Based Violence": "16_Days_of_Activism_against_Gender-Based_Violence",
+        "Transgender Day of Remembrance": "Transgender_Day_of_Remembrance",
+        "Pride Month": "Pride_Month",
+        "Indigenous Sunday (UCC)": "Indigenous_Sunday",
+        "Earth Sunday": "Earth_Day",
+        "Pride Sunday": "Pride_Sunday",
+        "Creation Sunday": "Season_of_Creation",
+        "Remembrance Sunday": "Remembrance_Sunday",
+        "All Saints Sunday": "All_Saints%27_Day",
+        "Canadian Thanksgiving": "Thanksgiving_(Canada)",
+        "Martin Luther King Jr. Day": "Martin_Luther_King_Jr._Day",
+        "World Day of Prayer": "World_Day_of_Prayer",
+        "St Joseph": "Joseph,_father_of_Jesus",
+        "Annunciation of the Lord": "Annunciation",
+        "St Nicholas Day": "Saint_Nicholas_Day",
+        "St Stephen / Boxing Day": "Boxing_Day",
+        "St John the Apostle": "John_the_Apostle",
+        "St Benedict of Nursia": "Benedict_of_Nursia",
+        "St Luke": "Luke_the_Evangelist",
+        "Saints Cyril and Methodius": "Saints_Cyril_and_Methodius",
+        "St Vincent de Paul": "Vincent_de_Paul",
+        "World Tourism Day / St Vincent de Paul": "Vincent_de_Paul",
+        "New Year's Day": "New_Year%27s_Day",
+        "Holy Name of Jesus": "Holy_Name_of_Jesus",
+        "Reformation Day": "Reformation_Day",
+        "Remembrance Day (Canada)": "Remembrance_Day",
+        "World AIDS Day": "World_AIDS_Day",
+        "World Food Day": "World_Food_Day",
+        "World Environment Day": "World_Environment_Day",
+        "World Refugee Day": "World_Refugee_Day",
+        "World Animal Day": "World_Animal_Day",
+        "Coming Out Day": "National_Coming_Out_Day",
+        "Earth Day": "Earth_Day",
+        "Christmas Day": "Christmas",
+    }
+
     def _fetch_article(self, name: str):
         import threading, urllib.request, urllib.parse, urllib.error
-        encoded = urllib.parse.quote(name.replace(" ", "_"))
+        # Look up canonical article title, stripping proximity suffixes like " (Mon Jun 21)"
+        clean = re.sub(r'\s+\([A-Za-z]{3,9}\s+\d{1,2}\)\s*$', '', name).strip()
+        article = self._WIKI_TITLES.get(clean) or self._WIKI_TITLES.get(name)
+        if article:
+            encoded = article  # already URL-encoded in the dict where needed
+        else:
+            encoded = urllib.parse.quote(clean.replace(" ", "_"))
         url = f"https://en.wikipedia.org/api/rest_v1/page/html/{encoded}"
 
         def fetch():
@@ -8752,11 +8911,8 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
                 GLib.idle_add(self._wv.load_html, html, f"https://en.wikipedia.org/wiki/{encoded}")
             except urllib.error.HTTPError as e:
                 if e.code == 404:
-                    # Try search redirect
-                    search_url = (f"https://en.wikipedia.org/w/index.php?"
-                                  f"search={urllib.parse.quote(name)}&action=opensearch")
                     GLib.idle_add(self._wv.load_uri,
-                                  f"https://en.m.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote(name)}")
+                                  f"https://en.m.wikipedia.org/wiki/Special:Search?search={urllib.parse.quote(clean)}")
                 else:
                     GLib.idle_add(self._show_error, f"HTTP {e.code}")
             except Exception as ex:
@@ -8806,19 +8962,22 @@ class LiturgyPlannerApp(Adw.Application):
 /* Default (non-compact): give rows comfortable breathing room */
 row.activatable { min-height: 52px; }
 row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
-/* Compact mode: tighter rows */
-.compact-mode row.activatable { min-height: 32px; }
-.compact-mode row.activatable > box { padding-top: 3px; padding-bottom: 3px; }
-.compact-mode row.activatable title { font-size: 0.875em; }
-.compact-mode row.activatable subtitle { font-size: 0.75em; }
+/* Compact mode: very tight rows */
+.compact-mode row.activatable { min-height: 22px; }
+.compact-mode row.activatable > box { padding-top: 1px; padding-bottom: 1px; }
+.compact-mode row.activatable title { font-size: 0.8em; }
+.compact-mode row.activatable subtitle { font-size: 0.7em; }
+.compact-mode .order-list row.activatable { min-height: 20px; }
+.compact-mode .order-list row.activatable title { font-size: 0.8em; margin-top: 0; margin-bottom: 0; }
 /* Status bar: slim height */
-.toolbar { min-height: 24px; }
+.toolbar { min-height: 18px; padding-top: 0; padding-bottom: 0; }
+.toolbar button.flat { min-height: 0; padding-top: 1px; padding-bottom: 1px; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
 /* Selected service order row: left accent bar */
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
 /* Observance chips in status bar */
-.obs-chip { padding-left: 6px; padding-right: 6px; }
+.obs-chip { padding-left: 4px; padding-right: 4px; padding-top: 0; padding-bottom: 0; }
 /* Reading chip: inserted into service */
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */

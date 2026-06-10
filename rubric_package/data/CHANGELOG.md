@@ -4,6 +4,179 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.0 — Rich text only, responsive reading redesign, snippets manager, rubric section, element icons
+
+### Added
+- **Rubric section** — a togglable private leader-instructions area above each element's text editor. Text appears red and italic in the manuscript; stripped entirely from the bulletin. Toggle via the "Rubric" button in the editor header.
+- **Snippets manager window** — the Snippet button now opens a full management window with rich-text editing, tagging, and CRUD. Snippets can be tagged (comma-separated) and filtered by tag. Auto-saves when switching between snippets.
+- **Responsive reading redesign** — the reading builder now uses a structured row editor. Each row has a text entry and an "All" toggle. Toggled rows appear bold in the bulletin; the first in each consecutive group is prefixed with "All: ".
+- **Element icon picker** — a new icon button in the element toolbar (row 1) opens a popover with 30+ symbolic icons. The selected icon appears in the service order list for that element.
+- **User-assigned element icons** — stored per-element in the service file alongside the rubric note.
+
+### Changed
+- **Rich text only** — the raw Typst editor toggle has been removed from element editors. Content is always edited as rich text; Typst is generated internally and is no longer user-exposed.
+- **Status bar events** — the centre now shows the closest past event (← arrow, left side) and the closest upcoming event (→ arrow, right side), instead of a flat list. Duplicate date display in event names is suppressed.
+- **Custom element dialog** — redesigned as a cleaner Adw.Window. Fixed a bug where the palette section dropdown showed only one option.
+- **Hymn suggestion pills** — pills now have visible borders at rest (not just on hover). YouTube icon is displayed in greyscale. Pill titles use ellipsis instead of wrapping when space is tight.
+- **Rubric note in manuscript** — rubric notes render as a styled red-italic block (`#rubric-note`) in the leader manuscript, above the element content.
+
+### Fixed
+- Compilation errors from user-entered Typst eliminated by removing raw Typst editor.
+- Observance names with embedded date suffixes (e.g. "(Aug 6)") no longer duplicate the date from the proximity label.
+
+---
+
+## 0.16.0-rc5 — UX polish: wrapping pills, slimmer bar, icons
+
+### Added
+- **Suggestion pills wrap** — hymn suggestion strip now uses a flow layout; pills wrap to multiple rows so all suggestions are visible without horizontal scrolling. Full titles shown (no ellipsis), smaller `caption` font.
+- **Element type icons** — small symbolic icons appear in service order rows: headphones for hymns/music, bookmark for scripture, body for prayer, text for sermon.
+- **Reading chips turn green** after inserting a passage into the service — visual confirmation.
+- **Calendar icon on date button** — clearer affordance for the date picker.
+- **Liturgical season colour dot** in the status bar centre, next to observance chips.
+- **Keyboard shortcuts overlay** — Ctrl+? opens a native GTK shortcuts window listing all key bindings.
+
+### Changed
+- **Status bar is slimmer** — reduced padding and margins throughout.
+
+---
+
+## 0.16.0-rc4 — More themes, pill titles only, dead-link fix
+
+### Added
+- **5 new hymn themes**: Grief & Lament, Stewardship & Creation Care, Eternal Life & Hope, Gathering & Opening, Courage & Discipleship. Now 24 themes, 280 hymn entries.
+
+### Fixed
+- **Dead link**: "I, the Lord of sea and sky" was tagged `MV 177` (wrong); corrected to `VU 509`.
+- **Suggestion pills**: title only displayed — hymnal and number moved to tooltip and Hymnary popup. Cleaner and more scannable.
+
+## 0.16.0-rc3 — Themes expanded, aesthetics, compact fix
+
+### Added
+- **19 curated hymn themes** (up from 14), sourced from hymnary.org topical index: Advent & Waiting, Christmas & Incarnation, Lent & Repentance, Easter & Resurrection, Pentecost & Holy Spirit, Trinity, Creation & Environment, Justice & Peace, God's Love & Grace, Jesus Christ, Communion & Eucharist, Baptism & Renewal, Community & Welcome, Praise & Worship, Prayer & Meditation, Healing & Comfort, Faith & Trust, Mission & Service, Hope. 228 total hymn entries (was 102).
+- **Compact toggle in status bar** — bold when on, regular when off; consistent with SIMPLE/GOST/Focus.
+
+### Changed
+- **Suggestion strip**: title leads, hymn number is secondary (dim caption).
+- **Compact view fixed and inverted** — now actually compresses row height; rows are spacious by default and shrink to 32 px minimum in compact mode.
+- **Selected row accent** — left accent bar on the active service order row.
+- **Observance chips** — pill shape in status bar centre.
+
+## 0.16.0-rc2 — Hymn UI redesign
+
+### Changed
+- **Hymn toolbar consolidated** — the number entry, lookup button, By Title search, and By Theme search are now all inside a single "Hymn" button that opens a three-tab popover (Lookup / By Title / By Theme). The toolbar is much cleaner.
+- **Theme search popover enlarged** — all 14 theme chips now display without scrolling; hymn result list is taller; selected chip uses a toggle style instead of a filled blue button.
+- **Suggestion strip redesigned** — flat linked pills (ref bold + title dim + YouTube icon) replace the heavy card buttons; cleaner and consistent with the rest of the UI.
+- **Compact mode fix** — compact view now actually reduces row height instead of adding margins.
+
+## 0.16.0-rc1 — Theme search for hymns
+
+### Added
+- **Theme search** — new "By Theme" tab in the hymn search popover with 14 curated themes (Baptism, Communion, Community & Welcome, Creation & Environment, Faith & Trust, God's Love & Grace, Healing & Comfort, Holy Spirit, Jesus Christ, Justice & Peace, Mission & Service, Praise & Worship, Prayer & Meditation, Trinity). All entries drawn from VU, MV, and LUS. Click a chip to load hymns; click again to deselect. Click any hymn row to insert it, same as title search.
+
+---
+
+## 0.15.7 — Documentation update
+
+### Changed
+- **Documentation** — bundled Help and FAQ fully rewritten for Flatpak-only distribution: removed all references to pipx, pip, apt, zypper, dnf, system dependencies, LaTeX/xelatex, TeX Live, and conditional Typst/WebKit availability; all bundled dependencies are simply available
+
+---
+
+## 0.15.6 — Status bar, GOST Type B, observances, Focus/Git buttons
+
+### Added
+- **Status bar** — persistent bar across the bottom of the window (Zerkalo-style)
+- **SIMPLE button** — replaces the header toggle; text button in the status bar (bold = on, dim = off)
+- **GOST button** — new text button in the status bar; switches the entire GTK UI to GOST Type B engineering font. Font bundled and registered from the app data directory on first launch. Persists between sessions.
+- **Focus button** — hides the palette and element list for distraction-free editing; status bar remains accessible. Bold when on.
+- **Git button** — commits and pushes the current service to GitHub with one click; runs `pull --rebase` first to avoid conflicts
+- **Observance chips** — feast days and liturgical commemorations for the service date now appear as clickable chips in the centre of the status bar (previously shown in the readings card)
+- **Observance Wikipedia window** — clicking any chip opens a built-in window that loads the Wikipedia article for that observance (article text only; no sidebars, infoboxes, or navigation)
+- **Version chip** — right end of the status bar shows the current version; clicking opens the changelog
+- **Opens last file on launch** — Rubric now reopens the most recently saved file automatically on startup
+
+### Changed
+- **Hymn lookup** redesigned as a linked pill (text entry + search icon button)
+- **Focus mode icon** updated to `eye-not-looking-symbolic` (cleaner BW icon)
+- **Service planner icons** bumped from 14 → 18 px (more visible in the panel)
+- **Documentation** updated to flatpak-only installation throughout
+
+---
+
+## 0.15.5 — Bug fixes and UX polish
+
+### Fixed
+- **ESV translation no longer silently falls back to WEB** — selecting ESV with no API key now shows a clear error message instead of returning World English Bible text without warning.
+- **Bulletin `#hymnref` Typst syntax corrected** — hymn lines in the bulletin were emitted with content-block syntax (`[ref][_title_]`) instead of argument syntax (`"ref", [_title_]`), risking compile errors and double-italics.
+- **Bulletin toggle opacity now works in tab view** — toggling the 📋 button now correctly dims the row in both flat-list and tabbed service views.
+- **Bulletin save errors now surfaced** — disk-full or permissions errors when saving a bulletin `.typ` file are now shown in a dialog instead of being silently swallowed.
+- **Hymn lookup injection is now undoable** — inserting a hymn title via the lookup bar now pushes an undo snapshot, so Ctrl+Z reverses it.
+- **`compile_typst_pdf` no longer opens file dialog and shows a toast simultaneously** — Ctrl+Shift+P when no `.typ` file is linked now shows a clear instruction toast only.
+- **Typst export now warns when service is unsaved** — exporting to `.typ` without a saved `.liturgy` file now shows a toast reminding you to save so the link persists.
+- **Snippet button now hidden in Simple mode** — the Snippet button in the item toolbar was always visible; it now hides alongside the Responsive Reading button when Simple mode is on.
+- **ESV API key takes effect immediately** — the key now saves on every keystroke in Preferences, so opening the Bible viewer without closing Preferences first uses the correct key.
+- **Section delete dialog no longer says "cannot be undone"** — the dialog now correctly states that Undo (Ctrl+Z) is available before saving.
+
+### Changed
+- All remaining "LaTeX" labels updated to "Typst" (BibleViewer Insert button, simple-mode tooltip, quickstart tip, folder-picker descriptions).
+- `is_special is False` antipattern replaced with `not is_special`.
+
+---
+
+## 0.15.4 — Delete key fix in writing space
+
+### Fixed
+- **Delete key now works in text fields** — pressing Delete in the element content editor now deletes the character to the right of the cursor as expected. Previously, a window-level accelerator consumed the keystroke before the text widget saw it. The binding has been moved to a key controller scoped to the service order list, so it only removes list items when the list itself has focus.
+
+---
+
+## 0.15.3 — Flatpak git sync fix
+
+### Fixed
+- **Flatpak: git sync now works** — `git` is not available in the GNOME Platform runtime. Rubric now uses `flatpak-spawn --host git` when running inside the sandbox, and requires `--talk-name=org.freedesktop.Flatpak` in finish-args. All git operations (commit, push, pull) now work from the flatpak.
+
+---
+
+## 0.15.2 — Flatpak typst fix
+
+### Fixed
+- **Flatpak: PDF preview and export now work** — the bundled Typst binary was installed to `/app/share/rubric/bin/typst` which is not on `$PATH` and was never found by `_find_typst()`. It is now installed to `/app/bin/typst` where `shutil.which` can locate it. All PDF compilation was silently failing in the flatpak build.
+
+---
+
+## 0.15.1 — Preview panel, heading hierarchy, and editing fixes
+
+### Added
+- **Manuscript preview** — the live preview panel now has a "Bulletin | Manuscript" toggle. Switching to Manuscript compiles the leader copy (full notes, leader-note blocks included) instead of the congregation bulletin. Bulletin edit mode is hidden when Manuscript is active.
+
+### Fixed
+- **Delete key no longer removes service elements while typing** — the Delete accelerator now checks whether a text widget (`GtkText`, `GtkTextView`, `GtkEntry`, `GtkSearchEntry`) has focus; if so, the key behaves as a normal delete character and does not remove the selected element.
+- **Preview no longer jumps to top on every compile** — the HTML bulletin preview uses `sessionStorage` to save and restore the scroll position across reloads. The PDF preview writes to a stable fixed path (`~/.cache/rubric/preview_bulletin.pdf` / `preview_manuscript.pdf`) and calls `reload()` instead of `load_uri()` when the URI hasn't changed, preserving the viewer's scroll state.
+- **Typst markup in element notes now renders correctly** — `_italic_`, `*bold*`, headings (`= …`, `== …`) and other Typst markup entered in the content editor were being escaped before insertion into the generated `.typ` file, producing literal `\_italic\_`. Content is now inserted verbatim (it is already stored as Typst). `#leader-note[…]` blocks are stripped from bulletin output but preserved in the manuscript.
+- **Heading hierarchy corrected** — `TYPST_SHARED` previously had level 2 and 3 swapped relative to normal expectations. Now: `=` (level 1) → large centred bold small-caps section heading (1.3 em); `==` (level 2) → bold small-caps with thin rule below (element heading); `===` (level 3) → slightly smaller plain bold. Service section dividers (`= Gathering`) and item names (`== Prelude`) are generated at the appropriate levels in both the bulletin and manuscript. The HTML fallback also renders Typst heading syntax as styled HTML instead of literal `= text`.
+
+---
+
+## 0.15.0 — Typst polish, packaging, and documentation
+
+### Added
+- **Typst syntax highlighting** — the Typst mode editor now uses GtkSourceView 5 (if installed) with a bundled `typst.lang` language definition covering headings, bold, italic, function calls, comments, math, labels, and all Rubric-specific keywords. Falls back to plain monospace editor if GtkSourceView is unavailable.
+- **Preferences → Typst Files** — in-app editor for the four Typst preamble templates (`bulletin_print`, `bulletin_digital`, `manuscript`, `_shared`). Edit opens a GtkSourceView editor with Typst highlighting; Save override writes to `~/.config/rubric/templates/` (persists across upgrades); Reset to default removes the override.
+- **Structured error messages** — `typst compile` stderr is now parsed into structured errors (message + file:line:col). All three compilation paths (bulletin, manuscript, preview) show a short human-readable message including the line number.
+- **`mark_error_line()`** on `ElementContentWidget` — highlights the error line in Typst mode when GtkSourceView is available.
+- **Typst binary bundled in packages** — `build-deb.sh` and `build-rpm.sh` now include the system `typst` binary at build time (`/usr/share/rubric/bin/typst`, `chmod 755`).
+
+### Changed
+- **`.gitignore`** — added Typst temp preview files (`rubric_preview_*.typ/pdf`) and `rubric_package/bin/` (bundled binary path, too large for git).
+- **`metainfo.xml`** — removed all LaTeX references; updated feature list to describe Typst, rich text editor, and live preview.
+- **`README.md`**, **`HELP.md`**, **`FAQ.md`** — LaTeX/xelatex references replaced with Typst throughout. Content editor (rich text + Typst mode toggle) documented. New Typst Templates section in HELP. New "Typst and PDF" FAQ section.
+- **`install.sh`** — removed xelatex dependency check; added typst binary detection and chmod step.
+- Version bumped to **0.15.0**.
+
+---
+
 ## 0.14.8 — Sidebar, startup ordering, background hymn downloads
 
 ### Fixed
