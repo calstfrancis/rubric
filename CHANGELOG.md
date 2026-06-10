@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## dev — Order panel aesthetic polish
+
+### Changed
+- **Season colour strip** — a 3px coloured strip at the top of the service order panel now reflects the current liturgical season colour.
+- **Section divider pill** — section divider rows are styled as a rounded pill with a section-coloured dot and subtle tinted background, visually distinguishing them from service items.
+- **Scripture/leader ref as subtitle** — when a service item has a leader reference (hymn number, scripture citation, etc.), it is shown as the dim subtitle in the order list instead of the content preview.
+- **Drag handle fade** — the `⠿` drag handle on service order rows is invisible at rest and fades in on hover, reducing visual noise.
+
+---
+
 ## 0.17.0 — Rich text only, responsive reading redesign, snippets manager, rubric section, element icons
 
 ### Added

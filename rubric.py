@@ -2121,6 +2121,16 @@ class MainWindow(Adw.ApplicationWindow):
         self._view_stack.add_named(self._notebook, "tabs")
 
         self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
+
+        # Season colour strip — 3px bar at top of order panel
+        self._order_season_strip = Gtk.DrawingArea()
+        self._order_season_strip.set_size_request(-1, 3)
+        def _draw_order_strip(_da, cr, _w, _h):
+            r, g, b = self._colour_bar_rgb
+            cr.set_source_rgb(r, g, b)
+            cr.paint()
+        self._order_season_strip.set_draw_func(_draw_order_strip)
+        order_box.append(self._order_season_strip)
         order_box.append(self._view_stack)
 
         # Time total bar
@@ -2327,7 +2337,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _make_item_row(self, si: ServiceItem, global_idx: int) -> Adw.ActionRow:
         preview = self._note_preview(si.content_typst)
-        row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(preview))
+        subtitle_text = si.leader if si.leader else preview
+        row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
         row.set_subtitle_lines(1); row._entry = si
         colour = _section_colour(si.section)
         dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
@@ -2340,15 +2351,18 @@ class MainWindow(Adw.ApplicationWindow):
             _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
             _ico.set_margin_start(2)
             row.add_prefix(_ico)
-        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.set_valign(Gtk.Align.CENTER)
+        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER)
         row.add_suffix(handle)
         self._attach_dnd(row, global_idx); return row
 
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row._entry = div
-        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        bx.set_margin_top(8); bx.set_margin_bottom(8); bx.set_margin_start(10); bx.set_margin_end(10)
-        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.set_valign(Gtk.Align.CENTER); bx.append(handle)
+        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        bx.set_margin_top(4); bx.set_margin_bottom(4); bx.set_margin_start(8); bx.set_margin_end(8)
+        bx.add_css_class("divider-pill")
+        colour = _section_colour(div.title)
+        dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER); bx.append(dot)
+        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER); bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
         bx.append(tl)
@@ -3227,7 +3241,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.readings_card.set_visible(True)
         self.season_label.set_label(info["week"]); self.year_badge.set_label(f"Year {info['year']}")
         self.season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
-        self._colour_bar_rgb = _hex_to_rgb(info["colour_hex"]); self._colour_bar.queue_draw()
+        self._colour_bar_rgb = _hex_to_rgb(info["colour_hex"]); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
         if hasattr(self, "_sb_season_dot"):
             self._sb_season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
             self._sb_season_dot.set_visible(True)
@@ -9063,6 +9077,11 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
 .bulletin-toggle { background: transparent; box-shadow: none; }
 .bulletin-toggle:checked { font-weight: bold; }
 .bulletin-toggle:not(:checked) { border-color: transparent; box-shadow: none; }
+/* Drag handle: fade in on row hover only */
+.order-list row .drag-handle { opacity: 0; transition: opacity 100ms; }
+.order-list row:hover .drag-handle { opacity: 0.45; }
+/* Section divider pill */
+.divider-pill { background: alpha(@accent_bg_color, 0.10); border-radius: 6px; padding: 2px 4px; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,
