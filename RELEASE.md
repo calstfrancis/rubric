@@ -1,4 +1,4 @@
-# Rubric v0.17.2
+# Rubric v0.17.3
 
 Install via Flatpak:
 
@@ -18,17 +18,7 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Shared layout** — the sidebar, order, notes, and preview panels now always share the window. No panel can push another off-screen or collapse it to zero. All dividers act as hard borders.
-
-**Maximized on launch** — Rubric now opens maximized by default.
-
-**Undo improvements** — toggling bulletin visibility, editing the leader field, changing duration, and inserting scripture from the Bible viewer are all now undoable.
-
-**Safe file open** — opening a file no longer clears the current service before confirming the new file is valid. A corrupted file now leaves your current service intact.
-
-**Tab mode fix** — adding elements in tab mode now inserts into the currently visible tab's section.
-
-**Hymn toolbar fix** — the hymn mode toolbar no longer flickers or clears the search field when switching between elements.
+**Compressible notes panel** — the notes/editor panel no longer has a hard minimum width. Drag the divider rightward to give the preview panel more room; the notes panel compresses as needed.
 
 ---
 

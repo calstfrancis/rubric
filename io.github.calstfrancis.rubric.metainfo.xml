@@ -41,6 +41,14 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.3" date="2026-06-10">
+      <description>
+        <p>Notes panel can now compress horizontally.</p>
+        <ul>
+          <li>The notes/editor panel no longer has a hard minimum width — it compresses to give the preview panel space when needed.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.2" date="2026-06-10">
       <description>
         <p>Layout and window fixes.</p>
