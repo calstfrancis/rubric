@@ -42,6 +42,10 @@ def _load() -> dict:
                 int(k): [tuple(h) for h in v]
                 for k, v in raw.get("propers", {}).items()
             },
+            "themes": {
+                k: [tuple(h) for h in v]
+                for k, v in raw.get("themes", {}).items()
+            },
         }
     return _cache
 
@@ -83,3 +87,13 @@ def get_suggestions(week: str, season: str) -> list[tuple[str, int, str]]:
     # 3. Season fallback
     hymns = data["seasons"].get(season, data["seasons"].get("Ordinary", []))
     return list(hymns[:8])
+
+
+def get_theme_names() -> list[str]:
+    """Return all available theme names, sorted alphabetically."""
+    return sorted(_load().get("themes", {}).keys())
+
+
+def get_theme_hymns(theme: str) -> list[tuple[str, int, str]]:
+    """Return (prefix, number, title) hymns for the given theme name."""
+    return list(_load().get("themes", {}).get(theme, []))

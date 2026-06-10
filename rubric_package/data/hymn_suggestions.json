@@ -1621,5 +1621,545 @@
         "Lift every voice and sing"
       ]
     ]
+  },
+  "themes": {
+    "Praise & Worship": [
+      [
+        "VU",
+        211,
+        "Rejoice, the Lord is King"
+      ],
+      [
+        "VU",
+        220,
+        "All hail the power of Jesus' name"
+      ],
+      [
+        "VU",
+        262,
+        "Praise to the Lord, the Almighty"
+      ],
+      [
+        "VU",
+        264,
+        "Let all things now living"
+      ],
+      [
+        "VU",
+        270,
+        "Praise our Maker"
+      ],
+      [
+        "VU",
+        272,
+        "Come, let us sing to the Lord"
+      ],
+      [
+        "VU",
+        307,
+        "How great thou art"
+      ],
+      [
+        "VU",
+        315,
+        "Immortal, invisible, God only wise"
+      ],
+      [
+        "VU",
+        316,
+        "Holy, holy, holy"
+      ],
+      [
+        "MV",
+        174,
+        "Hallelujah"
+      ],
+      [
+        "MV",
+        186,
+        "Holy God, we praise your name"
+      ]
+    ],
+    "Creation & Environment": [
+      [
+        "VU",
+        264,
+        "Let all things now living"
+      ],
+      [
+        "VU",
+        288,
+        "Morning has broken"
+      ],
+      [
+        "VU",
+        296,
+        "For the beauty of the earth"
+      ],
+      [
+        "VU",
+        306,
+        "God of the sparrow"
+      ],
+      [
+        "VU",
+        307,
+        "How great thou art"
+      ],
+      [
+        "MV",
+        12,
+        "Bring many names"
+      ],
+      [
+        "MV",
+        28,
+        "Called by earth and sky"
+      ]
+    ],
+    "God's Love & Grace": [
+      [
+        "VU",
+        107,
+        "There's a wideness in God's mercy"
+      ],
+      [
+        "VU",
+        117,
+        "What wondrous love is this"
+      ],
+      [
+        "VU",
+        331,
+        "God of grace and God of glory"
+      ],
+      [
+        "VU",
+        509,
+        "My hope is built on nothing less"
+      ],
+      [
+        "MV",
+        12,
+        "Bring many names"
+      ],
+      [
+        "MV",
+        86,
+        "God of the Bible"
+      ]
+    ],
+    "Holy Spirit": [
+      [
+        "VU",
+        196,
+        "O Holy Spirit, root of life"
+      ],
+      [
+        "VU",
+        197,
+        "Spirit of the living God"
+      ],
+      [
+        "VU",
+        198,
+        "Spirit, Spirit of gentleness"
+      ],
+      [
+        "VU",
+        199,
+        "Spirit divine, attend our prayers"
+      ],
+      [
+        "VU",
+        200,
+        "Breathe on me, breath of God"
+      ],
+      [
+        "VU",
+        201,
+        "Like the murmur of the dove's song"
+      ],
+      [
+        "VU",
+        207,
+        "Wind who makes all winds that blow"
+      ],
+      [
+        "MV",
+        1,
+        "Come, O Holy Spirit, come"
+      ],
+      [
+        "MV",
+        3,
+        "O Holy Spirit breathe on me"
+      ],
+      [
+        "MV",
+        4,
+        "Holy Spirit, hear us"
+      ],
+      [
+        "MV",
+        5,
+        "Creator Spirit"
+      ],
+      [
+        "MV",
+        173,
+        "Spirit open my heart"
+      ]
+    ],
+    "Jesus Christ": [
+      [
+        "VU",
+        115,
+        "When I survey the wondrous cross"
+      ],
+      [
+        "VU",
+        117,
+        "What wondrous love is this"
+      ],
+      [
+        "VU",
+        155,
+        "Jesus Christ is risen today"
+      ],
+      [
+        "VU",
+        157,
+        "The day of resurrection"
+      ],
+      [
+        "VU",
+        161,
+        "Thine is the glory"
+      ],
+      [
+        "VU",
+        165,
+        "Alleluia! Alleluia! Give thanks"
+      ],
+      [
+        "VU",
+        167,
+        "I know that my Redeemer lives"
+      ],
+      [
+        "VU",
+        169,
+        "Crown him with many crowns"
+      ],
+      [
+        "VU",
+        213,
+        "Jesus shall reign"
+      ],
+      [
+        "VU",
+        361,
+        "Be thou my vision"
+      ]
+    ],
+    "Baptism": [
+      [
+        "VU",
+        79,
+        "When Jesus comes to be baptized"
+      ],
+      [
+        "VU",
+        442,
+        "Baptized in water"
+      ],
+      [
+        "VU",
+        449,
+        "I've just come from the fountain"
+      ],
+      [
+        "VU",
+        453,
+        "We know that Christ is raised"
+      ],
+      [
+        "MV",
+        34,
+        "When hands reach out and fingers trace"
+      ],
+      [
+        "MV",
+        81,
+        "Wash, O God, our sons and daughters"
+      ],
+      [
+        "MV",
+        161,
+        "We are not our own"
+      ]
+    ],
+    "Communion": [
+      [
+        "VU",
+        127,
+        "An upper room did our Lord prepare"
+      ],
+      [
+        "VU",
+        459,
+        "Let us break bread together"
+      ],
+      [
+        "VU",
+        460,
+        "One bread, one body"
+      ],
+      [
+        "VU",
+        462,
+        "Loaves were broken, words were spoken"
+      ],
+      [
+        "VU",
+        467,
+        "This is the body of Christ"
+      ],
+      [
+        "VU",
+        468,
+        "Let us talents and tongues employ"
+      ],
+      [
+        "MV",
+        81,
+        "Wash, O God, our sons and daughters"
+      ],
+      [
+        "MV",
+        126,
+        "Stay with us"
+      ]
+    ],
+    "Prayer & Meditation": [
+      [
+        "VU",
+        200,
+        "Breathe on me, breath of God"
+      ],
+      [
+        "VU",
+        371,
+        "Spirit of God, descend upon my heart"
+      ],
+      [
+        "VU",
+        595,
+        "Be still, my soul"
+      ],
+      [
+        "MV",
+        135,
+        "When our heart is filled with sorrow"
+      ],
+      [
+        "MV",
+        139,
+        "Return to the Lord"
+      ]
+    ],
+    "Justice & Peace": [
+      [
+        "VU",
+        9,
+        "Come now, O Prince of Peace"
+      ],
+      [
+        "VU",
+        330,
+        "God of grace and God of glory"
+      ],
+      [
+        "VU",
+        332,
+        "O God of every nation"
+      ],
+      [
+        "MV",
+        23,
+        "Draw the circle wide"
+      ],
+      [
+        "MV",
+        29,
+        "All are welcome"
+      ],
+      [
+        "MV",
+        34,
+        "When hands reach out and fingers trace"
+      ],
+      [
+        "MV",
+        120,
+        "Lift every voice and sing"
+      ]
+    ],
+    "Healing & Comfort": [
+      [
+        "VU",
+        12,
+        "Comfort, comfort now my people"
+      ],
+      [
+        "VU",
+        109,
+        "O Christ, the healer"
+      ],
+      [
+        "VU",
+        595,
+        "Be still, my soul"
+      ],
+      [
+        "MV",
+        90,
+        "Hope shines as the solitary star"
+      ],
+      [
+        "MV",
+        135,
+        "When our heart is filled with sorrow"
+      ],
+      [
+        "MV",
+        139,
+        "Return to the Lord"
+      ]
+    ],
+    "Community & Welcome": [
+      [
+        "VU",
+        87,
+        "The Church is wherever God's people"
+      ],
+      [
+        "VU",
+        460,
+        "One bread, one body"
+      ],
+      [
+        "MV",
+        23,
+        "Draw the circle wide"
+      ],
+      [
+        "MV",
+        29,
+        "All are welcome"
+      ],
+      [
+        "MV",
+        34,
+        "When hands reach out and fingers trace"
+      ],
+      [
+        "MV",
+        161,
+        "We are not our own"
+      ]
+    ],
+    "Mission & Service": [
+      [
+        "VU",
+        374,
+        "O Jesus, I have promised"
+      ],
+      [
+        "VU",
+        376,
+        "Take my life and let it be"
+      ],
+      [
+        "MV",
+        34,
+        "When hands reach out and fingers trace"
+      ],
+      [
+        "MV",
+        161,
+        "We are not our own"
+      ],
+      [
+        "MV",
+        177,
+        "I, the Lord of sea and sky"
+      ]
+    ],
+    "Faith & Trust": [
+      [
+        "VU",
+        361,
+        "Be thou my vision"
+      ],
+      [
+        "VU",
+        374,
+        "O Jesus, I have promised"
+      ],
+      [
+        "VU",
+        509,
+        "My hope is built on nothing less"
+      ],
+      [
+        "VU",
+        595,
+        "Be still, my soul"
+      ],
+      [
+        "MV",
+        82,
+        "Bless now, O God, the journey"
+      ]
+    ],
+    "Trinity": [
+      [
+        "VU",
+        315,
+        "Immortal, invisible, God only wise"
+      ],
+      [
+        "VU",
+        316,
+        "Holy, holy, holy"
+      ],
+      [
+        "VU",
+        317,
+        "God, whose almighty word"
+      ],
+      [
+        "VU",
+        943,
+        "Ancient of Days"
+      ],
+      [
+        "MV",
+        12,
+        "Bring many names"
+      ],
+      [
+        "MV",
+        13,
+        "Naming God"
+      ],
+      [
+        "MV",
+        186,
+        "Holy God, we praise your name"
+      ]
+    ]
   }
 }

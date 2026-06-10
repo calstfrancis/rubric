@@ -57,10 +57,16 @@ except ImportError:
     _BIBLE_OK = False
 
 try:
-    from hymn_suggestions import get_suggestions as _get_hymn_suggestions
+    from hymn_suggestions import (
+        get_suggestions as _get_hymn_suggestions,
+        get_theme_names as _get_theme_names,
+        get_theme_hymns as _get_theme_hymns,
+    )
     _SUGG_OK = True
 except (ImportError, FileNotFoundError):
     _SUGG_OK = False
+    def _get_theme_names(): return []
+    def _get_theme_hymns(t): return []
 
 try:
     from snippets import load_snippets, save_snippets
@@ -2146,6 +2152,7 @@ class MainWindow(Adw.ApplicationWindow):
         row2.append(self.hymn_status)
 
         # Hymn title search — searches the local cache by keyword
+        self._theme_selected_btn = None
         self._hymn_search_pop = self._build_hymn_search_popover()
         hsrch_btn = Gtk.MenuButton(icon_name="system-search-symbolic",
                                    tooltip_text="Search hymn titles (cached)",
@@ -2601,32 +2608,100 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_hymn_search_popover(self) -> Gtk.Popover:
         pop = Gtk.Popover()
         pop.set_has_arrow(False)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        box.set_size_request(320, -1)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_size_request(340, -1)
 
-        se = Gtk.SearchEntry(); se.set_placeholder_text("Search hymn titles…")
-        se.set_margin_top(8); se.set_margin_bottom(6)
+        # ── Tab switcher ──────────────────────────────────────────────────────
+        stack = Gtk.Stack()
+        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        stack.set_transition_duration(150)
+        switcher = Gtk.StackSwitcher()
+        switcher.set_stack(stack)
+        switcher.set_halign(Gtk.Align.CENTER)
+        switcher.set_margin_top(8)
+        switcher.set_margin_bottom(4)
+        outer.append(switcher)
+        outer.append(stack)
+
+        # ── By Title page ─────────────────────────────────────────────────────
+        title_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        se = Gtk.SearchEntry()
+        se.set_placeholder_text("Search hymn titles…")
+        se.set_margin_top(4); se.set_margin_bottom(6)
         se.set_margin_start(8); se.set_margin_end(8)
-        box.append(se)
+        title_page.append(se)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_min_content_height(200); scroll.set_max_content_height(360)
+        scroll.set_min_content_height(200); scroll.set_max_content_height(340)
         self._hymn_search_list = Gtk.ListBox()
         self._hymn_search_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self._hymn_search_list.add_css_class("boxed-list")
         self._hymn_search_list.set_margin_start(8); self._hymn_search_list.set_margin_end(8)
-        self._hymn_search_list.set_margin_bottom(8)
-        scroll.set_child(self._hymn_search_list); box.append(scroll)
+        self._hymn_search_list.set_margin_bottom(4)
+        scroll.set_child(self._hymn_search_list)
+        title_page.append(scroll)
 
         hint = Gtk.Label(label="Only cached hymns appear. Pre-download in Preferences → Scripture.")
         hint.add_css_class("caption"); hint.add_css_class("dim-label")
         hint.set_wrap(True); hint.set_xalign(0)
         hint.set_margin_start(8); hint.set_margin_end(8); hint.set_margin_bottom(8)
-        box.append(hint)
+        title_page.append(hint)
+
+        stack.add_titled(title_page, "search", "By Title")
+
+        # ── By Theme page ─────────────────────────────────────────────────────
+        theme_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Flow of theme chips
+        theme_flow_scroll = Gtk.ScrolledWindow()
+        theme_flow_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        theme_flow_scroll.set_max_content_height(140)
+        self._theme_flow = Gtk.FlowBox()
+        self._theme_flow.set_max_children_per_line(3)
+        self._theme_flow.set_min_children_per_line(2)
+        self._theme_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._theme_flow.set_homogeneous(True)
+        self._theme_flow.set_row_spacing(4); self._theme_flow.set_column_spacing(4)
+        self._theme_flow.set_margin_start(8); self._theme_flow.set_margin_end(8)
+        self._theme_flow.set_margin_top(6); self._theme_flow.set_margin_bottom(4)
+        for name in _get_theme_names():
+            btn = Gtk.Button(label=name)
+            btn.add_css_class("pill")
+            btn.connect("clicked", lambda b, t=name: self._on_theme_chip_clicked(b, t))
+            self._theme_flow.append(btn)
+        theme_flow_scroll.set_child(self._theme_flow)
+        theme_page.append(theme_flow_scroll)
+
+        theme_page.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Hymns for selected theme
+        theme_scroll = Gtk.ScrolledWindow()
+        theme_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        theme_scroll.set_min_content_height(180); theme_scroll.set_max_content_height(280)
+        self._theme_hymn_list = Gtk.ListBox()
+        self._theme_hymn_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._theme_hymn_list.add_css_class("boxed-list")
+        self._theme_hymn_list.set_margin_start(8); self._theme_hymn_list.set_margin_end(8)
+        self._theme_hymn_list.set_margin_top(6); self._theme_hymn_list.set_margin_bottom(8)
+
+        # Placeholder row (shown until a theme is selected)
+        self._theme_placeholder = Gtk.ListBoxRow()
+        self._theme_placeholder.set_activatable(False)
+        ph_lbl = Gtk.Label(label="Select a theme above")
+        ph_lbl.add_css_class("dim-label"); ph_lbl.add_css_class("caption")
+        ph_lbl.set_margin_top(16); ph_lbl.set_margin_bottom(16)
+        self._theme_placeholder.set_child(ph_lbl)
+        self._theme_hymn_list.append(self._theme_placeholder)
+
+        theme_scroll.set_child(self._theme_hymn_list)
+        theme_page.append(theme_scroll)
+
+        stack.add_titled(theme_page, "themes", "By Theme")
 
         se.connect("search-changed", lambda e: self._on_hymn_search_changed(e.get_text().strip()))
-        pop.set_child(box)
+        pop.set_child(outer)
         return pop
 
     def _on_hymn_search_changed(self, query: str):
@@ -2649,6 +2724,40 @@ class MainWindow(Adw.ApplicationWindow):
             row.set_activatable(True)
             row.connect("activated", lambda _r, l=line: self._inject_hymn_line(l))
             self._hymn_search_list.append(row)
+
+    def _on_theme_chip_clicked(self, btn: Gtk.Button, theme: str):
+        # Toggle chip highlight — deselect if already active
+        if getattr(self, "_theme_selected_btn", None) is btn:
+            btn.remove_css_class("suggested-action")
+            self._theme_selected_btn = None
+            while self._theme_hymn_list.get_first_child():
+                self._theme_hymn_list.remove(self._theme_hymn_list.get_first_child())
+            self._theme_hymn_list.append(self._theme_placeholder)
+            return
+
+        if self._theme_selected_btn:
+            self._theme_selected_btn.remove_css_class("suggested-action")
+        btn.add_css_class("suggested-action")
+        self._theme_selected_btn = btn
+
+        while self._theme_hymn_list.get_first_child():
+            self._theme_hymn_list.remove(self._theme_hymn_list.get_first_child())
+
+        hymns = _get_theme_hymns(theme)
+        if not hymns:
+            row = Gtk.ListBoxRow(); row.set_activatable(False)
+            lbl = Gtk.Label(label="No hymns found for this theme")
+            lbl.add_css_class("dim-label"); lbl.add_css_class("caption")
+            lbl.set_margin_top(8); lbl.set_margin_bottom(8)
+            row.set_child(lbl); self._theme_hymn_list.append(row)
+            return
+        for prefix, number, title in hymns:
+            ref = f"{prefix} {number}"
+            line = f"{ref} — {title}"
+            row = Adw.ActionRow(title=title, subtitle=ref)
+            row.set_activatable(True)
+            row.connect("activated", lambda _r, l=line: self._inject_hymn_line(l))
+            self._theme_hymn_list.append(row)
 
     def _inject_hymn_line(self, hymn_line: str):
         self._hymn_search_pop.popdown()
