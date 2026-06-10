@@ -3552,6 +3552,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _toggle_palette_sidebar(self, btn):
         if btn.get_active():
             self._palette_visible = True
+            self._palette_paned.set_shrink_start_child(False)
             def _set_palette_pos():
                 total = self._palette_paned.get_allocated_width()
                 preview_open = getattr(self, "_preview_visible", False)
@@ -3572,6 +3573,7 @@ class MainWindow(Adw.ApplicationWindow):
             GLib.idle_add(_set_palette_pos)
         else:
             self._palette_visible = False
+            self._palette_paned.set_shrink_start_child(True)
             self._palette_paned.set_position(0)
 
     def _toggle_focus_mode(self, *_):
