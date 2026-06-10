@@ -1439,11 +1439,21 @@ class MainWindow(Adw.ApplicationWindow):
         self._apply_gost_mode()
 
     def _apply_simple_mode(self, skip_btn_sync: bool = False):
+        simple = config.simple_mode
         if hasattr(self, "_simple_status_lbl"):
-            if config.simple_mode:
+            if simple:
                 self._simple_status_lbl.set_markup("<b>SIMPLE</b>")
             else:
                 self._simple_status_lbl.set_text("SIMPLE")
+        if hasattr(self, "_dev_status_btn"):
+            self._dev_status_btn.set_visible(not simple)
+        if hasattr(self, "_git_btn"):
+            self._git_btn.set_visible(not simple)
+        if hasattr(self, "_time_bar"):
+            if simple:
+                self._time_bar.set_visible(False)
+            else:
+                self._update_time_total()
         self._refresh_menu()
 
     def _apply_gost_mode(self):
@@ -1713,7 +1723,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_mode = "bulletin"
-        self._preview_btn = Gtk.ToggleButton(icon_name="document-print-preview-symbolic",
+        self._preview_btn = Gtk.ToggleButton(label="Preview",
                                              tooltip_text="Toggle live preview")
         self._preview_btn.connect("toggled", self._toggle_preview_panel)
         hdr.pack_end(self._preview_btn)
@@ -1739,59 +1749,64 @@ class MainWindow(Adw.ApplicationWindow):
             s.set_margin_top(3); s.set_margin_bottom(3)
             return s
 
+        # Left group — aligned left, no separators
+        _left_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        _left_box.set_halign(Gtk.Align.START)
+        _left_box.set_margin_start(2)
+
         self._simple_status_btn, self._simple_status_lbl = _status_toggle_btn(
             "SIMPLE", "Simple mode — hides Typst export, GitHub sync, and advanced features")
         self._simple_status_btn.connect("clicked", self._on_simple_status_clicked)
-        status_bar.append(self._simple_status_btn)
-
-        status_bar.append(_sb_sep())
+        _left_box.append(self._simple_status_btn)
 
         self._gost_status_btn, self._gost_status_lbl = _status_toggle_btn(
             "GOST", "Toggle GOST Type B engineering font for the whole UI")
         self._gost_status_btn.connect("clicked", self._on_gost_status_clicked)
-        status_bar.append(self._gost_status_btn)
-
-        status_bar.append(_sb_sep())
+        _left_box.append(self._gost_status_btn)
 
         self._compact_status_btn, self._compact_status_lbl = _status_toggle_btn(
             "Compact", "Compact view — tighter row spacing")
         self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
-        status_bar.append(self._compact_status_btn)
-
-        status_bar.append(_sb_sep())
+        _left_box.append(self._compact_status_btn)
 
         self._dev_status_btn, self._dev_status_lbl = _status_toggle_btn(
             "Dev", "Developer mode — shows 'Copy Typst' button in preview footer")
         self._dev_status_btn.connect("clicked", self._on_dev_status_clicked)
         self._dev_mode = False
-        status_bar.append(self._dev_status_btn)
+        _left_box.append(self._dev_status_btn)
 
-        # Centre: prev event ← · season dot · → next event
+        status_bar.append(_left_box)
+
+        # Centre: prev event · season dot · next event — spread apart
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
         status_bar.append(_left_spacer)
-        _centre_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        _centre_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         _centre_box.set_halign(Gtk.Align.CENTER)
-        # Previous event (left side with ← arrow)
+        # Previous event
         self._prev_obs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
         _centre_box.append(self._prev_obs_box)
-        # Season dot
+        # Season dot with wider margins to spread the two event listings
         self._sb_season_dot = Gtk.Label(label="●")
         self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
+        self._sb_season_dot.set_margin_start(12); self._sb_season_dot.set_margin_end(12)
         self._sb_season_dot.set_visible(False)
         _centre_box.append(self._sb_season_dot)
-        # Next/upcoming event (right side with → arrow)
+        # Next/upcoming event
         self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
         _centre_box.append(self._obs_status_box)
         status_bar.append(_centre_box)
         _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
         status_bar.append(_right_spacer)
 
+        # Right group — aligned right, no separators
+        _right_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        _right_box.set_halign(Gtk.Align.END)
+        _right_box.set_margin_end(2)
+
         self._focus_status_btn, self._focus_status_lbl = _status_toggle_btn(
             "Focus", "Focus mode — hide palette and element list")
         self._focus_status_btn.connect("clicked", lambda _: self._toggle_focus_mode())
-        status_bar.append(self._focus_status_btn)
-
-        status_bar.append(_sb_sep())
+        _right_box.append(self._focus_status_btn)
 
         _git_btn = Gtk.Button(label="Git")
         _git_btn.add_css_class("flat"); _git_btn.add_css_class("caption")
@@ -1801,15 +1816,16 @@ class MainWindow(Adw.ApplicationWindow):
         _git_btn.set_tooltip_text("Commit and push to GitHub (Ctrl+Shift+G) — pull --rebase first")
         _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self.git_push())
-        status_bar.append(_git_btn)
-
-        status_bar.append(_sb_sep())
+        self._git_btn = _git_btn
+        _right_box.append(_git_btn)
 
         ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
         ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")
         ver_btn.set_margin_end(4); ver_btn.set_tooltip_text("View changelog")
         ver_btn.connect("clicked", lambda _: self.open_help("changelog"))
-        status_bar.append(ver_btn)
+        _right_box.append(ver_btn)
+
+        status_bar.append(_right_box)
 
         tv.add_bottom_bar(status_bar)
 
@@ -2067,7 +2083,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(False)
+        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(True)
         self._order_hpaned.set_position(260); self._order_hpaned.set_vexpand(True)
 
         # ── Order pane (left) ─────────────────────────────────────────────────
@@ -2191,6 +2207,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_toggle = Gtk.ToggleButton(label="Bulletin")
         self.bulletin_toggle.set_tooltip_text("Include in congregational bulletin")
         self.bulletin_toggle.add_css_class("flat")
+        self.bulletin_toggle.add_css_class("bulletin-toggle")
         self.bulletin_toggle.set_active(True)
         self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
         row1.append(self.bulletin_toggle)
@@ -3503,12 +3520,20 @@ class MainWindow(Adw.ApplicationWindow):
             self._palette_visible = True
             def _set_palette_pos():
                 total = self._palette_paned.get_allocated_width()
-                if getattr(self, "_preview_visible", False) and total > 0:
-                    # Leave room for order panel (280 min) + preview panel (300 min)
-                    pos = min(290, max(180, total - 580))
+                preview_open = getattr(self, "_preview_visible", False)
+                if preview_open and total > 0:
+                    # Palette gets up to 290; leave at least 220 for order + 300 for preview
+                    pos = min(290, max(180, total - 520))
                 else:
                     pos = 290
                 self._palette_paned.set_position(pos)
+                # When preview is open, ensure order panel keeps a usable minimum width
+                if preview_open and hasattr(self, "_preview_paned"):
+                    inner_total = total - pos
+                    cur = self._preview_paned.get_position()
+                    # Order panel: keep at least 220px; don't force it wider than it was
+                    order_pos = max(220, min(cur, inner_total - 300))
+                    self._preview_paned.set_position(order_pos)
                 return False
             GLib.idle_add(_set_palette_pos)
         else:
@@ -4573,6 +4598,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_debrief = ""
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             self._bulletin_edit_btn.set_active(False)
+        if getattr(self, "_preview_webview", None):
+            self._preview_webview.load_html("", None)
 
     def _apply_template(self, items: list[dict]):
         """Load template items into the current (already-reset) service."""
@@ -8992,13 +9019,25 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
 flowboxchild { background: transparent; padding: 0; }
-/* Suggestion pills: visible border at rest */
-.sugg-pill button { border: 1px solid alpha(@borders, 0.6); }
+/* Suggestion pills: coloured accent background */
+.sugg-pill button {
+  background: alpha(@accent_bg_color, 0.18);
+  border: 1px solid alpha(@accent_color, 0.35);
+  color: @accent_fg_color;
+}
+.sugg-pill button:hover { background: alpha(@accent_bg_color, 0.32); }
 .sugg-pill button:first-child { border-right: none; border-radius: 9999px 0 0 9999px; }
 .sugg-pill button:last-child { border-left: none; border-radius: 0 9999px 9999px 0; }
 .sugg-pill button:only-child { border-radius: 9999px; }
 /* Rubric note editor: reddish tint */
 .rubric-note-editor { background: alpha(red, 0.04); color: @error_color; font-style: italic; }
+/* Header bar buttons: square, not tall */
+headerbar button { min-width: 32px; min-height: 32px; padding: 4px; }
+headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 4px; }
+/* Bulletin toggle: bold when active, transparent border when inactive */
+.bulletin-toggle { background: transparent; box-shadow: none; }
+.bulletin-toggle:checked { font-weight: bold; }
+.bulletin-toggle:not(:checked) { border-color: transparent; box-shadow: none; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,

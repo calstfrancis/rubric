@@ -14,6 +14,14 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, Gdk
 
+try:
+    gi.require_version("GtkSource", "5")
+    from gi.repository import GtkSource as _GtkSource
+    _SOURCE_OK = True
+except Exception:
+    _GtkSource = None
+    _SOURCE_OK = False
+
 from rubric_package.utils.rich_typst import (
     TAG_BOLD, TAG_ITALIC, TAG_H1, TAG_H2, TAG_H3,
     TAG_LEADER, TAG_BULLET, TAG_ORDERED,
@@ -158,13 +166,25 @@ class ElementContentWidget(Gtk.Box):
         rich_sw.set_vexpand(True)
         rich_sw.set_margin_start(12); rich_sw.set_margin_end(12)
         rich_sw.set_margin_top(8);    rich_sw.set_margin_bottom(8)
-        self._rich_view = Gtk.TextView()
+        if _SOURCE_OK:
+            self._rich_buf = _GtkSource.Buffer()
+            self._rich_view = _GtkSource.View.new_with_buffer(self._rich_buf)
+            # Space drawer: grey dots for spaces, arrows for tabs — leading only
+            sd = self._rich_view.get_space_drawer()
+            sd.set_enable_matrix(True)
+            sd.set_types_for_locations(
+                _GtkSource.SpaceLocationFlags.LEADING,
+                _GtkSource.SpaceTypeFlags.SPACE | _GtkSource.SpaceTypeFlags.TAB,
+            )
+        else:
+            self._rich_view = Gtk.TextView()
+            self._rich_buf = self._rich_view.get_buffer()
         self._rich_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self._rich_view.add_css_class("card")
         self._rich_view.set_top_margin(8);   self._rich_view.set_bottom_margin(8)
         self._rich_view.set_left_margin(10); self._rich_view.set_right_margin(10)
-        self._rich_buf = self._rich_view.get_buffer()
         ensure_tags(self._rich_buf)
+        self._refresh_tag_colors()
         self._rich_buf.connect("changed", self._on_rich_changed)
         rich_sw.set_child(self._rich_view)
         self.append(rich_sw)
@@ -173,6 +193,28 @@ class ElementContentWidget(Gtk.Box):
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect("key-pressed", self._on_key_pressed)
         self._rich_view.add_controller(key_ctrl)
+
+        # Update tag colours when the system theme changes
+        try:
+            from gi.repository import Adw
+            Adw.StyleManager.get_default().connect(
+                "notify::dark", lambda *_: self._refresh_tag_colors())
+        except Exception:
+            pass
+
+    def _refresh_tag_colors(self) -> None:
+        """Update leader-note tag colours to match the current system theme."""
+        try:
+            from gi.repository import Adw
+            dark = Adw.StyleManager.get_default().get_dark()
+        except Exception:
+            dark = False
+        bg = "#2d1515" if dark else "#fff0f0"
+        fg = "#fca5a5" if dark else "#b91c1c"
+        tag = self._rich_buf.get_tag_table().lookup("leader-note")
+        if tag:
+            tag.set_property("background", bg)
+            tag.set_property("foreground", fg)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -297,4 +339,9 @@ class ElementContentWidget(Gtk.Box):
             if keyval == Gdk.KEY_i:
                 self._apply_inline(TAG_ITALIC)
                 return True
+        if keyval == Gdk.KEY_Tab and not (state & CTRL):
+            # Insert a tab character (converted to #h(1.5em) in Typst output)
+            buf = self._rich_buf
+            buf.insert_at_cursor('\t')
+            return True
         return False
