@@ -2405,16 +2405,16 @@ class MainWindow(Adw.ApplicationWindow):
             if r: self.order_listbox.select_row(r)
 
     def _make_tab_label(self, div: SectionDivider | None, page_idx_fn) -> Gtk.Widget:
-        """Tab label: rotated vertical text (bottom-to-top), right-click for rename/delete."""
+        """Tab label: vertical text (bottom-to-top), right-click for rename/delete."""
         if div is None:
             lbl = Gtk.Label(label="Service")
             lbl.add_css_class("heading")
-            lbl.set_angle(90)
+            lbl.add_css_class("rubric-tab-label")
             return lbl
 
         lbl = Gtk.Label(label=div.title)
         lbl.add_css_class("heading")
-        lbl.set_angle(90)
+        lbl.add_css_class("rubric-tab-label")
 
         # Right-click gesture for context menu
         gesture = Gtk.GestureClick()
@@ -9032,6 +9032,8 @@ flowboxchild { background: transparent; padding: 0; }
 .sugg-pill button:only-child { border-radius: 9999px; }
 /* Rubric note editor: reddish tint */
 .rubric-note-editor { background: alpha(red, 0.04); color: @error_color; font-style: italic; }
+/* Vertical section tab labels: rotate 90deg so text reads bottom-to-top */
+.rubric-tab-label { transform: rotate(-90deg); }
 /* Header bar buttons: square, not tall */
 headerbar button { min-width: 32px; min-height: 32px; padding: 4px; }
 headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 4px; }
