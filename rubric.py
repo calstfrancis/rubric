@@ -1617,7 +1617,7 @@ class MainWindow(Adw.ApplicationWindow):
         hdr = Adw.HeaderBar()
 
         # Palette sidebar toggle — all the way at the left
-        self._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show-symbolic",
+        self._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show",
                                              tooltip_text="Show/hide elements panel")
         self._sidebar_btn.set_active(True)
         self._sidebar_btn.add_css_class("flat")
@@ -1627,8 +1627,8 @@ class MainWindow(Adw.ApplicationWindow):
         # New + Open as a linked pill
         doc_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         doc_box.add_css_class("linked")
-        for icon, tip, cb in [("document-new-symbolic", "New service (Ctrl+N)", self.new_service),
-                               ("document-open-symbolic", "Open… (Ctrl+O)", self.open_file)]:
+        for icon, tip, cb in [("document-new", "New service (Ctrl+N)", self.new_service),
+                               ("document-open", "Open… (Ctrl+O)", self.open_file)]:
             b = Gtk.Button(icon_name=icon, tooltip_text=tip)
             b.connect("clicked", lambda _, f=cb: f())
             doc_box.append(b)
@@ -1637,9 +1637,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Undo + Redo as a linked pill
         edit_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         edit_box.add_css_class("linked")
-        self.undo_btn = Gtk.Button(icon_name="edit-undo-symbolic", tooltip_text="Undo (Ctrl+Z)")
+        self.undo_btn = Gtk.Button(icon_name="edit-undo", tooltip_text="Undo (Ctrl+Z)")
         self.undo_btn.connect("clicked", lambda _: self.undo()); self.undo_btn.set_sensitive(False)
-        self.redo_btn = Gtk.Button(icon_name="edit-redo-symbolic", tooltip_text="Redo (Ctrl+Shift+Z)")
+        self.redo_btn = Gtk.Button(icon_name="edit-redo", tooltip_text="Redo (Ctrl+Shift+Z)")
         self.redo_btn.connect("clicked", lambda _: self.redo()); self.redo_btn.set_sensitive(False)
         edit_box.append(self.undo_btn); edit_box.append(self.redo_btn)
         hdr.pack_start(edit_box)
@@ -1699,7 +1699,7 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.set_title_widget(title_btn)
         self.selected_date = None
 
-        sb = Gtk.Button(icon_name="document-save-symbolic", tooltip_text="Save (Ctrl+S)")
+        sb = Gtk.Button(icon_name="document-save", tooltip_text="Save (Ctrl+S)")
         sb.add_css_class("suggested-action"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
 
         # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
