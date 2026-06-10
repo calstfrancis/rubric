@@ -1,4 +1,4 @@
-# Rubric v0.17.1
+# Rubric v0.17.2
 
 Install via Flatpak:
 
@@ -18,13 +18,17 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Hymn toggle** — every element now has a "Hymn" toggle button in its toolbar. Tap it to activate hymn search and suggestions for any element, not just those named "Hymn".
+**Shared layout** — the sidebar, order, notes, and preview panels now always share the window. No panel can push another off-screen or collapse it to zero. All dividers act as hard borders.
 
-**Scripture display** — inserted scripture passages now show as readable indented text in the element editor. No raw Typst code visible to users.
+**Maximized on launch** — Rubric now opens maximized by default.
 
-**Focus mode fix** — turning off focus mode no longer forces the sidebar open if it was already hidden.
+**Undo improvements** — toggling bulletin visibility, editing the leader field, changing duration, and inserting scripture from the Bible viewer are all now undoable.
 
-**Season colour** — the liturgical season colour is now applied to the week name label and the lectionary chip in the date popover, in addition to the colour strip and dot.
+**Safe file open** — opening a file no longer clears the current service before confirming the new file is valid. A corrupted file now leaves your current service intact.
+
+**Tab mode fix** — adding elements in tab mode now inserts into the currently visible tab's section.
+
+**Hymn toolbar fix** — the hymn mode toolbar no longer flickers or clears the search field when switching between elements.
 
 ---
 

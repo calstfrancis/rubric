@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.2-rc2 — Layout sharing fix, maximize on start
+## 0.17.2 — Layout sharing fix, maximize on start
 
 ### Fixed
 - Sidebar, order, notes, and preview now always share the window: no panel can push another off-screen or collapse it to zero. All dividers act as hard borders within the window.

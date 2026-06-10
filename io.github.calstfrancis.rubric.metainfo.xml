@@ -41,6 +41,19 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.2" date="2026-06-10">
+      <description>
+        <p>Layout and window fixes.</p>
+        <ul>
+          <li>All four panels (sidebar, order, notes, preview) now share the window — no panel can push another off-screen or collapse it to zero.</li>
+          <li>Window opens maximized by default.</li>
+          <li>Multiple undo fixes: toggling bulletin visibility, editing the leader field, changing duration, and inserting scripture are all now undoable.</li>
+          <li>Opening a file no longer wipes the current service if the new file is invalid.</li>
+          <li>Hymn mode toolbar no longer flickers when switching elements.</li>
+          <li>Tab mode inserts into the currently visible tab, not the last one.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.1" date="2026-06-10">
       <description>
         <p>Polish and hymn toggle.</p>
