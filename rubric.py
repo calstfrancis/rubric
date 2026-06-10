@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.16.0-rc5"
+APP_VERSION = "0.17.0"
 
 
 config = Config()
@@ -2428,9 +2428,9 @@ class MainWindow(Adw.ApplicationWindow):
         da = Gtk.DrawingArea()
         da.add_css_class("rubric-vtab")
 
-        # Estimate pixel extents: ~7.5px per char at small size, ~12px tall
-        est_w = max(44, len(text) * 8)
-        est_h = 13
+        # Estimate pixel extents: ~9px per char at 11pt, ~15px tall
+        est_w = max(50, len(text) * 9)
+        est_h = 15
         # DrawingArea size request: width = text height + padding, height = text width + padding
         da.set_size_request(est_h + 10, est_w + 14)
 
@@ -2439,7 +2439,7 @@ class MainWindow(Adw.ApplicationWindow):
             color = style.get_color()
             cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
             layout = widget.create_pango_layout(t)
-            fd = Pango.FontDescription.from_string("9")
+            fd = Pango.FontDescription.from_string("11")
             layout.set_font_description(fd)
             _ink, log = layout.get_pixel_extents()
             tw, th = log.width, log.height

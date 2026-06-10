@@ -1,4 +1,4 @@
-# Rubric v0.16.0-rc5
+# Rubric v0.17.0
 
 Install via Flatpak:
 
@@ -18,7 +18,13 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**UX polish** — suggestion pills now wrap to two rows with full titles (no horizontal scrolling). Status bar is slimmer. Season colour dot in status bar. Element type icons in the service order. Reading chips turn green after insertion. Calendar icon on date button. Keyboard shortcut overlay (Ctrl+?). Keyboard shortcuts window.
+**Rich text editor** — raw Typst mode is gone; all content is edited as rich text with bold, italic, headings, lists, and leader notes.
+
+**Rubric section** — each element has a private leader-instructions area. Rubric text appears red and italic in the manuscript only; never in the bulletin.
+
+**Snippets manager** — a full CRUD window for managing reusable text snippets, with rich-text editing and tag filtering.
+
+**Order panel polish** — vertical section tabs, a liturgical season colour strip at the panel top, section dividers styled as coloured pills, leader references shown as subtitles in service order rows, and drag handles that fade in on hover.
 
 ---
 

@@ -4,35 +4,30 @@ All notable changes are documented here, newest first.
 
 ---
 
-## dev — Order panel aesthetic polish
-
-### Changed
-- **Season colour strip** — a 3px coloured strip at the top of the service order panel now reflects the current liturgical season colour.
-- **Section divider pill** — section divider rows are styled as a rounded pill with a section-coloured dot and subtle tinted background, visually distinguishing them from service items.
-- **Scripture/leader ref as subtitle** — when a service item has a leader reference (hymn number, scripture citation, etc.), it is shown as the dim subtitle in the order list instead of the content preview.
-- **Drag handle fade** — the `⠿` drag handle on service order rows is invisible at rest and fades in on hover, reducing visual noise.
-
----
-
-## 0.17.0 — Rich text only, responsive reading redesign, snippets manager, rubric section, element icons
+## 0.17.0 — Rich text, snippets manager, rubric section, order panel polish
 
 ### Added
-- **Rubric section** — a togglable private leader-instructions area above each element's text editor. Text appears red and italic in the manuscript; stripped entirely from the bulletin. Toggle via the "Rubric" button in the editor header.
-- **Snippets manager window** — the Snippet button now opens a full management window with rich-text editing, tagging, and CRUD. Snippets can be tagged (comma-separated) and filtered by tag. Auto-saves when switching between snippets.
-- **Responsive reading redesign** — the reading builder now uses a structured row editor. Each row has a text entry and an "All" toggle. Toggled rows appear bold in the bulletin; the first in each consecutive group is prefixed with "All: ".
-- **Element icon picker** — a new icon button in the element toolbar (row 1) opens a popover with 30+ symbolic icons. The selected icon appears in the service order list for that element.
-- **User-assigned element icons** — stored per-element in the service file alongside the rubric note.
+- **Rubric section** — a togglable private leader-instructions area above each element's text editor. Text appears red and italic in the manuscript; stripped entirely from the bulletin.
+- **Snippets manager window** — the Snippet button opens a full management window with rich-text editing, tagging, and CRUD.
+- **Responsive reading redesign** — the reading builder uses a structured row editor; toggled rows appear bold in the bulletin.
+- **Element icon picker** — icon button in the element toolbar opens a popover with 30+ symbolic icons.
 
 ### Changed
-- **Rich text only** — the raw Typst editor toggle has been removed from element editors. Content is always edited as rich text; Typst is generated internally and is no longer user-exposed.
-- **Status bar events** — the centre now shows the closest past event (← arrow, left side) and the closest upcoming event (→ arrow, right side), instead of a flat list. Duplicate date display in event names is suppressed.
-- **Custom element dialog** — redesigned as a cleaner Adw.Window. Fixed a bug where the palette section dropdown showed only one option.
-- **Hymn suggestion pills** — pills now have visible borders at rest (not just on hover). YouTube icon is displayed in greyscale. Pill titles use ellipsis instead of wrapping when space is tight.
-- **Rubric note in manuscript** — rubric notes render as a styled red-italic block (`#rubric-note`) in the leader manuscript, above the element content.
+- **Rich text only** — the raw Typst editor toggle has been removed. Content is always edited as rich text.
+- **Vertical section tabs** — notebook tabs on the order panel are now left-side vertical tabs with text rotated bottom-to-top.
+- **Season colour strip** — a 3px strip at the top of the order panel reflects the current liturgical season colour.
+- **Section divider pill** — section divider rows are styled as a rounded pill with a section-coloured dot.
+- **Scripture/leader ref as subtitle** — leader references (hymn numbers, scripture citations) appear as the dim subtitle in order list rows.
+- **Drag handle fade** — drag handles are invisible at rest and fade in on row hover.
+- **Status bar events** — centre shows the closest past and upcoming events with arrows; duplicate dates suppressed.
+- **Hymn suggestion pills** — opaque accent colour, white text, no border.
+- **Simple mode** — dev button, git status, and time bar hidden in simple mode.
+- **Tab key inserts indent** in the element editor (converted to `#h(1.5em)` in Typst output).
+- **Leader-note highlight colours** adapt to dark/light system theme.
 
 ### Fixed
 - Compilation errors from user-entered Typst eliminated by removing raw Typst editor.
-- Observance names with embedded date suffixes (e.g. "(Aug 6)") no longer duplicate the date from the proximity label.
+- Observance names with embedded date suffixes no longer duplicate the date.
 
 ---
 

@@ -41,6 +41,21 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.0" date="2026-06-10">
+      <description>
+        <p>Major UX update: rich text editor, snippets manager, rubric section, and order panel polish.</p>
+        <ul>
+          <li>Rich text editor — raw Typst mode removed; content is always edited as rich text.</li>
+          <li>Rubric section — private leader-instructions area per element, manuscript-only.</li>
+          <li>Snippets manager — full CRUD window with rich-text editing and tagging.</li>
+          <li>Vertical section tabs on the order panel; season colour strip at panel top.</li>
+          <li>Section divider rows styled as pills with section colour dot.</li>
+          <li>Leader references (hymn numbers, scripture citations) shown as subtitle in order rows.</li>
+          <li>Drag handles fade in on hover to reduce visual noise.</li>
+          <li>Simple mode hides dev/git/time controls.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.16.0-rc5" date="2026-06-10">
       <description>
         <p>UX polish across the service editor.</p>
