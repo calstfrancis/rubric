@@ -1833,7 +1833,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_panel = self._build_preview_panel()
         self._preview_panel.set_visible(False)
         self._preview_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self._preview_paned.set_shrink_start_child(False)
+        self._preview_paned.set_shrink_start_child(True)
         self._preview_paned.set_shrink_end_child(False)
         self._preview_paned.set_start_child(self._build_order_panel())
         self._preview_paned.set_end_child(self._preview_panel)
@@ -2098,6 +2098,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._notebook = Gtk.Notebook()
         self._notebook.set_show_border(False); self._notebook.set_vexpand(True)
+        self._notebook.set_scrollable(True)
         self._notebook.set_margin_start(8); self._notebook.set_margin_end(8)
         self._notebook.set_margin_top(8); self._notebook.set_margin_bottom(6)
         self._view_stack.add_named(self._notebook, "tabs")
@@ -3500,7 +3501,16 @@ class MainWindow(Adw.ApplicationWindow):
     def _toggle_palette_sidebar(self, btn):
         if btn.get_active():
             self._palette_visible = True
-            self._palette_paned.set_position(290)
+            def _set_palette_pos():
+                total = self._palette_paned.get_allocated_width()
+                if getattr(self, "_preview_visible", False) and total > 0:
+                    # Leave room for order panel (280 min) + preview panel (300 min)
+                    pos = min(290, max(180, total - 580))
+                else:
+                    pos = 290
+                self._palette_paned.set_position(pos)
+                return False
+            GLib.idle_add(_set_palette_pos)
         else:
             self._palette_visible = False
             self._palette_paned.set_position(0)
