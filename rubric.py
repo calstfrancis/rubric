@@ -2344,7 +2344,8 @@ class MainWindow(Adw.ApplicationWindow):
         subtitle_text = si.leader if si.leader else preview
         row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
         row.set_subtitle_lines(1); row._entry = si
-        dot = Gtk.Label(label="⬤"); dot.add_css_class("dim-label"); dot.set_valign(Gtk.Align.CENTER)
+        colour = _section_colour(si.section)
+        dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
         row.add_prefix(dot)
         # User-assigned icon takes priority; fall back to auto type icon
         user_icon = getattr(si, "icon", "")
@@ -2363,7 +2364,8 @@ class MainWindow(Adw.ApplicationWindow):
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         bx.set_margin_top(4); bx.set_margin_bottom(4); bx.set_margin_start(8); bx.set_margin_end(8)
         bx.add_css_class("divider-pill")
-        dot = Gtk.Label(label="⬤"); dot.add_css_class("dim-label"); dot.set_valign(Gtk.Align.CENTER); bx.append(dot)
+        colour = _section_colour(div.title)
+        dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER); bx.append(dot)
         handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER); bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
@@ -2978,7 +2980,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._inserted_readings.add(key)
         btn = self._reading_rows.get(key)
         if btn:
-            btn.add_css_class("dim-label")
+            btn.add_css_class("success")
 
     def _on_bible_insert(self, text):
         idx = self._selected_index()
@@ -3183,7 +3185,8 @@ class MainWindow(Adw.ApplicationWindow):
             colour = info["colour_hex"]
             # Compact: coloured dot + "Year A · Advent"
             self._lect_label.set_markup(
-                f'● <span>Year {year} · {season}</span>'
+                f'<span color="{colour}">●</span> '
+                f'<span>Year {year} · {season}</span>'
             )
             self._lect_label.set_tooltip_text(
                 f"Today: {info['week']} — RCL Year {year}"
@@ -3241,10 +3244,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._current_readings = {k: info[k] for k in ("ot","psalm","epistle","gospel")}
         self.readings_card.set_visible(True)
         self.season_label.set_label(info["week"]); self.year_badge.set_label(f"Year {info['year']}")
-        self.season_dot.set_text("●")
+        self.season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
         self._colour_bar_rgb = _hex_to_rgb(info["colour_hex"]); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
         if hasattr(self, "_sb_season_dot"):
-            self._sb_season_dot.set_text("●")
+            self._sb_season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
             self._sb_season_dot.set_visible(True)
 
         # Stepper
@@ -3305,7 +3308,7 @@ class MainWindow(Adw.ApplicationWindow):
             if arrow == "←":
                 markup = f'<span alpha="60%">← </span>'
             if tlabel:
-                markup += f'<b>{GLib.markup_escape_text(tlabel)}</b> '
+                markup += f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
             markup += GLib.markup_escape_text(display_name)
             if prox:
                 markup += f' <span alpha="60%">{GLib.markup_escape_text(prox)}</span>'
@@ -5961,10 +5964,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         TARGET = 75
         if total > TARGET:
             self._time_bar.set_markup(
-                f'<b>~{total} min total</b>'
-                f'<span size="small">  ({total - TARGET} over)</span>')
+                f'<span color="#B91C1C">~{total} min total</span>'
+                f'<span color="#B91C1C" size="small">  ({total - TARGET} over)</span>')
         else:
-            self._time_bar.set_text(f'~{total} min total')
+            self._time_bar.set_markup(f'<span color="#15803D">~{total} min total</span>')
 
     # ── Hymn suggestions ──────────────────────────────────────────────────────
 
@@ -7641,8 +7644,9 @@ class ServicesWindow(Adw.Window):
                 not_planned.add_css_class("dim-label"); not_planned.add_css_class("caption")
                 row.add_suffix(not_planned)
 
-            dot = Gtk.Label(label="●")
-            dot.add_css_class("dim-label")
+            # Colour dot for liturgical season
+            dot = Gtk.Label()
+            dot.set_markup(f'<span color="{colour}" size="x-large">●</span>')
             dot.set_valign(Gtk.Align.CENTER)
             dot.set_margin_end(4)
             row.add_prefix(dot)
@@ -8184,15 +8188,16 @@ class PlannerWindow(Adw.Window):
         def _add_row(svc_date, title, subtitle, path, planned, colour_hex="#15803D"):
             row = Adw.ActionRow(title=title, subtitle=subtitle)
             row.set_activatable(True)
-            dot = Gtk.Label(label="●")
-            dot.add_css_class("dim-label")
+            # Liturgical season colour dot
+            dot = Gtk.Label()
+            dot.set_markup(f'<span color="{colour_hex}">●</span>')
             dot.set_valign(Gtk.Align.CENTER)
             dot.set_margin_end(4)
             row.add_prefix(dot)
             icon = Gtk.Image.new_from_icon_name(
                 "emblem-ok-symbolic" if planned else "list-add-symbolic")
             icon.set_pixel_size(18)
-            icon.add_css_class("dim-label")
+            icon.add_css_class("success" if planned else "dim-label")
             row.add_prefix(icon)
             row._svc_date = svc_date
             row._svc_path = path
@@ -8270,7 +8275,8 @@ class PlannerWindow(Adw.Window):
 
             date_lbl = Gtk.Label()
             date_lbl.set_markup(
-                f'●  <b>{svc_date.strftime("%-d %B %Y")}</b>')
+                f'<span color="{colour_hex}">●</span>  '
+                f'<b>{svc_date.strftime("%-d %B %Y")}</b>')
             date_lbl.add_css_class("title-2"); date_lbl.set_xalign(0)
             box.append(date_lbl)
 
