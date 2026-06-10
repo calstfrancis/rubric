@@ -13,7 +13,7 @@ _GIT = ["flatpak-spawn", "--host", "git"] if Path("/.flatpak-info").exists() els
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gio, GLib, GObject, Gdk
+from gi.repository import Gtk, Adw, Gio, GLib, GObject, Gdk, Pango
 
 sys.path.insert(0, str(Path(__file__).parent))
 from rcl_data import get_liturgical_info
@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.1"
+APP_VERSION = "0.17.2.dev0"
 
 
 config = Config()
@@ -1396,7 +1396,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._redo_stack: list[list[dict]] = []
         self.current_file: str|None = None
         self.typ_file: str|None = None
-        self.modified = False; self._updating_note = False
+        self.modified = False; self._updating_note = False; self._leader_undo_pushed = False
         self.selected_date = None; self._selected_global_idx = -1
         self._current_readings: dict[str,str] = {}
         self._tab_listboxes: list[tuple] = []
@@ -1675,7 +1675,7 @@ class MainWindow(Adw.ApplicationWindow):
         _date_ico = Gtk.Image(icon_name="x-office-calendar-symbolic")
         _date_ico.add_css_class("dim-label"); _date_box.append(_date_ico)
         self._date_label_widget = Gtk.Label(label="No date selected")
-        self._date_label_widget.set_ellipsize(3); _date_box.append(self._date_label_widget)
+        self._date_label_widget.set_ellipsize(Pango.EllipsizeMode.END); _date_box.append(self._date_label_widget)
         self.date_button = Gtk.MenuButton(popover=cal_pop)
         self.date_button.set_child(_date_box)
         self.date_button.set_hexpand(True); date_row.append(self.date_button)
@@ -2391,6 +2391,7 @@ class MainWindow(Adw.ApplicationWindow):
         row.add_controller(drag)
         drop = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
         def on_drop(_t, value, _x, _y, dest=idx):
+            row.remove_css_class("drop-target")
             if value != dest: self._push_undo(); self._move_entry(value, dest)
             return True
         drop.connect("drop", on_drop)
@@ -2430,7 +2431,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _make_tab_label(self, div: SectionDivider | None, page_idx_fn) -> Gtk.Widget:
         """Tab label: rotated DrawingArea so text reads bottom-to-top with correct layout size."""
         import math
-        from gi.repository import Pango, PangoCairo
+        from gi.repository import PangoCairo
 
         text = div.title if div else "Service"
 
@@ -2576,6 +2577,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _handle_selection(self, row):
         self._updating_note = True
+        self._leader_undo_pushed = False
         if row and hasattr(row,"_entry") and isinstance(row._entry, ServiceItem):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
@@ -2588,9 +2590,12 @@ class MainWindow(Adw.ApplicationWindow):
             # Bulletin toggle — set state without triggering handler
             self.bulletin_toggle.set_active(si.show_in_bulletin)
             self.duration_spin.set_value(getattr(si, "duration", 0))
-            # Set hymn toggle — fires _on_hymn_mode_toggled which updates all visibility
+            # Set hymn toggle and sync visibility directly (handler blocked by _updating_note)
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             self._hymn_mode_btn.set_active(is_hymn)
+            for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
+            self.sugg_revealer.set_reveal_child(
+                is_hymn and getattr(self, "_hymn_suggestions_available", False))
             # Update focus mode banner
             if getattr(self, "_focus_mode", False):
                 self._focus_elem_lbl.set_text(si.name)
@@ -2600,6 +2605,9 @@ class MainWindow(Adw.ApplicationWindow):
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
             self.duration_spin.set_value(0)
+            self._hymn_mode_btn.set_active(False)
+            for w in self._hymn_toolbar_widgets: w.set_visible(False)
+            self.sugg_revealer.set_reveal_child(False)
         self._updating_note = False
 
     # ── Palette actions ───────────────────────────────────────────────────────
@@ -2630,6 +2638,25 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _add_entry(self, entry):
         idx = self._selected_index()
+        if idx < 0 and config.use_tabs:
+            # No item selected — insert at end of currently visible tab's section
+            page = self._notebook.get_current_page()
+            if 0 <= page < len(self._tab_listboxes):
+                section_div, _lb = self._tab_listboxes[page]
+                ins = len(self.service_entries)
+                in_section = section_div is None
+                for i, e in enumerate(self.service_entries):
+                    if e.is_divider:
+                        if e is section_div:
+                            in_section = True; ins = i + 1
+                        elif in_section:
+                            ins = i; break
+                    elif in_section:
+                        ins = i + 1
+                self.service_entries.insert(ins, entry)
+                self._refresh_order_list(select_index=ins)
+                self._mark_modified()
+                return
         if idx >= 0:
             ins = idx+1; self.service_entries.insert(ins, entry); self._refresh_order_list(select_index=ins)
         else:
@@ -2991,6 +3018,7 @@ class MainWindow(Adw.ApplicationWindow):
         if not (0 <= idx < len(self.service_entries)): return
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
+        self._push_undo()
         sep = "\n\n" if entry.content_typst else ""
         entry.content_typst = entry.content_typst + sep + text
         self._content_widget.set_content(entry.content_typst)
@@ -3780,6 +3808,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _run_preview_compile(self, typ_src: str, typst_bin: str) -> None:
         """Background thread: compile bulletin Typst to PDF for live preview."""
         import tempfile as _tf
+        typ_path = None
         try:
             with _tf.NamedTemporaryFile(
                 suffix=".typ", delete=False, mode="w", encoding="utf-8",
@@ -3788,11 +3817,14 @@ class MainWindow(Adw.ApplicationWindow):
                 f.write(typ_src)
                 typ_path = Path(f.name)
             pdf_path = self._preview_pdf_path()
-            result = subprocess.run(
-                [typst_bin, "compile", str(typ_path), str(pdf_path)],
-                capture_output=True, text=True, timeout=60,
-                encoding="utf-8", errors="replace",
-            )
+            try:
+                result = subprocess.run(
+                    [typst_bin, "compile", str(typ_path), str(pdf_path)],
+                    capture_output=True, text=True, timeout=60,
+                    encoding="utf-8", errors="replace",
+                )
+            finally:
+                typ_path.unlink(missing_ok=True)
             if result.returncode == 0 and pdf_path.exists():
                 GLib.idle_add(self._load_preview_pdf, str(pdf_path))
             else:
@@ -3804,6 +3836,8 @@ class MainWindow(Adw.ApplicationWindow):
         except subprocess.TimeoutExpired:
             GLib.idle_add(self._preview_compile_done)
         except Exception:
+            if typ_path:
+                typ_path.unlink(missing_ok=True)
             GLib.idle_add(self._preview_compile_done)
 
     def _find_typst(self) -> str | None:
@@ -4745,10 +4779,9 @@ class MainWindow(Adw.ApplicationWindow):
     def _load_file(self, path, mark_unsaved=False):
         try:
             with open(path,encoding="utf-8") as fp: data = json.load(fp)
+            new_entries = [_entry_from_dict(d) for d in data.get("items",[])]
             self._reset_state(); self.service_title_entry.set_text(data.get("title",""))
-            for d in data.get("items",[]):
-                entry = _entry_from_dict(d)
-                self.service_entries.append(entry)
+            self.service_entries.extend(new_entries)
             self._refresh_order_list()
             saved_date = data.get("date")
             if saved_date:
@@ -5938,7 +5971,14 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if not (0 <= idx < len(self.service_entries)): return
         entry_obj = self.service_entries[idx]
         if not isinstance(entry_obj, ServiceItem): return
+        if not getattr(self, "_leader_undo_pushed", False):
+            self._push_undo()
+            self._leader_undo_pushed = True
         entry_obj.leader = entry.get_text()
+        row = self._find_row_for_index(idx)
+        if isinstance(row, Adw.ActionRow):
+            row.set_subtitle(entry_obj.leader if entry_obj.leader
+                             else self._note_preview(entry_obj.content_typst))
         self._mark_modified()
 
     def _on_bulletin_toggled(self, btn):
@@ -5947,6 +5987,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if not (0 <= idx < len(self.service_entries)): return
         e = self.service_entries[idx]
         if not isinstance(e, ServiceItem): return
+        self._push_undo()
         e.show_in_bulletin = btn.get_active()
         row = self._find_row_for_index(idx)
         if row:
@@ -5959,6 +6000,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if not (0 <= idx < len(self.service_entries)): return
         e = self.service_entries[idx]
         if not isinstance(e, ServiceItem): return
+        self._push_undo()
         e.duration = int(spin.get_value())
         self._update_time_total()
         self._mark_modified()
@@ -6025,7 +6067,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             title_lbl.set_margin_start(6); title_lbl.set_margin_end(4)
             title_lbl.set_wrap(False)
             title_lbl.set_max_width_chars(22)
-            title_lbl.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+            title_lbl.set_ellipsize(Pango.EllipsizeMode.END)  # PANGO_ELLIPSIZE_END
             chip.set_child(title_lbl)
 
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
@@ -6157,6 +6199,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         self.scripture_entry.grab_focus()
 
     def _on_hymn_mode_toggled(self, btn):
+        if self._updating_note: return
         active = btn.get_active()
         for w in self._hymn_toolbar_widgets:
             w.set_visible(active)
@@ -6819,7 +6862,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 row_box.set_margin_start(8); row_box.set_margin_end(8)
                 row_box.set_margin_top(6); row_box.set_margin_bottom(6)
                 name_lbl = Gtk.Label(label=snip["name"])
-                name_lbl.set_xalign(0); name_lbl.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+                name_lbl.set_xalign(0); name_lbl.set_ellipsize(Pango.EllipsizeMode.END)  # PANGO_ELLIPSIZE_END
                 name_lbl.add_css_class("body")
                 row_box.append(name_lbl)
                 if tags:
@@ -7465,7 +7508,7 @@ class ServicesWindow(Adw.Window):
         self._planner_folder_lbl.add_css_class("caption")
         self._planner_folder_lbl.add_css_class("dim-label")
         self._planner_folder_lbl.set_hexpand(True); self._planner_folder_lbl.set_xalign(0)
-        self._planner_folder_lbl.set_ellipsize(3)
+        self._planner_folder_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         top.append(self._planner_folder_lbl)
         choose_btn = Gtk.Button(label="Folder…"); choose_btn.add_css_class("flat")
         choose_btn.connect("clicked", self._on_choose_folder); top.append(choose_btn)
@@ -7768,7 +7811,7 @@ class ServicesWindow(Adw.Window):
             preview = note[:120].replace("\n", " ") + ("…" if len(note) > 120 else "")
             note_lbl = Gtk.Label(label=preview)
             note_lbl.set_xalign(0); note_lbl.add_css_class("caption"); note_lbl.add_css_class("dim-label")
-            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(3)
+            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(Pango.EllipsizeMode.END)
             box.append(note_lbl)
         if not indented and r.get("service_title"):
             svc_lbl = Gtk.Label(label=f'{r["service_title"]}  ·  {r.get("service_date","") or ""}')
@@ -7865,7 +7908,7 @@ class ServicesWindow(Adw.Window):
         header.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1); info.set_hexpand(True)
         title_lbl = Gtk.Label(label=svc.get("service_title") or Path(path).stem)
-        title_lbl.set_xalign(0); title_lbl.add_css_class("heading"); title_lbl.set_ellipsize(3)
+        title_lbl.set_xalign(0); title_lbl.add_css_class("heading"); title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         info.append(title_lbl)
         date_lbl = Gtk.Label(label=svc.get("service_date") or "No date")
         date_lbl.set_xalign(0); date_lbl.add_css_class("caption"); date_lbl.add_css_class("dim-label")
@@ -8589,7 +8632,7 @@ class LibraryWindow(Adw.Window):
             preview = note[:120].replace("\n", " ") + ("…" if len(note) > 120 else "")
             note_lbl = Gtk.Label(label=preview)
             note_lbl.set_xalign(0); note_lbl.add_css_class("caption")
-            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(3)
+            note_lbl.set_wrap(True); note_lbl.set_lines(2); note_lbl.set_ellipsize(Pango.EllipsizeMode.END)
             box.append(note_lbl)
 
         if not indented and elem.get("service_title"):
@@ -8779,7 +8822,7 @@ class ArchiveWindow(Adw.Window):
         title = svc.get("service_title") or Path(path).stem
         title_lbl = Gtk.Label(label=title)
         title_lbl.set_xalign(0); title_lbl.add_css_class("heading")
-        title_lbl.set_ellipsize(3); info.append(title_lbl)
+        title_lbl.set_ellipsize(Pango.EllipsizeMode.END); info.append(title_lbl)
         date_lbl = Gtk.Label(label=svc.get("service_date") or "No date")
         date_lbl.set_xalign(0); date_lbl.add_css_class("caption")
         date_lbl.add_css_class("dim-label"); info.append(date_lbl)

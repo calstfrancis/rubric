@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## dev — Bug fixes and code quality
+
+### Fixed
+- Adding elements in tab mode now always inserts into the currently visible tab's section, not the last tab
+- Toggling bulletin visibility, editing the leader field, and changing duration are now undoable
+- Scripture inserted from the Bible viewer is now undoable
+- Editing the leader field now updates the order row subtitle live
+- Preview compile no longer leaks a `.typ` temp file in `/tmp` on every compile
+- Opening a file no longer wipes the current service state before confirming the new file is valid — a corrupted or unparseable file now leaves the current service intact
+- Hymn mode toolbar no longer flickers or clears the search field when switching between elements
+- Drop-target highlight on rows is now always removed when a drag is dropped (not just when cancelled)
+
+### Changed
+- `Pango.EllipsizeMode.END` replaces the magic number `3` throughout
+
+---
+
 ## 0.17.1 — UX polish, season colour, focus mode fixes, hymn toggle
 
 ### Changed
