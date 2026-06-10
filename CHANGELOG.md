@@ -4,6 +4,28 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.0 — Rich text only, responsive reading redesign, snippets manager, rubric section, element icons
+
+### Added
+- **Rubric section** — a togglable private leader-instructions area above each element's text editor. Text appears red and italic in the manuscript; stripped entirely from the bulletin. Toggle via the "Rubric" button in the editor header.
+- **Snippets manager window** — the Snippet button now opens a full management window with rich-text editing, tagging, and CRUD. Snippets can be tagged (comma-separated) and filtered by tag. Auto-saves when switching between snippets.
+- **Responsive reading redesign** — the reading builder now uses a structured row editor. Each row has a text entry and an "All" toggle. Toggled rows appear bold in the bulletin; the first in each consecutive group is prefixed with "All: ".
+- **Element icon picker** — a new icon button in the element toolbar (row 1) opens a popover with 30+ symbolic icons. The selected icon appears in the service order list for that element.
+- **User-assigned element icons** — stored per-element in the service file alongside the rubric note.
+
+### Changed
+- **Rich text only** — the raw Typst editor toggle has been removed from element editors. Content is always edited as rich text; Typst is generated internally and is no longer user-exposed.
+- **Status bar events** — the centre now shows the closest past event (← arrow, left side) and the closest upcoming event (→ arrow, right side), instead of a flat list. Duplicate date display in event names is suppressed.
+- **Custom element dialog** — redesigned as a cleaner Adw.Window. Fixed a bug where the palette section dropdown showed only one option.
+- **Hymn suggestion pills** — pills now have visible borders at rest (not just on hover). YouTube icon is displayed in greyscale. Pill titles use ellipsis instead of wrapping when space is tight.
+- **Rubric note in manuscript** — rubric notes render as a styled red-italic block (`#rubric-note`) in the leader manuscript, above the element content.
+
+### Fixed
+- Compilation errors from user-entered Typst eliminated by removing raw Typst editor.
+- Observance names with embedded date suffixes (e.g. "(Aug 6)") no longer duplicate the date from the proximity label.
+
+---
+
 ## 0.16.0-rc5 — UX polish: wrapping pills, slimmer bar, icons
 
 ### Added

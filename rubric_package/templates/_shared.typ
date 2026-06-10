@@ -37,6 +37,16 @@
   text(size: 0.9em, content),
 )
 
+// Rubric note: leader instructions — red italic, manuscript only (stripped from bulletin)
+#let rubric-note(content) = block(
+  fill: rgb("#fff0f0"),
+  inset: (left: 10pt, right: 10pt, top: 6pt, bottom: 6pt),
+  radius: 4pt,
+  above: 4pt,
+  below: 4pt,
+  text(size: 0.9em, fill: rgb("#b91c1c"), style: "italic", content),
+)
+
 // Element heading: bold small-caps with a thin rule below
 #show heading.where(level: 3): it => {
   v(6pt, weak: true)

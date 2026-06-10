@@ -14,9 +14,15 @@ except ImportError:
 # Fallback JSON path (legacy; used only if SQLite is unavailable)
 _LEGACY_PATH = Path.home() / ".config/rubric/snippets.json"
 
+def snippet_tags(snip: dict) -> list[str]:
+    """Return the tags list for a snippet (empty list if absent)."""
+    return snip.get("tags", [])
+
+
 DEFAULT_SNIPPETS = [
     {
         "name": "Land acknowledgement (Mi'kmaq)",
+        "tags": ["gathering", "indigenous"],
         "content": (
             "We acknowledge that we gather on the unceded ancestral territory "
             "of the Mi'kmaq people. We are grateful for their stewardship of "

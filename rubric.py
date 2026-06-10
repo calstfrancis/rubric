@@ -1733,16 +1733,21 @@ class MainWindow(Adw.ApplicationWindow):
         self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
         status_bar.append(self._compact_status_btn)
 
-        # Centre: season dot + observances (hexpand spacers on each side to keep centred)
+        # Centre: prev event ← · season dot · → next event
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
         status_bar.append(_left_spacer)
         _centre_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         _centre_box.set_halign(Gtk.Align.CENTER)
+        # Previous event (left side with ← arrow)
+        self._prev_obs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        _centre_box.append(self._prev_obs_box)
+        # Season dot
         self._sb_season_dot = Gtk.Label(label="●")
         self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
         self._sb_season_dot.set_visible(False)
         _centre_box.append(self._sb_season_dot)
-        self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        # Next/upcoming event (right side with → arrow)
+        self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
         _centre_box.append(self._obs_status_box)
         status_bar.append(_centre_box)
         _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
@@ -2155,6 +2160,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_toggle.set_active(True)
         self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
         row1.append(self.bulletin_toggle)
+
+        icon_btn = Gtk.MenuButton(icon_name="preferences-desktop-wallpaper-symbolic",
+                                  tooltip_text="Set icon for this element")
+        icon_btn.add_css_class("flat")
+        icon_btn.set_popover(self._build_icon_picker_popover())
+        self._icon_menu_btn = icon_btn
+        row1.append(icon_btn)
         itb_rows.append(row1)
 
         # ── Row 2: Scripture · Hymn (contextual) · Snippets / Reading ────
@@ -2207,6 +2219,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_widget = ElementContentWidget()
         self._content_widget.set_vexpand(True)
         self._content_widget.set_on_changed(self._on_content_typst_changed)
+        self._content_widget.set_on_rubric_changed(self._on_rubric_note_changed)
         notes_box.append(self._content_widget)
 
         # Scripture reference detection banner
@@ -2267,7 +2280,9 @@ class MainWindow(Adw.ApplicationWindow):
         colour = _section_colour(si.section)
         dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
         row.add_prefix(dot)
-        _ico_name = _item_type_icon(si.name)
+        # User-assigned icon takes priority; fall back to auto type icon
+        user_icon = getattr(si, "icon", "")
+        _ico_name = user_icon or _item_type_icon(si.name)
         if _ico_name:
             _ico = Gtk.Image(icon_name=_ico_name, pixel_size=14)
             _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
@@ -2472,6 +2487,7 @@ class MainWindow(Adw.ApplicationWindow):
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
             self._content_widget.set_content(si.content_typst)
+            self._content_widget.set_rubric_note(getattr(si, "rubric_note", ""))
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
@@ -2562,21 +2578,51 @@ class MainWindow(Adw.ApplicationWindow):
     def add_divider(self): self._push_undo(); self._add_entry(SectionDivider("New section"))
 
     def add_custom(self):
-        dlg = Adw.MessageDialog(transient_for=self, heading="Add custom element")
-        bx = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8); bx.set_margin_top(6)
-        nr = Adw.EntryRow(title="Element name"); bx.append(nr)
-        sr = Adw.ComboRow(title="Palette section (for colour)")
-        m = Gtk.StringList()
-        for s,_ in get_palette(): m.append(s)
-        sr.set_model(m); bx.append(sr); dlg.set_extra_child(bx)
-        dlg.add_response("cancel","Cancel"); dlg.add_response("add","Add")
-        dlg.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED); dlg.set_default_response("add")
-        def on_resp(d,r):
-            if r=="add":
-                name = nr.get_text().strip(); pal = get_palette()
-                section = pal[sr.get_selected()][0] if pal else ""
-                if name: self._push_undo(); self._add_entry(ServiceItem(name, section))
-        dlg.connect("response", on_resp); dlg.present()
+        win = Adw.Window(transient_for=self, modal=True)
+        win.set_title("Add custom element")
+        win.set_default_size(360, -1)
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar(); tv.add_top_bar(hdr)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_top(12); outer.set_margin_bottom(12)
+        outer.set_margin_start(16); outer.set_margin_end(16)
+
+        grp = Adw.PreferencesGroup()
+        name_row = Adw.EntryRow(title="Element name")
+        grp.add(name_row)
+
+        section_row = Adw.ComboRow(title="Palette section")
+        pal = get_palette()
+        section_row.set_model(Gtk.StringList.new([s for s, _ in pal]))
+        section_row.set_expression(
+            Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        grp.add(section_row)
+        outer.append(grp)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_row.set_margin_top(16)
+        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda _: win.close())
+        btn_row.append(cancel_btn)
+        add_btn = Gtk.Button(label="Add")
+        add_btn.add_css_class("suggested-action")
+
+        def on_add(_b):
+            nm = name_row.get_text().strip()
+            pal2 = get_palette()
+            sec = pal2[section_row.get_selected()][0] if pal2 else ""
+            if nm:
+                self._push_undo(); self._add_entry(ServiceItem(nm, sec))
+            win.close()
+
+        add_btn.connect("clicked", on_add)
+        name_row.connect("entry-activated", lambda _: on_add(None))
+        btn_row.append(add_btn)
+        outer.append(btn_row)
+
+        tv.set_content(outer); win.set_content(tv); win.present()
 
     def duplicate_service(self):
         entries = [_entry_from_dict(e.to_dict()) for e in self.service_entries]
@@ -2900,6 +2946,112 @@ class MainWindow(Adw.ApplicationWindow):
         self._mark_modified()
         self._detect_scripture_ref(content)
 
+    def _on_rubric_note_changed(self, text: str):
+        """Called by ElementContentWidget when the rubric note is edited."""
+        if self._updating_note:
+            return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)):
+            return
+        entry = self.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            return
+        entry.rubric_note = text
+        self._mark_modified()
+
+    # ── Icon picker ───────────────────────────────────────────────────────────
+
+    _ELEMENT_ICONS = [
+        # Music & worship
+        "audio-headphones-symbolic",      # Hymn / music
+        "audio-x-generic-symbolic",       # Anthem
+        "media-playback-start-symbolic",  # Prelude / postlude
+        # Scripture & word
+        "user-bookmarks-symbolic",        # Scripture reading
+        "accessories-text-editor-symbolic",  # Sermon / message
+        "format-text-rich-symbolic",      # Homily
+        # Prayer & liturgy
+        "emoji-body-symbolic",            # Prayer / blessing
+        "emblem-important-symbolic",      # Commissioning
+        "emblem-default-symbolic",        # Benediction
+        # Sacraments & rites
+        "starred-symbolic",               # Special occasion
+        "object-select-symbolic",         # Affirmation
+        "appointment-symbolic",           # Lord's Supper
+        # People & community
+        "system-users-symbolic",          # Land acknowledgement
+        "contact-new-symbolic",           # Welcome
+        "preferences-desktop-personal-symbolic",  # Children's time
+        # Offering & response
+        "emblem-money-symbolic",          # Offering
+        "view-list-symbolic",             # Announcements
+        # Misc
+        "weather-clear-symbolic",         # Rainbow candle
+        "go-home-symbolic",               # Gathering
+        "view-fullscreen-symbolic",       # Sending
+        "edit-find-symbolic",             # Scripture search
+        "help-about-symbolic",            # Info
+        "dialog-information-symbolic",    # Notice
+        "go-up-symbolic",                 # Opening
+        "go-down-symbolic",               # Closing
+        "media-record-symbolic",          # Practice
+        "appointment-new-symbolic",       # New appointment
+        "clock-symbolic",                 # Timed element
+        "flag-symbolic",                  # Special flag
+    ]
+
+    def _build_icon_picker_popover(self) -> Gtk.Popover:
+        pop = Gtk.Popover()
+        pop.set_has_arrow(True)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        outer.set_margin_top(8); outer.set_margin_bottom(8)
+        outer.set_margin_start(8); outer.set_margin_end(8)
+
+        lbl = Gtk.Label(label="Element icon")
+        lbl.add_css_class("heading"); lbl.set_xalign(0)
+        outer.append(lbl)
+
+        grid = Gtk.FlowBox()
+        grid.set_selection_mode(Gtk.SelectionMode.NONE)
+        grid.set_max_children_per_line(8)
+        grid.set_column_spacing(2); grid.set_row_spacing(2)
+
+        # None option (clear icon)
+        clear_btn = Gtk.Button(label="—", tooltip_text="No icon (use auto-detect)")
+        clear_btn.add_css_class("flat")
+        def on_clear(_b):
+            idx = self._selected_index()
+            if 0 <= idx < len(self.service_entries):
+                si = self.service_entries[idx]
+                if isinstance(si, ServiceItem):
+                    si.icon = ""
+                    self._refresh_order_list(idx)
+                    self._mark_modified()
+            pop.popdown()
+        clear_btn.connect("clicked", on_clear)
+        grid.append(clear_btn)
+
+        for ico in self._ELEMENT_ICONS:
+            btn = Gtk.Button(tooltip_text=ico)
+            btn.add_css_class("flat")
+            img = Gtk.Image(icon_name=ico, pixel_size=18)
+            btn.set_child(img)
+            def on_ico(_b, icon=ico):
+                idx = self._selected_index()
+                if 0 <= idx < len(self.service_entries):
+                    si = self.service_entries[idx]
+                    if isinstance(si, ServiceItem):
+                        si.icon = icon
+                        self._refresh_order_list(idx)
+                        self._mark_modified()
+                pop.popdown()
+            btn.connect("clicked", on_ico)
+            grid.append(btn)
+
+        outer.append(grid)
+        pop.set_child(outer)
+        return pop
+
     def _detect_scripture_ref(self, text: str):
         """Show inline banner if a scripture reference is found in the note."""
         if not hasattr(self, "_scripture_detect_rev"):
@@ -3037,40 +3189,68 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _refresh_observances_row(self, d) -> None:
         """Rebuild the observances chips in the status bar centre."""
-        box = getattr(self, "_obs_status_box", None)
-        if box is None:
+        next_box = getattr(self, "_obs_status_box", None)
+        prev_box = getattr(self, "_prev_obs_box", None)
+        if next_box is None:
             return
-        while box.get_first_child():
-            box.remove(box.get_first_child())
+        for box in (next_box, prev_box):
+            if box:
+                while box.get_first_child():
+                    box.remove(box.get_first_child())
         try:
-            from observances import get_observances, TYPES
+            from observances import get_observances, get_previous_observance, TYPES
         except ImportError:
             return
-        obs_list = get_observances(d)
-        if not obs_list:
-            return
-        for i, obs in enumerate(obs_list):
-            if i > 0:
-                dot = Gtk.Label(label="·")
-                dot.add_css_class("caption"); dot.add_css_class("dim-label")
-                dot.set_margin_start(2); dot.set_margin_end(2)
-                box.append(dot)
+
+        import re as _re
+
+        def _strip_date_parens(name: str) -> str:
+            """Remove trailing (Mon Day) or (Mon DD) date suffixes from name."""
+            return _re.sub(r'\s*\([A-Za-z]{3,9}\s+\d{1,2}\)\s*$', '', name).strip()
+
+        def _make_obs_chip(obs: dict, arrow: str, box: Gtk.Box) -> None:
             ti = TYPES.get(obs.get("type", ""), {})
             colour = ti.get("colour", "#6B7280")
             tlabel = ti.get("label", "")
+            prox = obs.get("proximity", "")
+            # Strip redundant inline date from name if we already have a proximity label
+            display_name = _strip_date_parens(obs["name"]) if prox else obs["name"]
             markup = ""
+            if arrow == "←":
+                markup = f'<span alpha="60%">← </span>'
             if tlabel:
-                markup = f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
-            markup += GLib.markup_escape_text(obs["name"])
-            if obs.get("proximity"):
-                markup += f' <span alpha="70%">({GLib.markup_escape_text(obs["proximity"])})</span>'
+                markup += f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
+            markup += GLib.markup_escape_text(display_name)
+            if prox:
+                markup += f' <span alpha="60%">{GLib.markup_escape_text(prox)}</span>'
+            if arrow == "→":
+                markup += ' <span alpha="60%">→</span>'
             chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
             chip_lbl.add_css_class("caption")
             chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
-            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill"); chip_btn.add_css_class("obs-chip")
+            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill")
+            chip_btn.add_css_class("obs-chip")
             chip_btn.set_tooltip_text(f"Open Wikipedia: {obs['name']}")
             chip_btn.connect("clicked", lambda _b, n=obs["name"]: self._open_observance_wiki(n))
             box.append(chip_btn)
+
+        # Next/upcoming event: first observance with proximity field, or first without
+        obs_list = get_observances(d)
+        next_obs = None
+        for obs in obs_list:
+            if obs.get("proximity"):
+                next_obs = obs
+                break
+        if next_obs is None and obs_list:
+            next_obs = obs_list[0]
+        if next_obs and next_box:
+            _make_obs_chip(next_obs, "→", next_box)
+
+        # Previous event: most recent observance before d
+        if prev_box:
+            prev_obs = get_previous_observance(d)
+            if prev_obs:
+                _make_obs_chip(prev_obs, "←", prev_box)
 
     def _step_sunday(self, direction: int):
         """Move the readings display to the prev (-1) or next (+1) Sunday."""
@@ -4317,9 +4497,11 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_widget.set_content("")
         self._clear_order_list(); self.selected_date=None; self._set_date_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
-        if hasattr(self, "_obs_status_box"):
-            while self._obs_status_box.get_first_child():
-                self._obs_status_box.remove(self._obs_status_box.get_first_child())
+        for _box_attr in ("_obs_status_box", "_prev_obs_box"):
+            b = getattr(self, _box_attr, None)
+            if b:
+                while b.get_first_child():
+                    b.remove(b.get_first_child())
         self.current_file=None; self.typ_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
         self.service_bulletin_text = ""
@@ -5474,6 +5656,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
                               if si.leader else "")
                 parts.append(f'== {_typst_escape(si.name)}{leader_str}')
+                rubric = getattr(si, "rubric_note", "")
+                if rubric:
+                    parts.append(f'#rubric-note[{_typst_escape(rubric)}]')
                 if si.content_typst:
                     parts.append(si.content_typst)
                 parts.append('')
@@ -5686,7 +5871,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         for prefix, number, title in suggestions:
             pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            pill.add_css_class("linked")
+            pill.add_css_class("linked"); pill.add_css_class("sugg-pill")
 
             # Main chip: title only — number shown in tooltip and Hymnary popup
             chip = Gtk.Button()
@@ -5695,8 +5880,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             title_lbl = Gtk.Label(label=title)
             title_lbl.add_css_class("caption")
             title_lbl.set_margin_start(6); title_lbl.set_margin_end(4)
-            title_lbl.set_wrap(True); title_lbl.set_wrap_mode(0)
-            title_lbl.set_max_width_chars(28)
+            title_lbl.set_wrap(False)
+            title_lbl.set_max_width_chars(22)
+            title_lbl.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
             chip.set_child(title_lbl)
 
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
@@ -5715,13 +5901,19 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             chip.add_controller(rg)
             pill.append(chip)
 
-            # YouTube button — right side of linked pill
+            # YouTube button — right side of linked pill; B&W icon
             yt_query = urllib.parse.quote(f"{prefix} {number} {title}")
             yt_url = f"https://www.youtube.com/results?search_query={yt_query}"
             yt_btn = Gtk.Button(tooltip_text=f"Search YouTube: {prefix} {number}")
             yt_btn.add_css_class("flat")
             if _yt_pb:
-                yt_btn.set_child(Gtk.Image.new_from_pixbuf(_yt_pb))
+                # Desaturate via a greyscale pixbuf copy
+                try:
+                    grey_pb = _yt_pb.copy()
+                    _yt_pb.saturate_and_pixelate(grey_pb, 0.0, False)
+                    yt_btn.set_child(Gtk.Image.new_from_pixbuf(grey_pb))
+                except Exception:
+                    yt_btn.set_child(Gtk.Image.new_from_pixbuf(_yt_pb))
             else:
                 yt_lbl = Gtk.Label(label="▶"); yt_lbl.add_css_class("dim-label"); yt_btn.set_child(yt_lbl)
             yt_btn.connect("clicked", lambda _b, u=yt_url: Gtk.show_uri(None, u, 0))
@@ -5805,7 +5997,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
     def open_responsive_reading(self):
         dlg = Adw.Window(transient_for=self, modal=True)
         dlg.set_title("Responsive Reading Builder")
-        dlg.set_default_size(560, 480)
+        dlg.set_default_size(580, 560)
 
         tv = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
@@ -5815,8 +6007,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         # Instructions
         instr = Gtk.Label(
-            label="Type one line per entry. Prefix with L: for Leader, P: for People.\n"
-                  "Lines without prefix alternate Leader / People."
+            label='Each row is one line of the reading.\n'
+                  'Toggle "All" on a row to mark it as the congregation\'s response — '
+                  'it will be bolded in the bulletin, and the first in each consecutive '
+                  'group of "All" lines will be prefixed with "All: ".'
         )
         instr.add_css_class("caption"); instr.add_css_class("dim-label")
         instr.set_wrap(True); instr.set_xalign(0)
@@ -5824,49 +6018,123 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         instr.set_margin_top(12); instr.set_margin_bottom(8)
         outer.append(instr)
 
+        # Row list (scrollable)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
-        scroll.set_margin_start(16); scroll.set_margin_end(16); scroll.set_margin_bottom(8)
-        editor = Gtk.TextView(); editor.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        editor.add_css_class("card"); editor.set_monospace(True)
-        editor.set_top_margin(8); editor.set_bottom_margin(8)
-        editor.set_left_margin(10); editor.set_right_margin(10)
-        buf = editor.get_buffer()
-        buf.set_text(
-            "L: The Lord is my shepherd;\n"
-            "P: I shall not want.\n"
-            "L: He makes me lie down in green pastures;\n"
-            "P: He leads me beside still waters.", -1
-        )
-        scroll.set_child(editor); outer.append(scroll)
+        scroll.set_margin_start(12); scroll.set_margin_end(12); scroll.set_margin_bottom(4)
 
+        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        rows_box.set_margin_top(4); rows_box.set_margin_bottom(4)
+        rows_box.set_margin_start(4); rows_box.set_margin_end(4)
+
+        # Each row_data: [entry_widget, toggle_btn, box_widget, is_all]
+        rr_rows: list[dict] = []
+
+        def _make_rr_row(text: str = "", is_all: bool = False) -> dict:
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            entry = Gtk.Entry(); entry.set_hexpand(True)
+            entry.set_placeholder_text("Enter line of text…")
+            if text: entry.set_text(text)
+            all_btn = Gtk.ToggleButton(label="All")
+            all_btn.set_active(is_all)
+            all_btn.add_css_class("flat")
+            all_btn.set_tooltip_text('Congregation response — bold in bulletin, "All: " on first')
+            del_btn = Gtk.Button(icon_name="list-remove-symbolic"); del_btn.add_css_class("flat")
+            row_box.append(entry); row_box.append(all_btn); row_box.append(del_btn)
+
+            rd = {"entry": entry, "all_btn": all_btn, "box": row_box}
+
+            def on_delete(_b, rd=rd):
+                if len(rr_rows) > 1:
+                    rr_rows.remove(rd)
+                    rows_box.remove(rd["box"])
+
+            del_btn.connect("clicked", on_delete)
+
+            # Enter in entry = add new row below
+            def on_activate(_e, rd=rd):
+                idx = rr_rows.index(rd)
+                new_rd = _make_rr_row()
+                rr_rows.insert(idx + 1, new_rd)
+                rows_box.insert_child_after(new_rd["box"], rd["box"])
+                new_rd["entry"].grab_focus()
+
+            entry.connect("activate", on_activate)
+            return rd
+
+        def _add_rr_row(text: str = "", is_all: bool = False):
+            rd = _make_rr_row(text, is_all)
+            rr_rows.append(rd)
+            rows_box.append(rd["box"])
+
+        # Default starter rows
+        starters = [
+            ("The Lord is my shepherd;", False),
+            ("I shall not want.", True),
+            ("He makes me lie down in green pastures;", False),
+            ("He leads me beside still waters.", True),
+        ]
+        for t, a in starters:
+            _add_rr_row(t, a)
+
+        scroll.set_child(rows_box); outer.append(scroll)
+
+        # Add row button
+        add_row_btn = Gtk.Button(label="+ Add line")
+        add_row_btn.add_css_class("flat")
+        add_row_btn.set_margin_start(16); add_row_btn.set_margin_top(4); add_row_btn.set_margin_bottom(4)
+        add_row_btn.connect("clicked", lambda _: _add_rr_row())
+        outer.append(add_row_btn)
+
+        outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Bottom buttons
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        btn_row.set_margin_start(16); btn_row.set_margin_end(16); btn_row.set_margin_bottom(14)
+        btn_row.set_margin_start(16); btn_row.set_margin_end(16)
+        btn_row.set_margin_top(10); btn_row.set_margin_bottom(14)
         sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
-        cancel_btn = Gtk.Button(label="Cancel"); cancel_btn.connect("clicked", lambda _: dlg.close())
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda _: dlg.close())
         btn_row.append(cancel_btn)
-        cards_btn = Gtk.Button(label="Print cards…")
-        cards_btn.set_tooltip_text(
-            "Generate printable role cards: leader's script, people's insert, and full pew card")
 
-        def on_cards(_b):
-            s, e = buf.get_bounds()
-            self._export_reading_cards(buf.get_text(s, e, False))
-
-        cards_btn.connect("clicked", on_cards); btn_row.append(cards_btn)
-        insert_btn = Gtk.Button(label="Insert as Typst"); insert_btn.add_css_class("suggested-action")
+        insert_btn = Gtk.Button(label="Insert into element")
+        insert_btn.add_css_class("suggested-action")
 
         def on_insert(_b):
-            s, e = buf.get_bounds()
-            raw = buf.get_text(s, e, False)
-            typst = self._build_responsive_typst(raw)
+            typst = self._build_rr_typst_from_rows(rr_rows)
             self._on_bible_insert(typst)
             dlg.close()
 
-        insert_btn.connect("clicked", on_insert); btn_row.append(insert_btn)
+        insert_btn.connect("clicked", on_insert)
+        btn_row.append(insert_btn)
         outer.append(btn_row)
+
         tv.set_content(outer); dlg.set_content(tv); dlg.present()
+
+    def _build_rr_typst_from_rows(self, rr_rows: list) -> str:
+        """Build Typst from the row-based responsive reading editor.
+
+        Off rows = plain leader text.
+        On rows = bold congregation response; first in each consecutive run gets "All: " prefix.
+        """
+        lines_out = []
+        prev_all = False
+        for rd in rr_rows:
+            text = rd["entry"].get_text().strip()
+            if not text:
+                continue
+            is_all = rd["all_btn"].get_active()
+            if is_all:
+                if not prev_all:
+                    # First in consecutive run — add "All: " prefix
+                    lines_out.append(f"*All: {_typst_escape(text)}* \\")
+                else:
+                    lines_out.append(f"*{_typst_escape(text)}* \\")
+            else:
+                lines_out.append(f"{_typst_escape(text)} \\")
+            prev_all = is_all
+        return "\n".join(lines_out)
 
     def _build_responsive_typst(self, raw: str) -> str:
         """Convert L: / P: annotated text to Typst using #ldr / #ppl."""
@@ -6203,37 +6471,249 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         if not _SNIP_OK:
             self._error("Snippets unavailable", "snippets.py not found.")
             return
-        snippets = load_snippets()
-        if not snippets:
-            self._error("No snippets", "No snippets saved yet. Add them in Preferences → Snippets.")
-            return
+        self._open_snippets_manager()
 
-        dlg = Adw.Window(transient_for=self, modal=True)
-        dlg.set_title("Insert Snippet"); dlg.set_default_size(440, 400)
-        tv = Adw.ToolbarView(); hdr = Adw.HeaderBar(); tv.add_top_bar(hdr)
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    def _open_snippets_manager(self, insert_on_activate: bool = True):
+        """Full snippets manager: list, rich-text editor, tagging, CRUD."""
+        snippets: list[dict] = load_snippets()
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True); scroll.set_margin_start(16); scroll.set_margin_end(16)
-        scroll.set_margin_top(12); scroll.set_margin_bottom(12)
+        win = Adw.Window(transient_for=self, modal=False)
+        win.set_title("Snippets"); win.set_default_size(720, 540)
+
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+
+        # New snippet button
+        new_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="New snippet")
+        new_btn.add_css_class("flat"); hdr.pack_start(new_btn)
+
+        # Delete button
+        del_btn = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text="Delete snippet")
+        del_btn.add_css_class("flat"); del_btn.set_sensitive(False); hdr.pack_start(del_btn)
+
+        tv.add_top_bar(hdr)
+
+        # ── Main split: list on left, editor on right ──────────────────────
+        split = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        split.set_position(240)
+
+        # ── Left: tag filter + snippet list ───────────────────────────────
+        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Tag filter chips
+        tag_scroll = Gtk.ScrolledWindow()
+        tag_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        tag_scroll.set_min_content_height(32)
+        tag_flow = Gtk.FlowBox()
+        tag_flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        tag_flow.set_max_children_per_line(20)
+        tag_flow.set_column_spacing(4); tag_flow.set_row_spacing(2)
+        tag_flow.set_margin_start(8); tag_flow.set_margin_end(8)
+        tag_flow.set_margin_top(4); tag_flow.set_margin_bottom(4)
+        tag_scroll.set_child(tag_flow)
+        left_box.append(tag_scroll)
+        left_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Snippet list
+        list_scroll = Gtk.ScrolledWindow()
+        list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        list_scroll.set_vexpand(True)
         lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        lb.add_css_class("boxed-list")
+        lb.add_css_class("navigation-sidebar")
+        list_scroll.set_child(lb)
+        left_box.append(list_scroll)
+        split.set_start_child(left_box)
 
-        for snip in snippets:
-            row = Adw.ActionRow(title=GLib.markup_escape_text(snip["name"]))
-            preview = snip["content"].replace("\n", " ")[:60] + ("…" if len(snip["content"]) > 60 else "")
-            row.set_subtitle(preview); row.set_activatable(True)
-            row._snip_content = snip["content"]
-            lb.append(row)
+        # ── Right: editor panel ────────────────────────────────────────────
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        def on_activated(_lb, row):
-            self._on_bible_insert(row._snip_content)
-            dlg.close()
+        # Name row
+        name_entry = Gtk.Entry()
+        name_entry.set_placeholder_text("Snippet name")
+        name_entry.add_css_class("title-2")
+        name_entry.set_margin_start(12); name_entry.set_margin_end(12)
+        name_entry.set_margin_top(10); name_entry.set_margin_bottom(4)
+        right_box.append(name_entry)
 
-        lb.connect("row-activated", on_activated)
-        scroll.set_child(lb); outer.append(scroll)
-        tv.set_content(outer); dlg.set_content(tv); dlg.present()
+        # Tags row
+        tags_entry = Gtk.Entry()
+        tags_entry.set_placeholder_text("Tags (comma-separated, e.g. gathering, prayer)")
+        tags_entry.add_css_class("caption")
+        tags_entry.set_margin_start(12); tags_entry.set_margin_end(12)
+        tags_entry.set_margin_bottom(6)
+        right_box.append(tags_entry)
+
+        right_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Rich text editor
+        from rubric_package.views.element_content import ElementContentWidget
+        editor_widget = ElementContentWidget()
+        editor_widget.set_vexpand(True)
+        right_box.append(editor_widget)
+
+        right_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Bottom bar: save + insert
+        bottom = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        bottom.set_margin_start(12); bottom.set_margin_end(12)
+        bottom.set_margin_top(8); bottom.set_margin_bottom(10)
+        save_btn = Gtk.Button(label="Save")
+        save_btn.add_css_class("flat")
+        save_btn.set_sensitive(False)
+        sp = Gtk.Box(); sp.set_hexpand(True); bottom.append(save_btn); bottom.append(sp)
+        insert_btn = Gtk.Button(label="Insert into element")
+        insert_btn.add_css_class("suggested-action")
+        insert_btn.set_sensitive(False)
+        bottom.append(insert_btn)
+        right_box.append(bottom)
+
+        split.set_end_child(right_box)
+        tv.set_content(split); win.set_content(tv)
+
+        # ── State ──────────────────────────────────────────────────────────
+        _selected_idx: list[int] = [-1]
+        _active_tag: list[str] = [""]  # "" = all
+
+        def _get_all_tags() -> list[str]:
+            tags: set[str] = set()
+            for s in snippets:
+                for t in s.get("tags", []):
+                    tags.add(t.strip())
+            return sorted(tags)
+
+        def _rebuild_tag_filter():
+            while tag_flow.get_first_child():
+                tag_flow.remove(tag_flow.get_first_child())
+            all_btn2 = Gtk.ToggleButton(label="All")
+            all_btn2.add_css_class("pill"); all_btn2.add_css_class("flat")
+            all_btn2.set_active(_active_tag[0] == "")
+            def on_all(b):
+                if b.get_active():
+                    _active_tag[0] = ""; _rebuild_list()
+            all_btn2.connect("toggled", on_all)
+            tag_flow.append(all_btn2)
+            for t in _get_all_tags():
+                tb = Gtk.ToggleButton(label=t)
+                tb.add_css_class("pill"); tb.add_css_class("flat")
+                tb.set_active(_active_tag[0] == t)
+                def on_tag(b, tag=t):
+                    if b.get_active():
+                        _active_tag[0] = tag; _rebuild_list()
+                tb.connect("toggled", on_tag)
+                tag_flow.append(tb)
+
+        def _rebuild_list():
+            while lb.get_first_child():
+                lb.remove(lb.get_first_child())
+            active_tag = _active_tag[0]
+            for i, snip in enumerate(snippets):
+                tags = snip.get("tags", [])
+                if active_tag and active_tag not in tags:
+                    continue
+                row = Gtk.ListBoxRow(); row._snip_idx = i
+                row_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+                row_box.set_margin_start(8); row_box.set_margin_end(8)
+                row_box.set_margin_top(6); row_box.set_margin_bottom(6)
+                name_lbl = Gtk.Label(label=snip["name"])
+                name_lbl.set_xalign(0); name_lbl.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+                name_lbl.add_css_class("body")
+                row_box.append(name_lbl)
+                if tags:
+                    tag_lbl = Gtk.Label(label=", ".join(tags[:3]))
+                    tag_lbl.set_xalign(0); tag_lbl.add_css_class("caption")
+                    tag_lbl.add_css_class("dim-label")
+                    row_box.append(tag_lbl)
+                row.set_child(row_box); lb.append(row)
+            # Re-select if possible
+            if _selected_idx[0] >= 0:
+                for child in _iter_listbox(lb):
+                    if child._snip_idx == _selected_idx[0]:
+                        lb.select_row(child); break
+
+        def _iter_listbox(lb):
+            row = lb.get_first_child()
+            while row:
+                yield row
+                row = row.get_next_sibling()
+
+        def _load_snippet(idx: int):
+            _selected_idx[0] = idx
+            snip = snippets[idx]
+            name_entry.set_text(snip["name"])
+            tags_entry.set_text(", ".join(snip.get("tags", [])))
+            editor_widget.set_content(snip.get("content", ""))
+            save_btn.set_sensitive(True)
+            del_btn.set_sensitive(True)
+            insert_btn.set_sensitive(True)
+
+        def _save_current():
+            idx = _selected_idx[0]
+            if idx < 0: return
+            snip = snippets[idx]
+            snip["name"] = name_entry.get_text().strip() or snip["name"]
+            raw_tags = tags_entry.get_text()
+            snip["tags"] = [t.strip() for t in raw_tags.split(",") if t.strip()]
+            snip["content"] = editor_widget.get_content()
+            save_snippets(snippets)
+            _rebuild_tag_filter()
+            _rebuild_list()
+
+        def on_row_selected(_lb, row):
+            if row and hasattr(row, "_snip_idx"):
+                _save_current()  # auto-save prev
+                _load_snippet(row._snip_idx)
+
+        lb.connect("row-selected", on_row_selected)
+
+        def on_new(_b):
+            _save_current()
+            new_snip = {"name": "New snippet", "content": "", "tags": []}
+            snippets.append(new_snip)
+            save_snippets(snippets)
+            _rebuild_tag_filter(); _rebuild_list()
+            _load_snippet(len(snippets) - 1)
+            # Select last row
+            last = None
+            for child in _iter_listbox(lb):
+                last = child
+            if last: lb.select_row(last); name_entry.grab_focus(); name_entry.select_region(0, -1)
+
+        new_btn.connect("clicked", on_new)
+
+        def on_delete(_b):
+            idx = _selected_idx[0]
+            if idx < 0: return
+            snippets.pop(idx)
+            save_snippets(snippets)
+            _selected_idx[0] = -1
+            save_btn.set_sensitive(False); del_btn.set_sensitive(False)
+            insert_btn.set_sensitive(False)
+            name_entry.set_text(""); tags_entry.set_text(""); editor_widget.clear()
+            _rebuild_tag_filter(); _rebuild_list()
+
+        del_btn.connect("clicked", on_delete)
+        save_btn.connect("clicked", lambda _: _save_current())
+
+        def on_insert(_b):
+            idx = _selected_idx[0]
+            if idx < 0: return
+            _save_current()
+            self._on_bible_insert(snippets[idx].get("content", ""))
+            win.close()
+
+        insert_btn.connect("clicked", on_insert)
+
+        editor_widget.set_on_changed(lambda _: save_btn.set_sensitive(True))
+
+        _rebuild_tag_filter(); _rebuild_list()
+
+        # Auto-select first snippet if any
+        first_row = lb.get_first_child()
+        if first_row and hasattr(first_row, "_snip_idx"):
+            lb.select_row(first_row)
+            _load_snippet(first_row._snip_idx)
+
+        win.present()
 
     # ── CSV export ────────────────────────────────────────────────────────────
 
@@ -8343,6 +8823,13 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
 flowboxchild { background: transparent; padding: 0; }
+/* Suggestion pills: visible border at rest */
+.sugg-pill button { border: 1px solid alpha(@borders, 0.6); }
+.sugg-pill button:first-child { border-right: none; border-radius: 9999px 0 0 9999px; }
+.sugg-pill button:last-child { border-left: none; border-radius: 0 9999px 9999px 0; }
+.sugg-pill button:only-child { border-radius: 9999px; }
+/* Rubric note editor: reddish tint */
+.rubric-note-editor { background: alpha(red, 0.04); color: @error_color; font-style: italic; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,

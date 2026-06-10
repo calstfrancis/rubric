@@ -41,6 +41,8 @@ class ServiceItem:
         duration: int = 0,
         content_typst: str = "",
         content_mode: str = "rich",
+        rubric_note: str = "",
+        icon: str = "",
     ) -> None:
         self.name = name
         self.section = section
@@ -54,6 +56,10 @@ class ServiceItem:
         self.content_typst = content_typst
         # "rich" or "typst"; not persisted (always opens in rich mode)
         self.content_mode = content_mode
+        # Leader-only instructions (red italic, manuscript only)
+        self.rubric_note = rubric_note
+        # Optional user-assigned symbolic icon name
+        self.icon = icon
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -71,6 +77,10 @@ class ServiceItem:
             d["prep_note"] = self.prep_note
         if self.duration:
             d["duration"] = self.duration
+        if self.rubric_note:
+            d["rubric_note"] = self.rubric_note
+        if self.icon:
+            d["icon"] = self.icon
         return d
 
     @classmethod
@@ -99,6 +109,8 @@ class ServiceItem:
             prep_note,
             d.get("duration", 0),
             content_typst,
+            rubric_note=d.get("rubric_note", ""),
+            icon=d.get("icon", ""),
         )
 
     def __repr__(self) -> str:

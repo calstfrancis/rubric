@@ -303,3 +303,21 @@ def get_observances(d: date) -> list[dict]:
                          proximity=f"{week_label} {day_name}")
 
     return results
+
+
+def get_previous_observance(d: date) -> dict | None:
+    """Return the most recent observance strictly before date d (up to 30 days back)."""
+    for offset in range(1, 31):
+        wd = d - timedelta(days=offset)
+        fixed = FIXED.get((wd.month, wd.day), [])
+        if fixed:
+            return dict(fixed[0], proximity=wd.strftime("%-d %b"))
+        for r in RANGES:
+            start = date(wd.year, r["start"][0], r["start"][1])
+            end   = date(wd.year, r["end"][0],   r["end"][1])
+            if start == wd or (start <= wd <= end and start == wd):
+                return {"name": r["name"], "type": r["type"],
+                        "proximity": wd.strftime("%-d %b")}
+        for obs in _computed_observances(wd):
+            return dict(obs, proximity=wd.strftime("%-d %b"))
+    return None

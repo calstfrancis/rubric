@@ -42,10 +42,14 @@ def note_for_typst(note: str) -> str:
 
 
 def strip_leader_notes(text: str) -> str:
-    """Remove #leader-note[...] blocks for congregation-facing Typst output."""
-    return re.sub(
+    """Remove #leader-note[...] and #rubric-note[...] blocks for congregation-facing output."""
+    text = re.sub(
         r'#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]', '', text, flags=re.DOTALL
-    ).strip()
+    )
+    text = re.sub(
+        r'#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]', '', text, flags=re.DOTALL
+    )
+    return text.strip()
 
 
 def passage_to_typst(reference: str, text: str, translation: str = "web") -> str:
@@ -120,8 +124,9 @@ def strip_typst_for_html(text: str) -> str:
     text = _re.sub(r"\*([^*\n]+)\*",        r"<strong>\1</strong>", text)
     text = _re.sub(r"_([^_\n]+)_",          r"<em>\1</em>",         text)
 
-    # Strip leader-note blocks entirely (congregation HTML)
+    # Strip leader-note and rubric-note blocks entirely (congregation HTML)
     text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+    text = _re.sub(r"#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
 
     # Strip remaining Typst function calls — emit their content arg if present
     text = _re.sub(r"#[a-z][a-z-]*\((?:[^()]*)\)", "", text)
@@ -223,8 +228,9 @@ def strip_typst_plain(text: str) -> str:
         lambda m: _re.sub(r"#sverse\((\d+)\)\[([^\]]*)\]", r"\1 \2 ", m.group(1).strip()),
         text, flags=_re.DOTALL,
     )
-    # Leader note — strip
+    # Leader/rubric notes — strip
     text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+    text = _re.sub(r"#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
     # Typst formatting — keep content
     text = _re.sub(r"#[a-z][a-z-]*\[([^\]]*)\]", r"\1", text)
     text = _re.sub(r"#[a-z][a-z-]*\((?:[^()]*)\)", "", text)
@@ -286,6 +292,15 @@ TYPST_SHARED = r"""
   inset: 8pt,
   radius: 4pt,
   text(size: 0.9em, content),
+)
+
+#let rubric-note(content) = block(
+  fill: rgb("#fff0f0"),
+  inset: (left: 10pt, right: 10pt, top: 6pt, bottom: 6pt),
+  radius: 4pt,
+  above: 4pt,
+  below: 4pt,
+  text(size: 0.9em, fill: rgb("#b91c1c"), style: "italic", content),
 )
 
 // Section heading: centred large bold small-caps (= Section)
