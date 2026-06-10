@@ -4,9 +4,10 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.2-rc1 — Bug fixes and code quality
+## 0.17.2-rc2 — Layout sharing fix, maximize on start
 
 ### Fixed
+- Sidebar, order, notes, and preview now always share the window: no panel can push another off-screen or collapse it to zero. All dividers act as hard borders within the window.
 - Adding elements in tab mode now always inserts into the currently visible tab's section, not the last tab
 - Toggling bulletin visibility, editing the leader field, and changing duration are now undoable
 - Scripture inserted from the Bible viewer is now undoable

@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.2-rc1"
+APP_VERSION = "0.17.2-rc2"
 
 
 config = Config()
@@ -1390,7 +1390,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, **kw):
-        super().__init__(**kw); self.set_default_size(1000,700)
+        super().__init__(**kw); self.set_default_size(1000,700); self.maximize()
         self.service_entries: list = []
         self._undo_stack: list[list[dict]] = []
         self._redo_stack: list[list[dict]] = []
@@ -1853,7 +1853,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_panel = self._build_preview_panel()
         self._preview_panel.set_visible(False)
         self._preview_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self._preview_paned.set_shrink_start_child(True)
+        self._preview_paned.set_shrink_start_child(False)
         self._preview_paned.set_shrink_end_child(False)
         self._preview_paned.set_start_child(self._build_order_panel())
         self._preview_paned.set_end_child(self._preview_panel)
@@ -2092,6 +2092,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Order pane (left) ─────────────────────────────────────────────────
         order_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        order_box.set_size_request(160, -1)
 
         self._view_stack = Gtk.Stack(); self._view_stack.set_vexpand(True)
 
@@ -2168,6 +2169,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Notes pane (right) ────────────────────────────────────────────────
         notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        notes_box.set_size_request(200, -1)
 
         # Focus mode banner — shown in F11 focus mode, hidden otherwise
         self._focus_banner = Gtk.Revealer()
@@ -3591,24 +3593,12 @@ class MainWindow(Adw.ApplicationWindow):
             self._palette_visible = True
             self._palette_paned.set_shrink_start_child(False)
             def _set_palette_pos():
-                total = self._palette_paned.get_allocated_width()
-                preview_open = getattr(self, "_preview_visible", False)
-                if preview_open and total > 0:
-                    # Palette gets up to 290; leave at least 220 for order + 300 for preview
-                    pos = min(290, max(180, total - 520))
-                else:
-                    pos = 290
+                pos = getattr(self, "_pre_hide_palette_pos", 290)
                 self._palette_paned.set_position(pos)
-                # When preview is open, ensure order panel keeps a usable minimum width
-                if preview_open and hasattr(self, "_preview_paned"):
-                    inner_total = total - pos
-                    cur = self._preview_paned.get_position()
-                    # Order panel: keep at least 220px; don't force it wider than it was
-                    order_pos = max(220, min(cur, inner_total - 300))
-                    self._preview_paned.set_position(order_pos)
                 return False
             GLib.idle_add(_set_palette_pos)
         else:
+            self._pre_hide_palette_pos = self._palette_paned.get_position()
             self._palette_visible = False
             self._palette_paned.set_shrink_start_child(True)
             self._palette_paned.set_position(0)
