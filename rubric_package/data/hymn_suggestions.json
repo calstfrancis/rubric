@@ -803,8 +803,8 @@
         "God of the Bible"
       ],
       [
-        "MV",
-        177,
+        "VU",
+        509,
         "I, the Lord of sea and sky"
       ]
     ]
@@ -2799,6 +2799,276 @@
         "MV",
         19,
         "Maranatha"
+      ]
+    ],
+    "Grief & Lament": [
+      [
+        "VU",
+        82,
+        "A light is gleaming"
+      ],
+      [
+        "VU",
+        154,
+        "Why has God forsaken me?"
+      ],
+      [
+        "VU",
+        182,
+        "Stay with us through the night"
+      ],
+      [
+        "VU",
+        186,
+        "Now the green blade rises"
+      ],
+      [
+        "VU",
+        497,
+        "Nearer, my God, to thee"
+      ],
+      [
+        "VU",
+        611,
+        "Out of the depths, O God, we call to you"
+      ],
+      [
+        "VU",
+        652,
+        "Be still, my soul"
+      ],
+      [
+        "VU",
+        663,
+        "My faith looks up to thee"
+      ],
+      [
+        "VU",
+        664,
+        "What a friend we have in Jesus"
+      ],
+      [
+        "MV",
+        73,
+        "O God, why are you silent?"
+      ],
+      [
+        "MV",
+        3,
+        "River (Rivière)"
+      ],
+      [
+        "MV",
+        24,
+        "Breath of God, breath of peace"
+      ]
+    ],
+    "Stewardship & Creation Care": [
+      [
+        "VU",
+        129,
+        "Said Judas to Mary"
+      ],
+      [
+        "VU",
+        265,
+        "Creating God, your fingers trace"
+      ],
+      [
+        "VU",
+        295,
+        "The earth and all who breathe"
+      ],
+      [
+        "VU",
+        297,
+        "All praise to you (Stewards of Earth)"
+      ],
+      [
+        "VU",
+        300,
+        "God, whose farm is all creation"
+      ],
+      [
+        "VU",
+        303,
+        "For beauty of prairies"
+      ],
+      [
+        "VU",
+        307,
+        "Touch the earth lightly"
+      ],
+      [
+        "VU",
+        416,
+        "Forth in your name, O Christ"
+      ],
+      [
+        "VU",
+        506,
+        "Take my life and let it be"
+      ],
+      [
+        "MV",
+        135,
+        "Called by earth and sky"
+      ],
+      [
+        "MV",
+        143,
+        "We cannot own the sunlit sky"
+      ]
+    ],
+    "Eternal Life & Hope": [
+      [
+        "VU",
+        147,
+        "What wondrous love is this"
+      ],
+      [
+        "VU",
+        164,
+        "The day of resurrection"
+      ],
+      [
+        "VU",
+        211,
+        "Crown him with many crowns"
+      ],
+      [
+        "VU",
+        703,
+        "In the bulb there is a flower"
+      ],
+      [
+        "VU",
+        704,
+        "God give us life"
+      ],
+      [
+        "VU",
+        706,
+        "Give thanks for life"
+      ],
+      [
+        "VU",
+        806,
+        "O God, our help in ages past"
+      ],
+      [
+        "VU",
+        629,
+        "Eternal light, shine in my heart"
+      ],
+      [
+        "MV",
+        120,
+        "My soul cries out (Canticle of the Turning)"
+      ],
+      [
+        "MV",
+        19,
+        "Maranatha"
+      ]
+    ],
+    "Gathering & Opening": [
+      [
+        "VU",
+        395,
+        "Come in, come in and sit down"
+      ],
+      [
+        "VU",
+        410,
+        "God, we praise you! God, we bless you!"
+      ],
+      [
+        "VU",
+        412,
+        "Lord, listen to your children praying"
+      ],
+      [
+        "MV",
+        2,
+        "Come all you people (Uyai mose)"
+      ],
+      [
+        "MV",
+        7,
+        "Gather us in"
+      ],
+      [
+        "MV",
+        14,
+        "Where two or three are gathered"
+      ],
+      [
+        "MV",
+        6,
+        "Holy Spirit, come into our lives"
+      ],
+      [
+        "MV",
+        10,
+        "Come and seek the ways of Wisdom"
+      ],
+      [
+        "MV",
+        15,
+        "Holy Sacred Spirit"
+      ],
+      [
+        "MV",
+        17,
+        "Confitemini Domino (Come and fill our hearts)"
+      ]
+    ],
+    "Courage & Discipleship": [
+      [
+        "VU",
+        374,
+        "Come and find the quiet centre"
+      ],
+      [
+        "VU",
+        509,
+        "I, the Lord of sea and sky"
+      ],
+      [
+        "VU",
+        677,
+        "O God of every nation"
+      ],
+      [
+        "VU",
+        686,
+        "God of grace and God of glory"
+      ],
+      [
+        "VU",
+        562,
+        "Jesus calls us; o'er the tumult"
+      ],
+      [
+        "MV",
+        99,
+        "Stand, O stand firm"
+      ],
+      [
+        "MV",
+        179,
+        "Sisters let us walk together"
+      ],
+      [
+        "MV",
+        196,
+        "We will take what you offer"
+      ],
+      [
+        "MV",
+        213,
+        "Take up his song"
       ]
     ]
   }

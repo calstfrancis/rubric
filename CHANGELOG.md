@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.16.0-rc4 — More themes, pill titles only, dead-link fix
+
+### Added
+- **5 new hymn themes**: Grief & Lament, Stewardship & Creation Care, Eternal Life & Hope, Gathering & Opening, Courage & Discipleship. Now 24 themes, 280 hymn entries.
+
+### Fixed
+- **Dead link**: "I, the Lord of sea and sky" was tagged `MV 177` (wrong); corrected to `VU 509`.
+- **Suggestion pills**: title only displayed — hymnal and number moved to tooltip and Hymnary popup. Cleaner and more scannable.
+
 ## 0.16.0-rc3 — Themes expanded, aesthetics, compact fix
 
 ### Added

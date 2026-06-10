@@ -1,4 +1,4 @@
-# Rubric v0.16.0-rc3
+# Rubric v0.16.0-rc4
 
 Install via Flatpak:
 

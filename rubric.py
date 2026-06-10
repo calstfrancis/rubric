@@ -96,7 +96,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.16.0-rc3"
+APP_VERSION = "0.16.0-rc4"
 
 
 config = Config()
@@ -5640,20 +5640,14 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
             pill.add_css_class("linked")
 
-            # Main chip: title first, then dim ref number
+            # Main chip: title only — number shown in tooltip and Hymnary popup
             chip = Gtk.Button()
             chip.add_css_class("flat")
-            chip.set_tooltip_text(f"Open {prefix} {number} on Hymnary  ·  Right-click to add to service")
-            chip_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            chip_inner.set_margin_start(6); chip_inner.set_margin_end(2)
+            chip.set_tooltip_text(f"{prefix} {number} — {title}\nClick to open on Hymnary  ·  Right-click to add to service")
             title_lbl = Gtk.Label(label=title)
-            title_lbl.set_max_width_chars(28); title_lbl.set_ellipsize(3)
-            chip_inner.append(title_lbl)
-            ref_lbl = Gtk.Label()
-            ref_lbl.add_css_class("dim-label"); ref_lbl.add_css_class("caption")
-            ref_lbl.set_markup(GLib.markup_escape_text(f"{prefix} {number}"))
-            chip_inner.append(ref_lbl)
-            chip.set_child(chip_inner)
+            title_lbl.set_margin_start(8); title_lbl.set_margin_end(6)
+            title_lbl.set_max_width_chars(30); title_lbl.set_ellipsize(3)
+            chip.set_child(title_lbl)
 
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
             hymnary_url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"

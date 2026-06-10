@@ -41,7 +41,7 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
-    <release version="0.16.0-rc3" date="2026-06-10">
+    <release version="0.16.0-rc4" date="2026-06-10">
       <description>
         <p>Hymn UI redesign and compact mode fix.</p>
         <ul>
