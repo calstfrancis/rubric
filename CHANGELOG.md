@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.16.0-rc3 — Themes expanded, aesthetics, compact fix
+
+### Added
+- **19 curated hymn themes** (up from 14), sourced from hymnary.org topical index: Advent & Waiting, Christmas & Incarnation, Lent & Repentance, Easter & Resurrection, Pentecost & Holy Spirit, Trinity, Creation & Environment, Justice & Peace, God's Love & Grace, Jesus Christ, Communion & Eucharist, Baptism & Renewal, Community & Welcome, Praise & Worship, Prayer & Meditation, Healing & Comfort, Faith & Trust, Mission & Service, Hope. 228 total hymn entries (was 102).
+- **Compact toggle in status bar** — bold when on, regular when off; consistent with SIMPLE/GOST/Focus.
+
+### Changed
+- **Suggestion strip**: title leads, hymn number is secondary (dim caption).
+- **Compact view fixed and inverted** — now actually compresses row height; rows are spacious by default and shrink to 32 px minimum in compact mode.
+- **Selected row accent** — left accent bar on the active service order row.
+- **Observance chips** — pill shape in status bar centre.
+
 ## 0.16.0-rc2 — Hymn UI redesign
 
 ### Changed

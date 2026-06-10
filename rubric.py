@@ -96,7 +96,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.16.0-rc2"
+APP_VERSION = "0.16.0-rc3"
 
 
 config = Config()
@@ -1449,11 +1449,21 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._gost_css.load_from_data(b"")
 
+    def _on_compact_status_clicked(self, _btn):
+        config.compact_mode = not config.compact_mode
+        config.save()
+        self._apply_density()
+
     def _apply_density(self):
         if config.compact_mode:
             self.add_css_class("compact-mode")
         else:
             self.remove_css_class("compact-mode")
+        if hasattr(self, "_compact_status_lbl"):
+            if config.compact_mode:
+                self._compact_status_lbl.set_markup("<b>Compact</b>")
+            else:
+                self._compact_status_lbl.set_text("Compact")
 
     def _refresh_menu(self):
         simple = config.simple_mode
@@ -1696,6 +1706,13 @@ class MainWindow(Adw.ApplicationWindow):
             "GOST", "Toggle GOST Type B engineering font for the whole UI")
         self._gost_status_btn.connect("clicked", self._on_gost_status_clicked)
         status_bar.append(self._gost_status_btn)
+
+        status_bar.append(_sb_sep())
+
+        self._compact_status_btn, self._compact_status_lbl = _status_toggle_btn(
+            "Compact", "Compact view — tighter row spacing")
+        self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
+        status_bar.append(self._compact_status_btn)
 
         # Centre: observances (hexpand spacers on each side to keep it centred)
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
@@ -2002,6 +2019,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.order_listbox = Gtk.ListBox()
         self.order_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.order_listbox.add_css_class("boxed-list")
+        self.order_listbox.add_css_class("order-list")
         self.order_listbox.connect("row-selected", self._on_flat_row_selected)
         _list_key = Gtk.EventControllerKey()
         _list_key.connect("key-pressed", lambda ctrl, keyval, *_:
@@ -2998,7 +3016,7 @@ class MainWindow(Adw.ApplicationWindow):
             chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
             chip_lbl.add_css_class("caption")
             chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
-            chip_btn.add_css_class("flat")
+            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill"); chip_btn.add_css_class("obs-chip")
             chip_btn.set_tooltip_text(f"Open Wikipedia: {obs['name']}")
             chip_btn.connect("clicked", lambda _b, n=obs["name"]: self._open_observance_wiki(n))
             box.append(chip_btn)
@@ -5622,19 +5640,19 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
             pill.add_css_class("linked")
 
-            # Main chip: ref bold + title dim
+            # Main chip: title first, then dim ref number
             chip = Gtk.Button()
             chip.add_css_class("flat")
             chip.set_tooltip_text(f"Open {prefix} {number} on Hymnary  ·  Right-click to add to service")
             chip_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             chip_inner.set_margin_start(6); chip_inner.set_margin_end(2)
-            ref_lbl = Gtk.Label()
-            ref_lbl.set_markup(f'<b>{GLib.markup_escape_text(f"{prefix} {number}")}</b>')
-            chip_inner.append(ref_lbl)
             title_lbl = Gtk.Label(label=title)
-            title_lbl.add_css_class("dim-label")
-            title_lbl.set_max_width_chars(26); title_lbl.set_ellipsize(3)
+            title_lbl.set_max_width_chars(28); title_lbl.set_ellipsize(3)
             chip_inner.append(title_lbl)
+            ref_lbl = Gtk.Label()
+            ref_lbl.add_css_class("dim-label"); ref_lbl.add_css_class("caption")
+            ref_lbl.set_markup(GLib.markup_escape_text(f"{prefix} {number}"))
+            chip_inner.append(ref_lbl)
             chip.set_child(chip_inner)
 
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
@@ -8197,13 +8215,23 @@ class LiturgyPlannerApp(Adw.Application):
         _ensure_gost_font()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
-/* Compact mode: reduce ActionRow height */
-.compact-mode row.activatable { min-height: 36px; }
-.compact-mode row.activatable > box { padding-top: 4px; padding-bottom: 4px; }
+/* Default (non-compact): give rows comfortable breathing room */
+row.activatable { min-height: 52px; }
+row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
+/* Compact mode: tighter rows */
+.compact-mode row.activatable { min-height: 32px; }
+.compact-mode row.activatable > box { padding-top: 3px; padding-bottom: 3px; }
 .compact-mode row.activatable title { font-size: 0.875em; }
 .compact-mode row.activatable subtitle { font-size: 0.75em; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
+/* Selected service order row: left accent bar */
+.order-list row.activatable:selected { border-left: 3px solid @accent_color; }
+/* Observance chips in status bar */
+.obs-chip { padding-left: 6px; padding-right: 6px; }
+/* Suggestion strip */
+.sugg-strip { background: transparent; }
+.sugg-strip row { background: transparent; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,

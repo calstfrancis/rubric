@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rubric-liturgy"
-version = "0.16.0-rc2"
+version = "0.16.0-rc3"
 description = "A GNOME-native worship service planning tool for United Church of Canada ministry"
 readme = "README.md"
 license = {text = "GPL-3.0"}
