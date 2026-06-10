@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.15.7 — Documentation update
+
+### Changed
+- **Documentation** — bundled Help and FAQ fully rewritten for Flatpak-only distribution: removed all references to pipx, pip, apt, zypper, dnf, system dependencies, LaTeX/xelatex, TeX Live, and conditional Typst/WebKit availability; all bundled dependencies are simply available
+
+---
+
 ## 0.15.6 — Status bar, GOST Type B, observances, Focus/Git buttons
 
 ### Added

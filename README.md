@@ -18,7 +18,7 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **RCL integration** — lectionary readings, liturgical colour, and season for any Sunday; weekday services default to the coming Sunday with a stepper
 - **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header, updated daily
 - **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
-- **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org; optional inline Hymnary preview via WebKit
+- **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org; inline Hymnary preview with WebKit (bundled)
 - **Bible viewer** — fetch passages in WEB, KJV, ASV, or ESV (ESV requires a free API key from api.esv.org)
 - **HTML export** — generates a clean, print-ready HTML file and opens it in the browser
 - **Bulletin PDF export** — compiled with the bundled [Typst](https://typst.app/) typesetter; no LaTeX required

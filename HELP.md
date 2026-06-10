@@ -34,7 +34,7 @@ After the wizard (or on "Show me around"), a dismissible banner appears below th
 
 ## Simple Mode vs. Advanced Mode
 
-Rubric launches in **Simple mode** by default. This keeps the interface clean for everyday planning use — no LaTeX knowledge required.
+Rubric launches in **Simple mode** by default. This keeps the interface clean for everyday planning use.
 
 | Feature | Simple mode | Advanced mode |
 |---------|-------------|---------------|
@@ -221,7 +221,7 @@ Select a hymn-type element, type `VU 16` (or `MV 120`, `LUS 5`) in the **Hymn** 
 
 ## HTML Export
 
-Hamburger menu → **Export → Export HTML** (or Ctrl+Shift+H). Generates a clean, print-ready HTML file and opens it in your default browser. Use File → Print in the browser to produce a PDF without needing Typst.
+Hamburger menu → **Export → Export HTML** (or Ctrl+Shift+H). Generates a clean, print-ready HTML file and opens it in your default browser. Use File → Print in the browser to produce a PDF directly from the browser.
 
 The HTML export includes:
 - Service title and date
@@ -234,8 +234,7 @@ The HTML export includes:
 
 Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit (debounced to avoid constant recompilation).
 
-- **With Typst installed** — compiles a real PDF in the background. A spinner appears while compiling; errors appear as a brief toast.
-- **Without Typst** — falls back to the HTML preview.
+- Compiles a real PDF in the background using the bundled Typst typesetter. A spinner appears while compiling; errors appear as a brief toast.
 - **⚙ gear icon** in the preview header — quick access to Print/Digital mode toggle and the church name field without opening the full preferences dialog.
 - **Popout button** — opens the preview in a separate floating window so you can see it alongside your editing.
 
@@ -341,7 +340,7 @@ Rubric exports bulletins and manuscripts as Typst (`.typ`) files compiled by the
 - **Manuscript** (`manuscript.typ`) — leader copy layout
 - **Shared functions** (`_shared.typ`) — Rubric's custom Typst functions (`#movement`, `#sverse`, `#scripture`, `#leader-note`, etc.)
 
-Click **Edit…** to open the template in an in-app editor (with Typst syntax highlighting if GtkSourceView is installed). Click **Save override** to write your version to `~/.config/rubric/templates/`. Rubric checks that folder before the bundled copies, so your overrides persist across upgrades. Click **Reset to default** to remove your override and restore the bundled version.
+Click **Edit…** to open the template in an in-app editor with Typst syntax highlighting. Click **Save override** to write your version to `~/.config/rubric/templates/`. Rubric checks that folder before the bundled copies, so your overrides persist across upgrades. Click **Reset to default** to remove your override and restore the bundled version.
 
 ### Custom Typst in element content
 

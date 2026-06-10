@@ -2,15 +2,7 @@
 
 ## Overview
 
-Rubric is a GNOME-native application for planning worship services for the United Church of Canada. It integrates the Revised Common Lectionary, hymn lookup for Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and export to HTML or LaTeX for bulletin production.
-
-Install via pipx (recommended):
-
-```bash
-pipx install --system-site-packages rubric-liturgy
-```
-
-See [README.md](README.md) for full installation instructions including system dependencies.
+Rubric is a GNOME-native application for planning worship services for the United Church of Canada. It integrates the Revised Common Lectionary, hymn lookup for Voices United, More Voices, and Let Us Sing, Bible passage retrieval, and export to HTML or PDF for bulletin production.
 
 ---
 
@@ -18,11 +10,11 @@ See [README.md](README.md) for full installation instructions including system d
 
 The first time Rubric opens, a welcome wizard appears with three choices:
 
-- **Start with today's lectionary** — pre-fills a complete four-movement order (Gathering, Word, Response, Sending) with standard element names and injects this Sunday's RCL reading references into the relevant notes. The readings card, hymn suggestions, and observances row are all populated automatically.
+- **Start with today's lectionary** — pre-fills a complete four-movement order (Gathering, Word, Response, Sending) with standard element names and injects this Sunday's RCL reading references into the relevant notes. The readings card, hymn suggestions, and observance chips are all populated automatically.
 - **Blank service** — opens a clean document so you can build from scratch.
 - **Show me around** — opens the Help guide and starts the quickstart tip strip.
 
-The wizard only appears once. Afterward, Rubric opens to whatever you last had open.
+The wizard only appears once. Afterward, Rubric reopens to the last file you had open automatically.
 
 ### Quickstart tip strip
 
@@ -32,26 +24,23 @@ After the wizard (or on "Show me around"), a dismissible banner appears below th
 
 ## Simple Mode vs. Advanced Mode
 
-Rubric launches in **Simple mode** by default. This keeps the interface clean for everyday planning use — no LaTeX knowledge required.
+Rubric launches in **Simple mode** by default. This keeps the interface clean for everyday planning use.
 
 | Feature | Simple mode | Advanced mode |
 |---------|-------------|---------------|
 | Service planning | ✓ | ✓ |
-| HTML export | ✓ | ✓ |
+| Rich text content editor | ✓ | ✓ |
 | Bulletin → HTML | ✓ | ✓ |
+| Bulletin → PDF (Typst) | ✓ | ✓ |
 | Bible viewer | ✓ | ✓ |
 | Hymn lookup and suggestions | ✓ | ✓ |
 | Service Planner | ✓ | ✓ |
-| GitHub sync | ✓ | ✓ |
-| LaTeX export | — | ✓ |
-| PDF compilation | — | ✓ |
-| Bulletin → PDF (LaTeX) | — | ✓ |
+| GitHub sync | — | ✓ |
 | Snippets library | — | ✓ |
 | Responsive reading builder | — | ✓ |
 | CSV export | — | ✓ |
-| LaTeX preamble editor | — | ✓ |
 
-Toggle simple mode in **Preferences → View → Simple mode**. All keyboard shortcuts work regardless of mode.
+Toggle simple mode with the **SIMPLE** button in the status bar (bottom of the window), or in **Preferences → View → Simple mode**. All keyboard shortcuts work regardless of mode.
 
 ---
 
@@ -61,11 +50,51 @@ The header bar shows (left to right):
 - **New / Open / Undo / Redo** buttons
 - **Window title** (centre, click to open service info popover)
 - **Lectionary year tracker** — coloured dot + "Year A · Advent" showing today's RCL year and season. Hover for the full week name.
-- **GitHub sync button** (⟳) — push the current service to GitHub (advanced mode / GitHub configured)
-- **Document icon** — quick LaTeX export (Ctrl+E) — advanced mode only
-- **Print icon** — compile to PDF via xelatex (Ctrl+Shift+P) — advanced mode only
+- **Document icon** — quick Typst export (Ctrl+E) — saves and compiles the leader's order
+- **Print icon** — compile bulletin to PDF via Typst (Ctrl+Shift+P)
 - **Save** button
 - **Hamburger menu**
+
+---
+
+## Status Bar
+
+A persistent bar at the bottom of the window. All buttons remain accessible even in Focus mode.
+
+| Button | Purpose |
+|--------|---------|
+| **SIMPLE** | Toggle Simple mode. Bold = on. |
+| **GOST** | Toggle GOST Type B engineering font globally. Bold = on. |
+| *Observance chips* (centre) | Feast days and commemorations for the service date. Click any chip to open its Wikipedia article. |
+| **Focus** | Hide the palette and element list. Bold = on. |
+| **Git** | Commit and push the current service to GitHub (pull --rebase first). |
+| **v0.x.x** | Current version. Click to open the changelog. |
+
+### Observance chips
+
+When a service date is set, Rubric checks for liturgical observances relevant to that date. Each chip shows a coloured type label and the name of the observance. Click any chip to open a built-in window showing the Wikipedia article for that observance (article text only — no sidebars, infoboxes, or navigation).
+
+| Chip colour | Category | Examples |
+|---|---|---|
+| Gold | Feast | All Saints, Christmas, Easter Vigil |
+| Violet | Saint | feast days of named saints |
+| Teal | Ecumenical | Week of Prayer for Christian Unity, World Day of Prayer |
+| Amber | Indigenous | Indigenous Sunday, Orange Shirt Day |
+| Rose | Social Justice | International Women's Day, World AIDS Day |
+| Green | Ecological | Earth Day, Earth Sunday, Season of Creation |
+| Rainbow | Pride | Pride Month, Pride Sunday |
+| Grey-blue | Remembrance | Remembrance Day, Remembrance Sunday |
+| Purple | UCC | UCC-specific commemorations |
+
+When the service date is a Sunday, observances falling on weekdays within that same week appear with a proximity note (e.g. "Orange Shirt Day · *this Wednesday*"). This helps you decide whether to acknowledge the observance on the preceding Sunday.
+
+### GOST Type B
+
+Toggles a Soviet engineering standard monoline font across the entire interface. The font is bundled — no separate installation required. The setting persists between sessions.
+
+### Focus mode
+
+Hides the element palette and order list so the content editor fills the window. The status bar remains visible. Press **Focus** again to restore the panels.
 
 ---
 
@@ -113,35 +142,16 @@ When a date is set, shows:
 - **Colour bar** — liturgical season colour
 - **Season and week** (e.g. "Proper 12, Year A") alongside four reading buttons
 - **Four reading buttons** — First Reading · Psalm · Epistle · Gospel. Click to open the Bible Viewer.
-- **Observances row** — a compact row of labelled badges for feasts, commemorations, and seasonal observances relevant to the service date (see below).
 
 ### Weekday services
 Weekday dates default to the next Sunday's readings with a ← → stepper. Useful for Thursday chapels.
-
-### Observances row
-
-The observances row appears automatically when there is something worth noting for the service date. Each badge shows a coloured type label and the observance name:
-
-| Badge colour | Category | Examples |
-|---|---|---|
-| Gold | Feast | All Saints, Christmas, Easter Vigil |
-| Violet | Saint | feast days of named saints |
-| Teal | Ecumenical | Week of Prayer for Christian Unity, World Day of Prayer |
-| Amber | Indigenous | Indigenous Sunday, Orange Shirt Day |
-| Rose | Social Justice | International Women's Day, World AIDS Day, 16 Days of Activism |
-| Green | Ecological | Earth Day, Earth Sunday, Season of Creation |
-| Rainbow | Pride | Pride Month, Pride Sunday |
-| Grey-blue | Remembrance | Remembrance Day, Remembrance Sunday |
-| Purple | UCC | UCC-specific commemorations |
-
-When the service date is a Sunday, observances falling on weekdays within that same week appear with a proximity note (e.g. "Orange Shirt Day · *this Wednesday*"). This helps you decide whether to acknowledge the observance on the preceding Sunday.
 
 ---
 
 ## Hymn Suggestions Strip
 
 When a date is set, suggested hymns for the RCL week appear (VU, MV, LUS):
-- **Left-click** a chip → opens inline Hymnary preview (if WebKit is installed) or browser
+- **Left-click** a chip → opens inline Hymnary preview or browser
 - **▶ button** → YouTube search
 - **Right-click** a chip → injects `VU 16 — Mary, woman of the promise` into the **currently selected element's** Notes/Content
 
@@ -171,20 +181,22 @@ Appears when any service element is selected. The toolbar has two rows:
 | Snippet | Insert a snippet (Ctrl+Shift+I) — advanced mode |
 | Reading | Open the Responsive Reading builder (Ctrl+R) — advanced mode |
 
-### Notes panel — Leader notes / Bulletin text
+### Content editor
 
-Below the toolbar, two tabs hold separate text areas:
+Below the toolbar is the element content editor. It stores a single Typst string used for both the leader copy and the bulletin. Two editing modes:
 
-- **Leader notes** — free-form text that exports to the leader copy (LaTeX/HTML). RCL reading references injected from a loaded file appear here. This is where you type sermon notes, prayers, responsive reading text, etc.
-- **Bulletin text** — separate text that appears in the congregational bulletin in place of the leader notes (optional). Leave blank to use leader notes content in the bulletin.
+- **Rich text mode** (default) — formatting toolbar with **B** (bold), **I** (italic), **H1/H2/H3** (headings), **•** (bullet list), **1.** (numbered list), and **Ldr** (leader note — grey box, omitted from the congregational bulletin). Keyboard shortcuts: Ctrl+B, Ctrl+I.
+- **Typst mode** — raw Typst source editor (monospace, syntax-highlighted). Toggle with the **Typst** button at the top right.
 
-Rubric always switches to **Leader notes** when you select an item, so injected content is never hidden.
+Switching modes preserves content exactly. A small notice appears if you switch from Typst to rich text and the source contains markup outside the supported subset — those constructs are displayed as literal text (no data is lost).
+
+**Leader notes** (the `#leader-note[…]` block, added with the **Ldr** button) appear in the leader copy but are stripped from the congregational bulletin automatically.
 
 ---
 
 ## Bible Viewer
 
-Fetches passages in your chosen translation (WEB by default; set in **Preferences → Scripture**). Click **Insert as LaTeX** to add a formatted `{scripture}` block to the selected element's Notes/Content.
+Fetches passages in your chosen translation (WEB by default; set in **Preferences → Scripture**). Click **Insert scripture** to add a formatted `#scripture[…]` block to the selected element's content editor.
 
 ### ESV
 ESV requires a free API key from api.esv.org. Ministry and bulletin use is explicitly permitted by the ESV licence. Enter your key in **Preferences → Scripture**.
@@ -193,13 +205,13 @@ ESV requires a free API key from api.esv.org. Ministry and bulletin use is expli
 
 ## Hymn Lookup
 
-Select a hymn-type element, type `VU 16` (or `MV 120`, `LUS 5`) in the **Hymn #** field and press Enter. The title is fetched from Hymnary.org and prepended to Notes/Content as `VU 16 — Mary, woman of the promise`. Results are cached.
+Select a hymn-type element, type `VU 16` (or `MV 120`, `LUS 5`) in the **Hymn** field and press Enter or click the search button. The title is fetched from Hymnary.org and prepended to Notes/Content as `VU 16 — Mary, woman of the promise`. Results are cached.
 
 ---
 
 ## HTML Export
 
-Hamburger menu → **Export → Export HTML** (or Ctrl+Shift+H). Generates a clean, print-ready HTML file and opens it in your default browser. Use File → Print in the browser to produce a PDF without needing LaTeX.
+Hamburger menu → **Export → Export HTML** (or Ctrl+Shift+H). Generates a clean, print-ready HTML file and opens it in your default browser. Use File → Print in the browser to produce a PDF directly from the browser.
 
 The HTML export includes:
 - Service title and date
@@ -210,10 +222,9 @@ The HTML export includes:
 
 ## Bulletin Preview Panel
 
-Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit.
+Click the **bulletin preview button** in the header bar (or toggle via the menu) to open a live preview panel on the right side of the window. The preview updates automatically as you edit (debounced to avoid constant recompilation).
 
-- **Simple mode** — renders the bulletin as HTML.
-- **Advanced mode with xelatex** — compiles a real PDF in the background. A spinner appears while compiling.
+- Compiles a real PDF in the background using the bundled Typst typesetter. A spinner appears while compiling; errors appear as a brief toast.
 - **⚙ gear icon** in the preview header — quick access to Print/Digital mode toggle and the church name field without opening the full preferences dialog.
 - **Popout button** — opens the preview in a separate floating window so you can see it alongside your editing.
 
@@ -221,21 +232,12 @@ Click the **bulletin preview button** in the header bar (or toggle via the menu)
 
 ## Bulletin Export
 
-### Simple mode (default)
-**Export Bulletin** (Ctrl+Shift+B) generates an HTML bulletin and opens it in your browser. Includes:
-- Church name, service details, welcome line
-- Order of service (bulletin-visible elements only — controlled by the Bulletin toggle in the item toolbar)
-- Active announcements (expired ones are filtered automatically)
-- Staff list, mission statement, accessibility note
+**Export Bulletin** (Ctrl+Shift+B) opens the export dialog. Choose one or more outputs:
+- **Bulletin — print (booklet)** — Typst-compiled PDF, half-letter (5.5 × 8.5 in), fold for saddle-stitch
+- **Bulletin — digital (screen)** — Typst-compiled PDF, full letter, colour hyperlinks
+- **HTML** — opens in your browser; use File → Print to produce a PDF directly from the browser
 
-Use File → Print in the browser to produce a print-ready PDF.
-
-### Advanced mode
-**Export Bulletin** opens the LaTeX bulletin dialog. Choose **Print (booklet)** or **Digital (screen)**:
-- **Print/booklet** — `memoir` class, half-letter (5.5 × 8.5 in), fold for saddle-stitch
-- **Digital/screen** — `extarticle`, full letter, colour hyperlinks
-
-Both formats require TeX Live with xelatex and the `memoir` package.
+All outputs filter to bulletin-visible elements only (controlled by the Bulletin toggle in the item toolbar). Active announcements are included; expired announcements are filtered automatically.
 
 ---
 
@@ -253,10 +255,10 @@ If no repository is configured, the planner asks you to choose a folder on first
 
 ## Past Liturgies
 
-Hamburger menu → **Past Liturgies** (Ctrl+Shift+H). A read-only browser of every service you have saved and indexed. Use this to look back at past services without replacing what you're working on.
+Hamburger menu → **Past Liturgies** (Ctrl+Shift+H). A read-only browser of every service you have saved and indexed.
 
 - Services are listed newest-first. Click any service row to expand it and read the full content.
-- Each expanded service shows its elements grouped by section, with the full leader notes displayed in plain text (LaTeX formatting stripped for readability).
+- Each expanded service shows its elements grouped by section, with the full leader notes displayed in plain text.
 - **Open in editor** button on each service loads it into the main window (you will be asked to save or discard the current service first).
 - **Insert** button on any element copies that element's notes into whichever element is currently selected in the service order.
 - The **search bar** filters by service title, date, or element content across all indexed services.
@@ -286,13 +288,12 @@ The Element Library and Past Liturgies are complementary: use Element Library wh
 4. Paste your GitHub repository URL into the **Remote URL** field and click **Connect**.
 
 ### Syncing
-- **Push** (⟳ toolbar button or Ctrl+Shift+G) — saves the current service, commits it with an automatic message (`Service: Title – Date`), and pushes to GitHub. No commit message required.
+- **Push** (**Git** button in the status bar or Ctrl+Shift+G) — saves the current service, commits it with an automatic message (`Service: Title – Date`), and pushes to GitHub. A `git pull --rebase` runs first to avoid conflicts. No commit message required.
 - **Pull** — **Preferences → GitHub → Pull** downloads changes from GitHub. Pull before editing on a different machine.
 
 ### Repository-aware save paths
 When a repository is configured:
 - Save As defaults to `repo/liturgy/`
-- Export LaTeX defaults to `repo/tex/`
 - Bulletin export defaults to `repo/bulletins/`
 - Compiled PDFs move automatically to `repo/pdf/` (service order) or `repo/bulletins/` (bulletin)
 
@@ -313,26 +314,27 @@ Manage in **Preferences → Snippets**.
 
 ## Responsive Reading Builder
 
-**℟** button or Ctrl+R (advanced mode). Prefix lines `L:` (Leader) or `P:` (People); unprefixed lines alternate automatically. Inserts formatted LaTeX into Notes/Content.
+**℟** button or Ctrl+R (advanced mode). Prefix lines `L:` (Leader) or `P:` (People); unprefixed lines alternate automatically. Inserts formatted Typst into the element content editor.
 
 ---
 
-## LaTeX Export
+## Typst Templates
 
-*Advanced mode only.*
+Rubric exports bulletins and manuscripts as Typst (`.typ`) files compiled by the bundled `typst` binary.
 
-### Quick export (Ctrl+E)
-Click the document icon. First use opens a file chooser; the path is remembered. Subsequent presses overwrite immediately. Right-click to change or unlink.
+### Editing templates
 
-### Structure
-- `extarticle`, 12pt, 0.5in margins, Junicode font
-- Each divider → new page, centred small-caps heading
-- Each element → `\section*` with optional right-aligned leader name
-- Two-column layout per movement (`multicol`)
-- Scripture in `{scripture}` environment with hanging verse indent
+**Preferences → Typst Files** shows the four template files:
+- **Bulletin — print/booklet** (`bulletin_print.typ`) — page size, margins, fonts for folded bulletins
+- **Bulletin — digital/screen** (`bulletin_digital.typ`) — full-letter layout with coloured hyperlinks
+- **Manuscript** (`manuscript.typ`) — leader copy layout
+- **Shared functions** (`_shared.typ`) — Rubric's custom Typst functions (`#movement`, `#sverse`, `#scripture`, `#leader-note`, etc.)
 
-### Compile to PDF (Ctrl+Shift+P)
-Runs `xelatex` in a background thread. "Compiling PDF…" toast stays until done; success opens the PDF automatically. Helper files (`.log`, `.aux`, etc.) are cleaned up automatically.
+Click **Edit…** to open the template in an in-app editor with Typst syntax highlighting. Click **Save override** to write your version to `~/.config/rubric/templates/`. Rubric checks that folder before the bundled copies, so your overrides persist across upgrades. Click **Reset to default** to remove your override and restore the bundled version.
+
+### Custom Typst in element content
+
+Switch any element to **Typst mode** (toggle button top-right of the content editor) to enter raw Typst. You can use any Typst function, not just the Rubric subset. Out-of-subset constructs are passed through to the compiled document unchanged — only the rich-text editor won't render them visually.
 
 ---
 
@@ -340,7 +342,6 @@ Runs `xelatex` in a background thread. "Compiling PDF…" toast stays until done
 
 Hamburger menu → **Export**:
 - **Export HTML…** — print-ready HTML for the service order
-- **Export LaTeX…** — opens the file chooser (advanced mode)
 - **Export plain text…** — section headings and element names
 - **Export CSV…** — Section, Element, Leader, Hymn ref, Notes preview (advanced mode)
 
@@ -372,8 +373,8 @@ Hamburger menu → Help section: **Help** (F1), **FAQ**, **What's New**.
 | Save as | Ctrl+Shift+S |
 | Undo | Ctrl+Z |
 | Redo | Ctrl+Shift+Z |
-| Export LaTeX | Ctrl+E |
-| Compile PDF | Ctrl+Shift+P |
+| Export leader copy (Typst) | Ctrl+E |
+| Compile bulletin PDF | Ctrl+Shift+P |
 | Export Bulletin | Ctrl+Shift+B |
 | GitHub sync (push) | Ctrl+Shift+G |
 | Service Planner | Ctrl+Shift+L |

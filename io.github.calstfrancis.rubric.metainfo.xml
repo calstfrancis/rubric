@@ -41,6 +41,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.15.7" date="2026-06-09">
+      <description>
+        <p>Documentation update: in-app Help and FAQ fully rewritten for Flatpak-only distribution. All references to pipx, pip, apt, zypper, dnf, system dependencies, LaTeX/xelatex, TeX Live, and conditional Typst or WebKit availability removed.</p>
+      </description>
+    </release>
     <release version="0.15.6" date="2026-06-09">
       <description>
         <p>Status bar and UI polish.</p>

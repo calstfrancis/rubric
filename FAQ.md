@@ -33,7 +33,7 @@ No. Flatpak bundles all dependencies in a sandbox. GTK4, libadwaita, Python, and
 
 **Q: I want the inline Hymnary preview but it opens in the browser instead.**
 
-WebKit is bundled in the Flatpak and should work automatically. If the preview opens in the browser anyway, check that you are running the Flatpak and not a development checkout.
+WebKit is bundled in the Flatpak and should work automatically. If the preview opens in the browser anyway, try relaunching Rubric.
 
 ---
 
@@ -41,17 +41,13 @@ WebKit is bundled in the Flatpak and should work automatically. If the preview o
 
 **Q: What is Simple mode?**
 
-Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes — no LaTeX required.
+Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes.
 
 Toggle it with the **SIMPLE** button in the status bar at the bottom of the window, or in **Preferences → View → Simple mode**.
 
 **Q: I turned off Simple mode. Where is everything?**
 
 The toolbar gains the GitHub sync button and document/print icons. The hamburger menu expands with CSV export, GitHub sync, snippets, and responsive reading options. All keyboard shortcuts continue to work regardless of mode.
-
-**Q: I want to produce a proper print PDF for the bulletin. Do I need LaTeX?**
-
-No. Rubric includes a bundled [Typst](https://typst.app/) typesetter. PDF export works out of the box — no TeX Live, no LaTeX installation.
 
 ---
 
@@ -97,10 +93,6 @@ Bundled templates live inside the application package (read-only). Go to **Prefe
 **Q: The four template names are bulletin_print, bulletin_digital, manuscript, and _shared. What does _shared contain?**
 
 `_shared.typ` defines Rubric's custom Typst functions: `#movement` (section heading), `#sverse` (verse with superscript number), `#scripture` (indented scripture block), `#leader-note` (grey box for leader-only notes), `#ldr` and `#ppl` (bold leader/people lines for responsive readings). Every generated document includes these automatically — you can redefine them in `_shared` to change how they look globally.
-
-**Q: Can I point Rubric at a different typst binary?**
-
-The app checks in order: the bundled binary inside the Flatpak (`/app/bin/typst`), then `typst` on PATH. The bundled binary is used automatically in a normal Flatpak install.
 
 ---
 
