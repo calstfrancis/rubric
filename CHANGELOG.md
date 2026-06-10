@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.16.0-rc2 — Hymn UI redesign
+
+### Changed
+- **Hymn toolbar consolidated** — the number entry, lookup button, By Title search, and By Theme search are now all inside a single "Hymn" button that opens a three-tab popover (Lookup / By Title / By Theme). The toolbar is much cleaner.
+- **Theme search popover enlarged** — all 14 theme chips now display without scrolling; hymn result list is taller; selected chip uses a toggle style instead of a filled blue button.
+- **Suggestion strip redesigned** — flat linked pills (ref bold + title dim + YouTube icon) replace the heavy card buttons; cleaner and consistent with the rest of the UI.
+- **Compact mode fix** — compact view now actually reduces row height instead of adding margins.
+
 ## 0.16.0-rc1 — Theme search for hymns
 
 ### Added

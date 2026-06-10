@@ -41,12 +41,14 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
-    <release version="0.16.0-rc1" date="2026-06-10">
+    <release version="0.16.0-rc2" date="2026-06-10">
       <description>
-        <p>Theme search for hymns.</p>
+        <p>Hymn UI redesign and compact mode fix.</p>
         <ul>
-          <li>New "By Theme" tab in the hymn search popover with 14 curated themes spanning Voices United, More Voices, and Let Us Sing.</li>
-          <li>Click a theme chip to browse its hymns; click a row to insert into the service.</li>
+          <li>Hymn toolbar consolidated into a single button opening a three-tab popover: Lookup, By Title, By Theme.</li>
+          <li>Theme popover enlarged — all 14 themes visible without scrolling; toggle-style chip selection.</li>
+          <li>Suggestion strip redesigned as flat linked pills with inline YouTube button.</li>
+          <li>Compact view now correctly reduces row height.</li>
         </ul>
       </description>
     </release>

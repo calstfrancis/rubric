@@ -96,7 +96,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.16.0-rc1"
+APP_VERSION = "0.16.0-rc2"
 
 
 config = Config()
@@ -2131,35 +2131,18 @@ class MainWindow(Adw.ApplicationWindow):
         ss_fetch.connect("clicked", lambda _: self._do_scripture_search())
         row2.append(ss_fetch)
 
-        # Hymn sub-segment — only shown for hymn-type elements
+        # Hymn sub-segment — single button opens unified lookup/search popover
         sep_hymn = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         sep_hymn.set_margin_start(6); sep_hymn.set_margin_end(6); row2.append(sep_hymn)
-        hl = Gtk.Label(label="Hymn"); hl.add_css_class("dim-label")
-        hl.set_margin_end(4); row2.append(hl)
-        hymn_pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        hymn_pill.add_css_class("linked")
-        self.hymn_entry = Gtk.Entry()
-        self.hymn_entry.set_placeholder_text("VU 16")
-        self.hymn_entry.set_width_chars(8)
-        self.hymn_entry.connect("activate", lambda _: self._do_hymn_lookup())
-        hymn_pill.append(self.hymn_entry)
-        hlb = Gtk.Button(icon_name="system-search-symbolic", tooltip_text="Look up hymn (Enter)")
-        hlb.connect("clicked", lambda _: self._do_hymn_lookup()); hymn_pill.append(hlb)
-        row2.append(hymn_pill)
-        self.hymn_status = Gtk.Label(); self.hymn_status.add_css_class("dim-label")
-        self.hymn_status.set_max_width_chars(20); self.hymn_status.set_ellipsize(3)
-        self.hymn_status.set_hexpand(True)
-        row2.append(self.hymn_status)
 
-        # Hymn title search — searches the local cache by keyword
         self._theme_selected_btn = None
         self._hymn_search_pop = self._build_hymn_search_popover()
-        hsrch_btn = Gtk.MenuButton(icon_name="system-search-symbolic",
-                                   tooltip_text="Search hymn titles (cached)",
-                                   popover=self._hymn_search_pop)
-        hsrch_btn.add_css_class("flat")
-        self._hymn_toolbar_widgets = [sep_hymn, hl, self.hymn_entry, hlb, self.hymn_status, hsrch_btn]
-        row2.append(hsrch_btn)
+        hymn_menu_btn = Gtk.MenuButton(label="Hymn",
+                                       tooltip_text="Look up or search hymns",
+                                       popover=self._hymn_search_pop)
+        hymn_menu_btn.add_css_class("flat")
+        self._hymn_toolbar_widgets = [sep_hymn, hymn_menu_btn]
+        row2.append(hymn_menu_btn)
 
         # Action buttons
         sep_act = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
@@ -2609,7 +2592,7 @@ class MainWindow(Adw.ApplicationWindow):
         pop = Gtk.Popover()
         pop.set_has_arrow(False)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        outer.set_size_request(340, -1)
+        outer.set_size_request(460, -1)
 
         # ── Tab switcher ──────────────────────────────────────────────────────
         stack = Gtk.Stack()
@@ -2622,6 +2605,35 @@ class MainWindow(Adw.ApplicationWindow):
         switcher.set_margin_bottom(4)
         outer.append(switcher)
         outer.append(stack)
+
+        # ── Lookup page (number-based) ─────────────────────────────────────────
+        lookup_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        lookup_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lookup_row.set_margin_top(10); lookup_row.set_margin_bottom(6)
+        lookup_row.set_margin_start(10); lookup_row.set_margin_end(10)
+
+        self.hymn_entry = Gtk.Entry()
+        self.hymn_entry.set_placeholder_text("VU 16")
+        self.hymn_entry.set_width_chars(9)
+        self.hymn_entry.set_hexpand(True)
+        self.hymn_entry.connect("activate", lambda _: self._do_hymn_lookup())
+        lookup_row.append(self.hymn_entry)
+
+        lookup_btn = Gtk.Button(label="Look up")
+        lookup_btn.add_css_class("suggested-action")
+        lookup_btn.connect("clicked", lambda _: self._do_hymn_lookup())
+        lookup_row.append(lookup_btn)
+        lookup_page.append(lookup_row)
+
+        self.hymn_status = Gtk.Label()
+        self.hymn_status.add_css_class("dim-label"); self.hymn_status.add_css_class("caption")
+        self.hymn_status.set_wrap(True); self.hymn_status.set_xalign(0)
+        self.hymn_status.set_margin_start(10); self.hymn_status.set_margin_end(10)
+        self.hymn_status.set_margin_bottom(10)
+        lookup_page.append(self.hymn_status)
+
+        stack.add_titled(lookup_page, "lookup", "Lookup")
 
         # ── By Title page ─────────────────────────────────────────────────────
         title_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -2654,10 +2666,7 @@ class MainWindow(Adw.ApplicationWindow):
         # ── By Theme page ─────────────────────────────────────────────────────
         theme_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Flow of theme chips
-        theme_flow_scroll = Gtk.ScrolledWindow()
-        theme_flow_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        theme_flow_scroll.set_max_content_height(140)
+        # Flow of theme chips — no scroll, let it expand naturally
         self._theme_flow = Gtk.FlowBox()
         self._theme_flow.set_max_children_per_line(3)
         self._theme_flow.set_min_children_per_line(2)
@@ -2665,21 +2674,20 @@ class MainWindow(Adw.ApplicationWindow):
         self._theme_flow.set_homogeneous(True)
         self._theme_flow.set_row_spacing(4); self._theme_flow.set_column_spacing(4)
         self._theme_flow.set_margin_start(8); self._theme_flow.set_margin_end(8)
-        self._theme_flow.set_margin_top(6); self._theme_flow.set_margin_bottom(4)
+        self._theme_flow.set_margin_top(8); self._theme_flow.set_margin_bottom(6)
         for name in _get_theme_names():
-            btn = Gtk.Button(label=name)
-            btn.add_css_class("pill")
-            btn.connect("clicked", lambda b, t=name: self._on_theme_chip_clicked(b, t))
+            btn = Gtk.ToggleButton(label=name)
+            btn.add_css_class("flat")
+            btn.connect("toggled", lambda b, t=name: self._on_theme_chip_clicked(b, t))
             self._theme_flow.append(btn)
-        theme_flow_scroll.set_child(self._theme_flow)
-        theme_page.append(theme_flow_scroll)
+        theme_page.append(self._theme_flow)
 
         theme_page.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         # Hymns for selected theme
         theme_scroll = Gtk.ScrolledWindow()
         theme_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        theme_scroll.set_min_content_height(180); theme_scroll.set_max_content_height(280)
+        theme_scroll.set_min_content_height(180); theme_scroll.set_max_content_height(320)
         self._theme_hymn_list = Gtk.ListBox()
         self._theme_hymn_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self._theme_hymn_list.add_css_class("boxed-list")
@@ -2725,19 +2733,18 @@ class MainWindow(Adw.ApplicationWindow):
             row.connect("activated", lambda _r, l=line: self._inject_hymn_line(l))
             self._hymn_search_list.append(row)
 
-    def _on_theme_chip_clicked(self, btn: Gtk.Button, theme: str):
-        # Toggle chip highlight — deselect if already active
-        if getattr(self, "_theme_selected_btn", None) is btn:
-            btn.remove_css_class("suggested-action")
+    def _on_theme_chip_clicked(self, btn: Gtk.ToggleButton, theme: str):
+        if not btn.get_active():
+            # Being untoggled — clear list
             self._theme_selected_btn = None
             while self._theme_hymn_list.get_first_child():
                 self._theme_hymn_list.remove(self._theme_hymn_list.get_first_child())
             self._theme_hymn_list.append(self._theme_placeholder)
             return
 
-        if self._theme_selected_btn:
-            self._theme_selected_btn.remove_css_class("suggested-action")
-        btn.add_css_class("suggested-action")
+        # Untoggle previous selection
+        if self._theme_selected_btn and self._theme_selected_btn is not btn:
+            self._theme_selected_btn.set_active(False)
         self._theme_selected_btn = btn
 
         while self._theme_hymn_list.get_first_child():
@@ -5596,23 +5603,40 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self.sugg_revealer.set_reveal_child(False)
             return
 
+        import urllib.parse
+        from hymn_lookup import HYMNALS
+        _yt_svg = Path(__file__).parent / "data" / "youtube.svg"
+        if not _yt_svg.exists():
+            try:
+                import rubric_package as _rp
+                _yt_svg = Path(_rp.__file__).parent / "data" / "youtube.svg"
+            except Exception:
+                _yt_svg = None
+        try:
+            from gi.repository import GdkPixbuf
+            _yt_pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(_yt_svg), 18, 13, True) if _yt_svg and _yt_svg.exists() else None
+        except Exception:
+            _yt_pb = None
+
         for prefix, number, title in suggestions:
-            # Wrap chip + YT button in a small box
-            chip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            pill.add_css_class("linked")
 
+            # Main chip: ref bold + title dim
             chip = Gtk.Button()
-            chip.set_tooltip_text(f"Open {prefix} {number} on Hymnary  ·  Right-click to add to selected element")
-            chip_lbl = Gtk.Label()
-            chip_lbl.set_markup(
-                f'<span weight="bold">{prefix} {number}</span>'
-                f'\n<span size="small">{GLib.markup_escape_text(title[:28])}{"…" if len(title)>28 else ""}</span>'
-            )
-            chip_lbl.set_justify(Gtk.Justification.CENTER)
-            chip.set_child(chip_lbl)
-            chip.add_css_class("card")
+            chip.add_css_class("flat")
+            chip.set_tooltip_text(f"Open {prefix} {number} on Hymnary  ·  Right-click to add to service")
+            chip_inner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            chip_inner.set_margin_start(6); chip_inner.set_margin_end(2)
+            ref_lbl = Gtk.Label()
+            ref_lbl.set_markup(f'<b>{GLib.markup_escape_text(f"{prefix} {number}")}</b>')
+            chip_inner.append(ref_lbl)
+            title_lbl = Gtk.Label(label=title)
+            title_lbl.add_css_class("dim-label")
+            title_lbl.set_max_width_chars(26); title_lbl.set_ellipsize(3)
+            chip_inner.append(title_lbl)
+            chip.set_child(chip_inner)
 
-            # Left click → inline Hymnary preview (WebKit) or browser fallback
-            from hymn_lookup import HYMNALS
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
             hymnary_url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"
             hymn_label = f"{prefix} {number} — {title}"
@@ -5622,36 +5646,26 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             else:
                 chip.connect("clicked", lambda _b, u=hymnary_url: Gtk.show_uri(None, u, 0))
 
-            # Right click → add to service
             rg = Gtk.GestureClick(); rg.set_button(3)
             def on_right(_g, _n, _x, _y, p=prefix, n=number, t=title):
                 self._add_hymn_from_suggestion(p, n, t)
             rg.connect("pressed", on_right)
             chip.add_controller(rg)
-            chip_box.append(chip)
+            pill.append(chip)
 
-            # YouTube search button — logo icon with fallback
-            import urllib.parse
+            # YouTube button — right side of linked pill
             yt_query = urllib.parse.quote(f"{prefix} {number} {title}")
             yt_url = f"https://www.youtube.com/results?search_query={yt_query}"
-            yt_btn = Gtk.Button(tooltip_text=f"Search YouTube for {prefix} {number}: {title}")
-            yt_btn.add_css_class("flat"); yt_btn.set_valign(Gtk.Align.CENTER)
-            _yt_svg = Path(__file__).parent / "data" / "youtube.svg"
-            if not _yt_svg.exists():
-                import rubric_package as _rp
-                _yt_svg = Path(_rp.__file__).parent / "data" / "youtube.svg"
-            try:
-                from gi.repository import GdkPixbuf
-                import gi as _gi
-                _gi.require_version("GdkPixbuf", "2.0")
-                _yt_pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(_yt_svg), 22, 16, True)
+            yt_btn = Gtk.Button(tooltip_text=f"Search YouTube: {prefix} {number}")
+            yt_btn.add_css_class("flat")
+            if _yt_pb:
                 yt_btn.set_child(Gtk.Image.new_from_pixbuf(_yt_pb))
-            except Exception:
-                yt_btn.set_child(Gtk.Label(label="▶"))
+            else:
+                yt_lbl = Gtk.Label(label="▶"); yt_lbl.add_css_class("dim-label"); yt_btn.set_child(yt_lbl)
             yt_btn.connect("clicked", lambda _b, u=yt_url: Gtk.show_uri(None, u, 0))
-            chip_box.append(yt_btn)
+            pill.append(yt_btn)
 
-            self._sugg_chips_box.append(chip_box)
+            self._sugg_chips_box.append(pill)
 
         self.sugg_revealer.set_reveal_child(True)
 
@@ -8183,11 +8197,11 @@ class LiturgyPlannerApp(Adw.Application):
         _ensure_gost_font()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
-/* Compact mode: item rows (Adw.ActionRow) */
-.compact-mode .boxed-list row.activatable { min-height: 36px; }
-.compact-mode .boxed-list actionrow > box { padding-top: 3px; padding-bottom: 3px; min-height: 24px; }
-/* Compact mode: divider rows (custom Gtk.ListBoxRow > Gtk.Box) */
-.compact-mode .boxed-list row > box { margin-top: 3px; margin-bottom: 3px; }
+/* Compact mode: reduce ActionRow height */
+.compact-mode row.activatable { min-height: 36px; }
+.compact-mode row.activatable > box { padding-top: 4px; padding-bottom: 4px; }
+.compact-mode row.activatable title { font-size: 0.875em; }
+.compact-mode row.activatable subtitle { font-size: 0.75em; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
 """)

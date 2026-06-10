@@ -1,4 +1,4 @@
-# Rubric v0.16.0-rc1
+# Rubric v0.16.0-rc2
 
 Install via Flatpak:
 
@@ -18,7 +18,7 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Theme search** — the hymn search popover now has a "By Theme" tab alongside "By Title". Choose from 14 curated themes (Baptism, Communion, Justice & Peace, Praise & Worship, and more); each theme lists hymns from Voices United, More Voices, and Let Us Sing. Click a theme chip to browse, click a hymn row to insert.
+**Hymn UI redesign** — the hymn toolbar is now a single "Hymn" button opening a three-tab popover: Lookup (number entry), By Title (keyword search), By Theme (14 curated themes across VU/MV/LUS). The suggestion strip at the bottom is redesigned as clean flat linked pills. Compact mode now actually compacts rows.
 
 ---
 
