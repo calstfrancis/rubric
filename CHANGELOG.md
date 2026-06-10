@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.3-rc1 — Notes panel can compress for preview
+
+### Fixed
+- Notes panel no longer has a hard minimum width — it can compress horizontally so the preview panel always fits on screen
+
+---
+
 ## 0.17.2 — Layout sharing fix, maximize on start
 
 ### Fixed

@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.2"
+APP_VERSION = "0.17.3-rc1"
 
 
 config = Config()
@@ -2087,7 +2087,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(False)
+        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(True)
         self._order_hpaned.set_position(260); self._order_hpaned.set_vexpand(True)
 
         # ── Order pane (left) ─────────────────────────────────────────────────
@@ -2169,7 +2169,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Notes pane (right) ────────────────────────────────────────────────
         notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        notes_box.set_size_request(200, -1)
 
         # Focus mode banner — shown in F11 focus mode, hidden otherwise
         self._focus_banner = Gtk.Revealer()
