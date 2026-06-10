@@ -2405,34 +2405,54 @@ class MainWindow(Adw.ApplicationWindow):
             if r: self.order_listbox.select_row(r)
 
     def _make_tab_label(self, div: SectionDivider | None, page_idx_fn) -> Gtk.Widget:
-        """Tab label: vertical text (bottom-to-top), right-click for rename/delete."""
-        if div is None:
-            lbl = Gtk.Label(label="Service")
-            lbl.add_css_class("heading")
-            lbl.add_css_class("rubric-tab-label")
-            return lbl
+        """Tab label: rotated DrawingArea so text reads bottom-to-top with correct layout size."""
+        import math
+        from gi.repository import Pango, PangoCairo
 
-        lbl = Gtk.Label(label=div.title)
-        lbl.add_css_class("heading")
-        lbl.add_css_class("rubric-tab-label")
+        text = div.title if div else "Service"
 
-        # Right-click gesture for context menu
-        gesture = Gtk.GestureClick()
-        gesture.set_button(3)  # right button
+        da = Gtk.DrawingArea()
+        da.add_css_class("rubric-vtab")
 
-        def on_right_click(_g, _n, _x, _y, d=div, l=lbl):
-            menu = Gio.Menu()
-            menu.append("Rename…",  f"win.tab-rename")
-            menu.append("Delete section…", f"win.tab-delete")
-            popover = Gtk.PopoverMenu.new_from_model(menu)
-            popover.set_parent(l)
-            self._tab_ctx_div = d
-            self._tab_ctx_lbl = l
-            popover.popup()
+        # Estimate pixel extents: ~7.5px per char at small size, ~12px tall
+        est_w = max(44, len(text) * 8)
+        est_h = 13
+        # DrawingArea size request: width = text height + padding, height = text width + padding
+        da.set_size_request(est_h + 10, est_w + 14)
 
-        gesture.connect("pressed", on_right_click)
-        lbl.add_controller(gesture)
-        return lbl
+        def draw(widget, cr, w, h, t=text):
+            style = widget.get_style_context()
+            color = style.get_color()
+            cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
+            layout = widget.create_pango_layout(t)
+            fd = Pango.FontDescription.from_string("9")
+            layout.set_font_description(fd)
+            _ink, log = layout.get_pixel_extents()
+            tw, th = log.width, log.height
+            cr.save()
+            cr.translate(w / 2.0, h / 2.0)
+            cr.rotate(-math.pi / 2.0)   # 90 deg CCW => bottom-to-top
+            cr.translate(-tw / 2.0, -th / 2.0)
+            PangoCairo.show_layout(cr, layout)
+            cr.restore()
+
+        da.set_draw_func(draw)
+
+        if div is not None:
+            gesture = Gtk.GestureClick()
+            gesture.set_button(3)
+            def on_right_click(_g, _n, _x, _y, d=div, widget=da):
+                menu = Gio.Menu()
+                menu.append("Rename...", "win.tab-rename")
+                menu.append("Delete section...", "win.tab-delete")
+                popover = Gtk.PopoverMenu.new_from_model(menu)
+                popover.set_parent(widget)
+                self._tab_ctx_div = d
+                popover.popup()
+            gesture.connect("pressed", on_right_click)
+            da.add_controller(gesture)
+
+        return da
 
     def _delete_section(self, div: SectionDivider):
         """Remove the divider and all its items."""
@@ -9032,8 +9052,10 @@ flowboxchild { background: transparent; padding: 0; }
 .sugg-pill button:only-child { border-radius: 9999px; }
 /* Rubric note editor: reddish tint */
 .rubric-note-editor { background: alpha(red, 0.04); color: @error_color; font-style: italic; }
-/* Vertical section tab labels: rotate 90deg so text reads bottom-to-top */
-.rubric-tab-label { transform: rotate(-90deg); }
+/* Vertical section tab strip */
+notebook > header.left { background: transparent; border-right: 1px solid alpha(@borders, 0.4); }
+notebook > header.left tab { padding: 4px 2px; min-height: 0; }
+notebook > header.left tab:checked { background: alpha(@accent_bg_color, 0.15); border-right: 2px solid @accent_color; }
 /* Header bar buttons: square, not tall */
 headerbar button { min-width: 32px; min-height: 32px; padding: 4px; }
 headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 4px; }

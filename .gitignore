@@ -59,3 +59,4 @@ build/
 *.AppImage
 *.rpm
 *.deb
+*.png
