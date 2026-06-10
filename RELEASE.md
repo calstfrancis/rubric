@@ -1,4 +1,4 @@
-# Rubric v0.15.7
+# Rubric v0.16.0-rc1
 
 Install via Flatpak:
 
@@ -18,7 +18,7 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Documentation update** — the in-app Help and FAQ have been fully rewritten for Flatpak-only distribution. All references to pipx, pip, apt, zypper, dnf, system dependencies, LaTeX/xelatex, TeX Live, and conditional Typst or WebKit availability have been removed. Everything is bundled.
+**Theme search** — the hymn search popover now has a "By Theme" tab alongside "By Title". Choose from 14 curated themes (Baptism, Communion, Justice & Peace, Praise & Worship, and more); each theme lists hymns from Voices United, More Voices, and Let Us Sing. Click a theme chip to browse, click a hymn row to insert.
 
 ---
 

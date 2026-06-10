@@ -4,6 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.16.0-rc1 — Theme search for hymns
+
+### Added
+- **Theme search** — new "By Theme" tab in the hymn search popover with 14 curated themes (Baptism, Communion, Community & Welcome, Creation & Environment, Faith & Trust, God's Love & Grace, Healing & Comfort, Holy Spirit, Jesus Christ, Justice & Peace, Mission & Service, Praise & Worship, Prayer & Meditation, Trinity). All entries drawn from VU, MV, and LUS. Click a chip to load hymns; click again to deselect. Click any hymn row to insert it, same as title search.
+
+---
+
 ## 0.15.7 — Documentation update
 
 ### Changed

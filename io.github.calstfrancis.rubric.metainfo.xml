@@ -41,6 +41,15 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.16.0-rc1" date="2026-06-10">
+      <description>
+        <p>Theme search for hymns.</p>
+        <ul>
+          <li>New "By Theme" tab in the hymn search popover with 14 curated themes spanning Voices United, More Voices, and Let Us Sing.</li>
+          <li>Click a theme chip to browse its hymns; click a row to insert into the service.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.15.7" date="2026-06-09">
       <description>
         <p>Documentation update: in-app Help and FAQ fully rewritten for Flatpak-only distribution. All references to pipx, pip, apt, zypper, dnf, system dependencies, LaTeX/xelatex, TeX Live, and conditional Typst or WebKit availability removed.</p>
