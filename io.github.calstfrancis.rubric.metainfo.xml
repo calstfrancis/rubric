@@ -41,6 +41,19 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.16.0-rc5" date="2026-06-10">
+      <description>
+        <p>UX polish across the service editor.</p>
+        <ul>
+          <li>Suggestion pills now wrap to multiple rows with full titles — no horizontal scrolling.</li>
+          <li>Status bar is slimmer; liturgical season colour dot added.</li>
+          <li>Element type icons (music, scripture, prayer, sermon) in service order rows.</li>
+          <li>Reading chips turn green after inserting a passage into the service.</li>
+          <li>Calendar icon on date button for clearer affordance.</li>
+          <li>Keyboard shortcut overlay accessible via Ctrl+?.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.16.0-rc4" date="2026-06-10">
       <description>
         <p>Hymn UI redesign and compact mode fix.</p>

@@ -1,4 +1,4 @@
-# Rubric v0.16.0-rc4
+# Rubric v0.16.0-rc5
 
 Install via Flatpak:
 
@@ -18,7 +18,7 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Hymn UI redesign** — the hymn toolbar is now a single "Hymn" button opening a three-tab popover: Lookup (number entry), By Title (keyword search), By Theme (14 curated themes across VU/MV/LUS). The suggestion strip at the bottom is redesigned as clean flat linked pills. Compact mode now actually compacts rows.
+**UX polish** — suggestion pills now wrap to two rows with full titles (no horizontal scrolling). Status bar is slimmer. Season colour dot in status bar. Element type icons in the service order. Reading chips turn green after insertion. Calendar icon on date button. Keyboard shortcut overlay (Ctrl+?). Keyboard shortcuts window.
 
 ---
 

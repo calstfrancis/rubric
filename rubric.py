@@ -42,6 +42,18 @@ _hex_to_rgb             = hex_to_rgb
 _is_hymn_element        = is_hymn_element
 _entry_from_dict        = entry_from_dict
 
+def _item_type_icon(name: str) -> str | None:
+    n = name.lower()
+    if any(w in n for w in ("hymn","song","anthem","music","prelude","postlude","choir","sung","psalm")):
+        return "audio-headphones-symbolic"
+    if any(w in n for w in ("scripture","reading","epistle","gospel","bible")):
+        return "user-bookmarks-symbolic"
+    if any(w in n for w in ("prayer","blessing","benediction","invocation","intercession","litany")):
+        return "emoji-body-symbolic"
+    if any(w in n for w in ("sermon","message","homily","reflection")):
+        return "format-text-rich-symbolic"
+    return None
+
 try:
     from hymn_lookup import lookup_hymn, parse_hymn_ref, search_hymns, prefetch_hymnal
     _HYMN_OK = True
@@ -96,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.16.0-rc4"
+APP_VERSION = "0.16.0-rc5"
 
 
 config = Config()
@@ -1550,6 +1562,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("focus-mode",         self._toggle_focus_mode,             None),
             ("copy-as-text",       self._copy_as_text,                  "<Ctrl><Shift>t"),
             ("toggle-bulletin-edit", self._toggle_bulletin_edit,        None),
+            ("show-shortcuts",     self._show_shortcuts_window,         "<Ctrl>question"),
         ]:
             a = Gio.SimpleAction.new(name, None)
             a.connect("activate", lambda _a,_p,f=cb: f()); self.add_action(a)
@@ -1619,7 +1632,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.calendar.connect("day-selected", self._on_calendar_day_selected)
         cal_pop.set_child(self.calendar)
         date_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.date_button = Gtk.MenuButton(label="No date selected", popover=cal_pop)
+        _date_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        _date_ico = Gtk.Image(icon_name="x-office-calendar-symbolic")
+        _date_ico.add_css_class("dim-label"); _date_box.append(_date_ico)
+        self._date_label_widget = Gtk.Label(label="No date selected")
+        self._date_label_widget.set_ellipsize(3); _date_box.append(self._date_label_widget)
+        self.date_button = Gtk.MenuButton(popover=cal_pop)
+        self.date_button.set_child(_date_box)
         self.date_button.set_hexpand(True); date_row.append(self.date_button)
         clr = Gtk.Button(icon_name="edit-clear-symbolic", tooltip_text="Clear date")
         clr.add_css_class("flat"); clr.connect("clicked", self._on_clear_date); date_row.append(clr)
@@ -1682,17 +1701,17 @@ class MainWindow(Adw.ApplicationWindow):
 
         def _status_toggle_btn(label_text, tooltip):
             lbl = Gtk.Label(); lbl.add_css_class("caption"); lbl.set_use_markup(True)
-            lbl.set_margin_top(3); lbl.set_margin_bottom(3)
+            lbl.set_margin_top(1); lbl.set_margin_bottom(1)
             lbl.set_text(label_text)
             btn = Gtk.Button(); btn.set_child(lbl); btn.add_css_class("flat")
-            btn.set_tooltip_text(tooltip); btn.set_margin_start(2); btn.set_margin_end(2)
+            btn.set_tooltip_text(tooltip); btn.set_margin_start(1); btn.set_margin_end(1)
             return btn, lbl
 
         def _sb_sep():
             s = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
             s.add_css_class("rubric-statusbar-sep")
-            s.set_margin_start(4); s.set_margin_end(4)
-            s.set_margin_top(6); s.set_margin_bottom(6)
+            s.set_margin_start(3); s.set_margin_end(3)
+            s.set_margin_top(3); s.set_margin_bottom(3)
             return s
 
         self._simple_status_btn, self._simple_status_lbl = _status_toggle_btn(
@@ -1714,12 +1733,18 @@ class MainWindow(Adw.ApplicationWindow):
         self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
         status_bar.append(self._compact_status_btn)
 
-        # Centre: observances (hexpand spacers on each side to keep it centred)
+        # Centre: season dot + observances (hexpand spacers on each side to keep centred)
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
         status_bar.append(_left_spacer)
+        _centre_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        _centre_box.set_halign(Gtk.Align.CENTER)
+        self._sb_season_dot = Gtk.Label(label="●")
+        self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
+        self._sb_season_dot.set_visible(False)
+        _centre_box.append(self._sb_season_dot)
         self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        self._obs_status_box.set_halign(Gtk.Align.CENTER)
-        status_bar.append(self._obs_status_box)
+        _centre_box.append(self._obs_status_box)
+        status_bar.append(_centre_box)
         _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
         status_bar.append(_right_spacer)
 
@@ -1734,9 +1759,9 @@ class MainWindow(Adw.ApplicationWindow):
         _git_btn.add_css_class("flat"); _git_btn.add_css_class("caption")
         _git_btn_lbl = _git_btn.get_child()
         if _git_btn_lbl:
-            _git_btn_lbl.set_margin_top(3); _git_btn_lbl.set_margin_bottom(3)
+            _git_btn_lbl.set_margin_top(1); _git_btn_lbl.set_margin_bottom(1)
         _git_btn.set_tooltip_text("Commit and push to GitHub (pull --rebase first)")
-        _git_btn.set_margin_start(2); _git_btn.set_margin_end(2)
+        _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self.git_push())
         status_bar.append(_git_btn)
 
@@ -2026,8 +2051,8 @@ class MainWindow(Adw.ApplicationWindow):
             (self.remove_item(), True)[1]
             if keyval == Gdk.KEY_Delete else False)
         self.order_listbox.add_controller(_list_key)
-        placeholder = Adw.StatusPage(title="No elements yet",
-            description="Double-click an element in the palette to add it.",
+        placeholder = Adw.StatusPage(title="Service is empty",
+            description="Double-click an element in the palette, or drag elements here.",
             icon_name="rubric-symbolic")
         placeholder.set_vexpand(True); self.order_listbox.set_placeholder(placeholder)
         self._flat_scroll.set_child(self.order_listbox)
@@ -2215,14 +2240,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.sugg_revealer.set_transition_duration(200)
         sugg_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         sugg_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        self._sugg_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self._sugg_chips_box = Gtk.FlowBox()
+        self._sugg_chips_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._sugg_chips_box.set_max_children_per_line(50)
+        self._sugg_chips_box.set_min_children_per_line(1)
+        self._sugg_chips_box.set_column_spacing(4); self._sugg_chips_box.set_row_spacing(4)
         self._sugg_chips_box.set_margin_start(10); self._sugg_chips_box.set_margin_end(10)
         self._sugg_chips_box.set_margin_bottom(6); self._sugg_chips_box.set_margin_top(6)
-        sugg_scroll = Gtk.ScrolledWindow()
-        sugg_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        sugg_scroll.set_min_content_height(40)
-        sugg_scroll.set_child(self._sugg_chips_box)
-        sugg_outer.append(sugg_scroll)
+        sugg_outer.append(self._sugg_chips_box)
         self.sugg_revealer.set_child(sugg_outer)
         box.append(self.sugg_revealer)
 
@@ -2242,6 +2267,12 @@ class MainWindow(Adw.ApplicationWindow):
         colour = _section_colour(si.section)
         dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
         row.add_prefix(dot)
+        _ico_name = _item_type_icon(si.name)
+        if _ico_name:
+            _ico = Gtk.Image(icon_name=_ico_name, pixel_size=14)
+            _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
+            _ico.set_margin_start(2)
+            row.add_prefix(_ico)
         handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.set_valign(Gtk.Align.CENTER)
         row.add_suffix(handle)
         self._attach_dnd(row, global_idx); return row
@@ -2803,7 +2834,18 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_reading_clicked(self, key):
         ref = self._current_readings.get(key,"")
         if not ref or ref=="—": return
-        BibleViewer(ref, self._on_bible_insert, translation=config.bible_translation, esv_key=config.bible_api_key_esv, transient_for=self).present()
+        def _insert(text, k=key):
+            self._on_bible_insert(text)
+            self._mark_reading_inserted(k)
+        BibleViewer(ref, _insert, translation=config.bible_translation, esv_key=config.bible_api_key_esv, transient_for=self).present()
+
+    def _mark_reading_inserted(self, key: str):
+        if not hasattr(self, "_inserted_readings"):
+            self._inserted_readings: set[str] = set()
+        self._inserted_readings.add(key)
+        btn = self._reading_rows.get(key)
+        if btn:
+            btn.add_css_class("success")
 
     def _on_bible_insert(self, text):
         idx = self._selected_index()
@@ -2912,15 +2954,19 @@ class MainWindow(Adw.ApplicationWindow):
             self._lect_label.set_text("")
         return True  # keep the daily timer running
 
+    def _set_date_label(self, text: str):
+        if hasattr(self, "_date_label_widget"):
+            self._date_label_widget.set_text(text)
+
     def _on_calendar_day_selected(self, cal):
         gd = cal.get_date()
         from datetime import date as pydate
         d = pydate(gd.get_year(), gd.get_month(), gd.get_day_of_month())
-        self.selected_date = d; self.date_button.set_label(d.strftime("%-d %B %Y"))
+        self.selected_date = d; self._set_date_label(d.strftime("%-d %B %Y"))
         self._update_readings(d); self._mark_modified()
 
     def _on_clear_date(self, _):
-        self.selected_date = None; self.date_button.set_label("No date selected")
+        self.selected_date = None; self._set_date_label("No date selected")
         self.readings_card.set_visible(False); self._mark_modified()
 
     def _update_readings(self, d, override_sunday=None):
@@ -2959,6 +3005,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.season_label.set_label(info["week"]); self.year_badge.set_label(f"Year {info['year']}")
         self.season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
         self._colour_bar_rgb = _hex_to_rgb(info["colour_hex"]); self._colour_bar.queue_draw()
+        if hasattr(self, "_sb_season_dot"):
+            self._sb_season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
+            self._sb_season_dot.set_visible(True)
 
         # Stepper
         self._sunday_step_box.set_visible(show_stepper)
@@ -2967,10 +3016,12 @@ class MainWindow(Adw.ApplicationWindow):
                 f"Readings for {self._readings_sunday.strftime('%-d %b %Y (Sunday)')}"
             )
 
+        self._inserted_readings: set[str] = set()
         for key, btn in self._reading_rows.items():
             ref = info[key]
             full_name = self._reading_labels.get(key, key)
             abbr = self._reading_abbrs.get(key, key)
+            btn.remove_css_class("success")
             if ref and ref != "—":
                 btn.set_label(ref); btn.set_sensitive(True)
                 btn.set_tooltip_text(f"{full_name}: {ref}")
@@ -3977,7 +4028,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Set date
         self.selected_date = today
-        self.date_button.set_label(today.strftime("%-d %B %Y"))
+        self._set_date_label(today.strftime("%-d %B %Y"))
 
         # Service title = liturgical week label
         week = info.get("week", "")
@@ -4264,7 +4315,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
         self.service_title_entry.set_text("")
         self._content_widget.set_content("")
-        self._clear_order_list(); self.selected_date=None; self.date_button.set_label("No date selected")
+        self._clear_order_list(); self.selected_date=None; self._set_date_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
         if hasattr(self, "_obs_status_box"):
             while self._obs_status_box.get_first_child():
@@ -4380,7 +4431,7 @@ class MainWindow(Adw.ApplicationWindow):
                 from datetime import date as pydate
                 try:
                     self.selected_date = pydate.fromisoformat(saved_date)
-                    self.date_button.set_label(self.selected_date.strftime("%-d %B %Y"))
+                    self._set_date_label(self.selected_date.strftime("%-d %B %Y"))
                     self._update_readings(self.selected_date)
                 except ValueError: pass
             # Restore linked .typ path if present and file still exists
@@ -5606,10 +5657,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
     def _update_hymn_suggestions(self, week: str, season: str):
         """Rebuild the suggestions chip strip for the current RCL week."""
-        # Clear existing chips
-        while True:
-            c = self._sugg_chips_box.get_first_child()
-            if c is None: break
+        while (c := self._sugg_chips_box.get_first_child()):
             self._sugg_chips_box.remove(c)
 
         if not _SUGG_OK:
@@ -5645,8 +5693,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             chip.add_css_class("flat")
             chip.set_tooltip_text(f"{prefix} {number} — {title}\nClick to open on Hymnary  ·  Right-click to add to service")
             title_lbl = Gtk.Label(label=title)
-            title_lbl.set_margin_start(8); title_lbl.set_margin_end(6)
-            title_lbl.set_max_width_chars(30); title_lbl.set_ellipsize(3)
+            title_lbl.add_css_class("caption")
+            title_lbl.set_margin_start(6); title_lbl.set_margin_end(4)
+            title_lbl.set_wrap(True); title_lbl.set_wrap_mode(0)
+            title_lbl.set_max_width_chars(28)
             chip.set_child(title_lbl)
 
             hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
@@ -6521,6 +6571,70 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         tv.set_content(scroll)
         win.set_content(tv)
         win.present()
+
+    def _show_shortcuts_window(self):
+        xml = """<?xml version='1.0' encoding='UTF-8'?>
+<interface>
+  <object class='GtkShortcutsWindow' id='sw'>
+    <property name='modal'>True</property>
+    <child>
+      <object class='GtkShortcutsSection'>
+        <property name='title'>Shortcuts</property>
+        <child>
+          <object class='GtkShortcutsGroup'>
+            <property name='title'>File</property>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;n</property><property name='title'>New service</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;o</property><property name='title'>Open service</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;s</property><property name='title'>Save</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;s</property><property name='title'>Save as…</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;l</property><property name='title'>Service planner</property></object></child>
+          </object>
+        </child>
+        <child>
+          <object class='GtkShortcutsGroup'>
+            <property name='title'>Editing</property>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;z</property><property name='title'>Undo</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;z</property><property name='title'>Redo</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;n</property><property name='title'>Add custom element</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;d</property><property name='title'>Add section divider</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;Up</property><property name='title'>Move element up</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;Down</property><property name='title'>Move element down</property></object></child>
+          </object>
+        </child>
+        <child>
+          <object class='GtkShortcutsGroup'>
+            <property name='title'>Tools</property>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;r</property><property name='title'>Responsive reading builder</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;f</property><property name='title'>Scripture search</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;i</property><property name='title'>Snippets library</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;k</property><property name='title'>Services library</property></object></child>
+          </object>
+        </child>
+        <child>
+          <object class='GtkShortcutsGroup'>
+            <property name='title'>Export</property>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;e</property><property name='title'>Quick export to Typst</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;p</property><property name='title'>Compile PDF</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;b</property><property name='title'>Export bulletin (HTML)</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;g</property><property name='title'>Git commit and push</property></object></child>
+          </object>
+        </child>
+        <child>
+          <object class='GtkShortcutsGroup'>
+            <property name='title'>Help</property>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>F1</property><property name='title'>Help</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;question</property><property name='title'>Keyboard shortcuts</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;comma</property><property name='title'>Preferences</property></object></child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>"""
+        b = Gtk.Builder.new_from_string(xml, -1)
+        sw = b.get_object("sw")
+        sw.set_transient_for(self)
+        sw.present()
 
     def show_about(self):
         about = Adw.AboutWindow(transient_for=self)
@@ -8217,15 +8331,18 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .compact-mode row.activatable > box { padding-top: 3px; padding-bottom: 3px; }
 .compact-mode row.activatable title { font-size: 0.875em; }
 .compact-mode row.activatable subtitle { font-size: 0.75em; }
+/* Status bar: slim height */
+.toolbar { min-height: 24px; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
 /* Selected service order row: left accent bar */
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
 /* Observance chips in status bar */
 .obs-chip { padding-left: 6px; padding-right: 6px; }
-/* Suggestion strip */
-.sugg-strip { background: transparent; }
-.sugg-strip row { background: transparent; }
+/* Reading chip: inserted into service */
+button.success { color: @success_color; }
+/* Suggestion strip flowbox children: no selection highlight */
+flowboxchild { background: transparent; padding: 0; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,

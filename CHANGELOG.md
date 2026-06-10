@@ -4,6 +4,21 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.16.0-rc5 — UX polish: wrapping pills, slimmer bar, icons
+
+### Added
+- **Suggestion pills wrap** — hymn suggestion strip now uses a flow layout; pills wrap to multiple rows so all suggestions are visible without horizontal scrolling. Full titles shown (no ellipsis), smaller `caption` font.
+- **Element type icons** — small symbolic icons appear in service order rows: headphones for hymns/music, bookmark for scripture, body for prayer, text for sermon.
+- **Reading chips turn green** after inserting a passage into the service — visual confirmation.
+- **Calendar icon on date button** — clearer affordance for the date picker.
+- **Liturgical season colour dot** in the status bar centre, next to observance chips.
+- **Keyboard shortcuts overlay** — Ctrl+? opens a native GTK shortcuts window listing all key bindings.
+
+### Changed
+- **Status bar is slimmer** — reduced padding and margins throughout.
+
+---
+
 ## 0.16.0-rc4 — More themes, pill titles only, dead-link fix
 
 ### Added
