@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.1-dev"
+APP_VERSION = "0.17.1"
 
 
 config = Config()
@@ -2274,6 +2274,11 @@ class MainWindow(Adw.ApplicationWindow):
         self._rr_btn = Gtk.Button(label="Responsive", tooltip_text="Responsive reading builder (Ctrl+R)")
         self._rr_btn.add_css_class("flat")
         self._rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); row2.append(self._rr_btn)
+        self._hymn_mode_btn = Gtk.ToggleButton(label="Hymn",
+                                               tooltip_text="Toggle hymn search and suggestions for this element")
+        self._hymn_mode_btn.add_css_class("flat")
+        self._hymn_mode_btn.connect("toggled", self._on_hymn_mode_toggled)
+        row2.append(self._hymn_mode_btn)
         itb_rows.append(row2)
 
         self.item_toolbar_revealer.set_child(itb_rows)
@@ -2583,10 +2588,9 @@ class MainWindow(Adw.ApplicationWindow):
             # Bulletin toggle — set state without triggering handler
             self.bulletin_toggle.set_active(si.show_in_bulletin)
             self.duration_spin.set_value(getattr(si, "duration", 0))
-            # Show/hide hymn segment based on element type
+            # Set hymn toggle — fires _on_hymn_mode_toggled which updates all visibility
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
-            for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
-            if is_hymn: self.hymn_status.set_label(""); self.hymn_entry.set_text("")
+            self._hymn_mode_btn.set_active(is_hymn)
             # Update focus mode banner
             if getattr(self, "_focus_mode", False):
                 self._focus_elem_lbl.set_text(si.name)
@@ -5984,11 +5988,13 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._sugg_chips_box.remove(c)
 
         if not _SUGG_OK:
+            self._hymn_suggestions_available = False
             self.sugg_revealer.set_reveal_child(False)
             return
 
         suggestions = _get_hymn_suggestions(week, season)
         if not suggestions:
+            self._hymn_suggestions_available = False
             self.sugg_revealer.set_reveal_child(False)
             return
 
@@ -6075,7 +6081,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
             self._sugg_chips_box.append(pill)
 
-        self.sugg_revealer.set_reveal_child(True)
+        self._hymn_suggestions_available = True
+        self.sugg_revealer.set_reveal_child(
+            getattr(self, "_hymn_mode_btn", None) is not None
+            and self._hymn_mode_btn.get_active()
+        )
 
     def _show_hymnary_preview(self, url: str, title: str):
         """Open an inline WebKit window showing the Hymnary page."""
@@ -6145,6 +6155,17 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
     def open_scripture_search(self):
         """Focus the scripture search entry."""
         self.scripture_entry.grab_focus()
+
+    def _on_hymn_mode_toggled(self, btn):
+        active = btn.get_active()
+        for w in self._hymn_toolbar_widgets:
+            w.set_visible(active)
+        self.sugg_revealer.set_reveal_child(
+            active and getattr(self, "_hymn_suggestions_available", False)
+        )
+        if active:
+            if hasattr(self, "hymn_status"): self.hymn_status.set_label("")
+            if hasattr(self, "hymn_entry"): self.hymn_entry.set_text("")
 
     # ── Responsive reading builder ────────────────────────────────────────────
 

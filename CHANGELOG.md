@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.1-dev — UX polish, season colour, focus mode fixes
+## 0.17.1 — UX polish, season colour, focus mode fixes, hymn toggle
 
 ### Changed
 - YouTube icon is properly sized to YouTube logo proportions (wider than tall)
@@ -17,6 +17,9 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 - Turning off focus mode no longer opens the sidebar if it was closed before focus mode was activated
+
+### Added
+- **Hymn toggle** — a "Hymn" toggle button appears next to "Responsive" in every element toolbar. Activating it shows the hymn search and suggestions for any element, not just those named "Hymn"
 
 ---
 

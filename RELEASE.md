@@ -1,4 +1,4 @@
-# Rubric v0.17.0
+# Rubric v0.17.1
 
 Install via Flatpak:
 
@@ -18,13 +18,13 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Rich text editor** — raw Typst mode is gone; all content is edited as rich text with bold, italic, headings, lists, and leader notes.
+**Hymn toggle** — every element now has a "Hymn" toggle button in its toolbar. Tap it to activate hymn search and suggestions for any element, not just those named "Hymn".
 
-**Rubric section** — each element has a private leader-instructions area. Rubric text appears red and italic in the manuscript only; never in the bulletin.
+**Scripture display** — inserted scripture passages now show as readable indented text in the element editor. No raw Typst code visible to users.
 
-**Snippets manager** — a full CRUD window for managing reusable text snippets, with rich-text editing and tag filtering.
+**Focus mode fix** — turning off focus mode no longer forces the sidebar open if it was already hidden.
 
-**Order panel polish** — vertical section tabs, a liturgical season colour strip at the panel top, section dividers styled as coloured pills, leader references shown as subtitles in service order rows, and drag handles that fade in on hover.
+**Season colour** — the liturgical season colour is now applied to the week name label and the lectionary chip in the date popover, in addition to the colour strip and dot.
 
 ---
 

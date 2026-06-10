@@ -41,6 +41,18 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.1" date="2026-06-10">
+      <description>
+        <p>Polish and hymn toggle.</p>
+        <ul>
+          <li>Hymn toggle button in every element toolbar — activate to show hymn search and suggestions for any element, not just those named "Hymn".</li>
+          <li>Inserted scripture passages display as readable text in the editor — no raw Typst visible.</li>
+          <li>Focus mode now restores sidebar to its pre-focus state.</li>
+          <li>Season colour applied to week name label and lectionary chip.</li>
+          <li>Events in status bar spread further apart.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.0" date="2026-06-10">
       <description>
         <p>Major UX update: rich text editor, snippets manager, rubric section, and order panel polish.</p>
