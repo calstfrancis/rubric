@@ -1839,7 +1839,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_shrink_start_child(True); paned.set_shrink_end_child(False)
+        paned.set_shrink_start_child(False); paned.set_shrink_end_child(False)
         paned.set_start_child(self._build_palette_panel())
         self._palette_paned = paned
         self._palette_visible = True
@@ -2083,7 +2083,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(True)
+        self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(False)
         self._order_hpaned.set_position(260); self._order_hpaned.set_vexpand(True)
 
         # ── Order pane (left) ─────────────────────────────────────────────────
@@ -2115,7 +2115,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._notebook = Gtk.Notebook()
         self._notebook.set_show_border(False); self._notebook.set_vexpand(True)
         self._notebook.set_scrollable(True)
-        self._notebook.set_margin_start(8); self._notebook.set_margin_end(8)
+        self._notebook.set_tab_pos(Gtk.PositionType.LEFT)
+        self._notebook.set_margin_start(0); self._notebook.set_margin_end(8)
         self._notebook.set_margin_top(8); self._notebook.set_margin_bottom(6)
         self._view_stack.add_named(self._notebook, "tabs")
 
@@ -2404,16 +2405,16 @@ class MainWindow(Adw.ApplicationWindow):
             if r: self.order_listbox.select_row(r)
 
     def _make_tab_label(self, div: SectionDivider | None, page_idx_fn) -> Gtk.Widget:
-        """Tab label: plain text, right-click for rename/delete."""
+        """Tab label: rotated vertical text (bottom-to-top), right-click for rename/delete."""
         if div is None:
             lbl = Gtk.Label(label="Service")
             lbl.add_css_class("heading")
+            lbl.set_angle(90)
             return lbl
 
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         lbl = Gtk.Label(label=div.title)
         lbl.add_css_class("heading")
-        box.append(lbl)
+        lbl.set_angle(90)
 
         # Right-click gesture for context menu
         gesture = Gtk.GestureClick()
@@ -2425,14 +2426,13 @@ class MainWindow(Adw.ApplicationWindow):
             menu.append("Delete section…", f"win.tab-delete")
             popover = Gtk.PopoverMenu.new_from_model(menu)
             popover.set_parent(l)
-            # Store which divider is being targeted
             self._tab_ctx_div = d
             self._tab_ctx_lbl = l
             popover.popup()
 
         gesture.connect("pressed", on_right_click)
-        box.add_controller(gesture)
-        return box
+        lbl.add_controller(gesture)
+        return lbl
 
     def _delete_section(self, div: SectionDivider):
         """Remove the divider and all its items."""
