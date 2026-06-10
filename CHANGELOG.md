@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## dev — Bug fixes and code quality
+## 0.17.2-rc1 — Bug fixes and code quality
 
 ### Fixed
 - Adding elements in tab mode now always inserts into the currently visible tab's section, not the last tab
