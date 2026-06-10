@@ -4,6 +4,22 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.1-dev — UX polish, season colour, focus mode fixes
+
+### Changed
+- YouTube icon is properly sized to YouTube logo proportions (wider than tall)
+- Season colour now also applied to week name label and lectionary chip in readings card
+- Status bar events spread further apart (larger gap around season dot)
+- Scripture insert button labelled "Insert" — Typst not exposed to users
+- Inserted scripture passages now display as readable text in the element editor (no raw Typst visible)
+- Header bar icons use full-colour system theme variants
+- Simple mode also hides GOST and Compact buttons
+
+### Fixed
+- Turning off focus mode no longer opens the sidebar if it was closed before focus mode was activated
+
+---
+
 ## 0.17.0 — Rich text, snippets manager, rubric section, order panel polish
 
 ### Added

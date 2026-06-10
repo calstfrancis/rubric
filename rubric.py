@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.0"
+APP_VERSION = "0.17.1-dev"
 
 
 config = Config()
@@ -193,7 +193,7 @@ class BibleViewer(Adw.Window):
         attr = Gtk.Label(label=trl_label)
         attr.add_css_class("caption"); attr.add_css_class("dim-label")
         attr.set_hexpand(True); attr.set_xalign(0); self._bot.append(attr)
-        ins = Gtk.Button(label="Insert as Typst"); ins.add_css_class("suggested-action")
+        ins = Gtk.Button(label="Insert"); ins.add_css_class("suggested-action")
         ins.connect("clicked", self._on_insert); self._bot.append(ins); outer.append(self._bot)
         tv.set_content(outer)
         if _BIBLE_OK: fetch_passage(reference, self._on_fetched, translation=translation, esv_key=esv_key)
@@ -1792,7 +1792,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Season dot with wider margins to spread the two event listings
         self._sb_season_dot = Gtk.Label(label="●")
         self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
-        self._sb_season_dot.set_margin_start(20); self._sb_season_dot.set_margin_end(20)
+        self._sb_season_dot.set_margin_start(36); self._sb_season_dot.set_margin_end(36)
         self._sb_season_dot.set_visible(False)
         _centre_box.append(self._sb_season_dot)
         # Next/upcoming event
@@ -3185,8 +3185,7 @@ class MainWindow(Adw.ApplicationWindow):
             colour = info["colour_hex"]
             # Compact: coloured dot + "Year A · Advent"
             self._lect_label.set_markup(
-                f'<span color="{colour}">●</span> '
-                f'<span>Year {year} · {season}</span>'
+                f'<span color="{colour}">●  Year {year} · {season}</span>'
             )
             self._lect_label.set_tooltip_text(
                 f"Today: {info['week']} — RCL Year {year}"
@@ -3243,11 +3242,13 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._current_readings = {k: info[k] for k in ("ot","psalm","epistle","gospel")}
         self.readings_card.set_visible(True)
-        self.season_label.set_label(info["week"]); self.year_badge.set_label(f"Year {info['year']}")
-        self.season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
-        self._colour_bar_rgb = _hex_to_rgb(info["colour_hex"]); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
+        self.year_badge.set_label(f"Year {info['year']}")
+        cx = info["colour_hex"]
+        self.season_dot.set_markup(f'<span color="{cx}">●</span>')
+        self.season_label.set_markup(f'<span color="{cx}">{GLib.markup_escape_text(info["week"])}</span>')
+        self._colour_bar_rgb = _hex_to_rgb(cx); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
         if hasattr(self, "_sb_season_dot"):
-            self._sb_season_dot.set_markup(f'<span color="{info["colour_hex"]}">●</span>')
+            self._sb_season_dot.set_markup(f'<span color="{cx}">●</span>')
             self._sb_season_dot.set_visible(True)
 
         # Stepper
@@ -3593,6 +3594,8 @@ class MainWindow(Adw.ApplicationWindow):
         if active:
             self._pre_focus_palette_pos = self._palette_paned.get_position()
             self._pre_focus_order_pos  = self._order_hpaned.get_position()
+            self._pre_focus_sidebar_visible = self._palette_visible
+            self._palette_paned.set_shrink_start_child(True)
             self._palette_paned.set_position(0)
             self._sidebar_btn.set_active(False)
             self._order_hpaned.set_shrink_start_child(True)
@@ -3609,8 +3612,12 @@ class MainWindow(Adw.ApplicationWindow):
             self._focus_banner.set_reveal_child(False)
             self._order_hpaned.set_shrink_start_child(False)
             self._order_hpaned.set_position(getattr(self, "_pre_focus_order_pos", 260))
-            self._palette_paned.set_position(getattr(self, "_pre_focus_palette_pos", 290))
-            self._sidebar_btn.set_active(True)
+            if getattr(self, "_pre_focus_sidebar_visible", True):
+                self._palette_paned.set_shrink_start_child(False)
+                self._palette_paned.set_position(getattr(self, "_pre_focus_palette_pos", 290))
+                self._sidebar_btn.set_active(True)
+            else:
+                self._palette_paned.set_position(0)
 
     def _toggle_preview_panel(self, btn):
         visible = btn.get_active()
@@ -6037,9 +6044,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             yt_btn = Gtk.Button(tooltip_text=f"Search YouTube: {prefix} {number}")
             yt_btn.add_css_class("flat")
             import math as _math
-            _yt_da = Gtk.DrawingArea(); _yt_da.set_size_request(20, 14)
+            _yt_da = Gtk.DrawingArea(); _yt_da.set_size_request(26, 18)
             def _draw_yt(_da, cr, w, h):
-                r = 2.5
+                r = 3.5
                 cr.new_path()
                 cr.arc(r, r, r, _math.pi, -_math.pi / 2)
                 cr.arc(w - r, r, r, -_math.pi / 2, 0)

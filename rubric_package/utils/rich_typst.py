@@ -36,10 +36,31 @@ TAG_ORDERED = "ordered"
 
 # One level of nested brackets — sufficient for #sverse(N)[text] inside #scripture
 # and #strong[text] / #emph[text] inside #leader-note
-_LEADER_RE = re.compile(r'#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]', re.DOTALL)
-_STRONG_RE = re.compile(r'#strong\[((?:[^[\]]|\[[^\]]*\])*)\]')
-_EMPH_RE   = re.compile(r'#emph\[((?:[^[\]]|\[[^\]]*\])*)\]')
-_INLINE_RE = re.compile(r'(\*[^*\n]+\*|_[^_\n]+_)')
+_LEADER_RE    = re.compile(r'#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]', re.DOTALL)
+_STRONG_RE    = re.compile(r'#strong\[((?:[^[\]]|\[[^\]]*\])*)\]')
+_EMPH_RE      = re.compile(r'#emph\[((?:[^[\]]|\[[^\]]*\])*)\]')
+_INLINE_RE    = re.compile(r'(\*[^*\n]+\*|_[^_\n]+_)')
+# Scripture blocks: #text(...)[ref] + #scripture[#sverse(n)[...] ...]
+_SCRIPTURE_RE = re.compile(
+    r'#text\([^)]*\)\[([^\]]+)\]\s*\n#scripture\[((?:[^[\]]|\[[^\]]*\])*)\]',
+    re.DOTALL,
+)
+_SVERSE_RE    = re.compile(r'#sverse\((\d+)\)\[([^\]]*)\]')
+
+
+def _scripture_to_plain(m: re.Match) -> str:
+    """Convert a #text(...)[ref] + #scripture[...] block to readable plain text."""
+    ref = m.group(1).strip()
+    body = m.group(2)
+    verses = _SVERSE_RE.findall(body)
+    lines = [f"³³{num}³³ {text.strip()}" for num, text in verses]
+    # Use a simple marker: reference line then indented verse lines
+    return ref + "\n" + "\n".join("    " + l for l in lines) if lines else ref
+
+
+def _normalise_scripture(text: str) -> str:
+    """Replace #scripture blocks with readable plain-text before tag parsing."""
+    return _SCRIPTURE_RE.sub(_scripture_to_plain, text)
 
 
 # ── Tag management ─────────────────────────────────────────────────────────────
@@ -132,6 +153,9 @@ def typst_to_tags(typst_str: str, buf) -> bool:
 
     if not typst_str:
         return False
+
+    # Convert scripture blocks to readable plain text before further parsing
+    typst_str = _normalise_scripture(typst_str)
 
     has_unsupported = False
 
