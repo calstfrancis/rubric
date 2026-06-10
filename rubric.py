@@ -9019,13 +9019,14 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
 flowboxchild { background: transparent; padding: 0; }
-/* Suggestion pills: coloured accent background */
+/* Suggestion pills: opaque accent colour, white text, no border */
 .sugg-pill button {
-  background: alpha(@accent_bg_color, 0.18);
-  border: 1px solid alpha(@accent_color, 0.35);
+  background: @accent_bg_color;
   color: @accent_fg_color;
+  border: none;
+  box-shadow: none;
 }
-.sugg-pill button:hover { background: alpha(@accent_bg_color, 0.32); }
+.sugg-pill button:hover { background: mix(@accent_bg_color, black, 0.12); }
 .sugg-pill button:first-child { border-right: none; border-radius: 9999px 0 0 9999px; }
 .sugg-pill button:last-child { border-left: none; border-radius: 0 9999px 9999px 0; }
 .sugg-pill button:only-child { border-radius: 9999px; }
