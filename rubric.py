@@ -1447,6 +1447,10 @@ class MainWindow(Adw.ApplicationWindow):
                 self._simple_status_lbl.set_text("SIMPLE")
         if hasattr(self, "_dev_status_btn"):
             self._dev_status_btn.set_visible(not simple)
+        if hasattr(self, "_gost_status_btn"):
+            self._gost_status_btn.set_visible(not simple)
+        if hasattr(self, "_compact_status_btn"):
+            self._compact_status_btn.set_visible(not simple)
         if hasattr(self, "_git_btn"):
             self._git_btn.set_visible(not simple)
         if hasattr(self, "_time_bar"):
@@ -1788,7 +1792,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Season dot with wider margins to spread the two event listings
         self._sb_season_dot = Gtk.Label(label="●")
         self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
-        self._sb_season_dot.set_margin_start(12); self._sb_season_dot.set_margin_end(12)
+        self._sb_season_dot.set_margin_start(20); self._sb_season_dot.set_margin_end(20)
         self._sb_season_dot.set_visible(False)
         _centre_box.append(self._sb_season_dot)
         # Next/upcoming event
@@ -2428,9 +2432,9 @@ class MainWindow(Adw.ApplicationWindow):
         da = Gtk.DrawingArea()
         da.add_css_class("rubric-vtab")
 
-        # Estimate pixel extents: ~9px per char at 11pt, ~15px tall
-        est_w = max(50, len(text) * 9)
-        est_h = 15
+        # Estimate pixel extents: ~10px per char at 13pt, ~17px tall
+        est_w = max(55, len(text) * 10)
+        est_h = 17
         # DrawingArea size request: width = text height + padding, height = text width + padding
         da.set_size_request(est_h + 10, est_w + 14)
 
@@ -2439,7 +2443,7 @@ class MainWindow(Adw.ApplicationWindow):
             color = style.get_color()
             cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
             layout = widget.create_pango_layout(t)
-            fd = Pango.FontDescription.from_string("11")
+            fd = Pango.FontDescription.from_string("13")
             layout.set_font_description(fd)
             _ink, log = layout.get_pixel_extents()
             tw, th = log.width, log.height
@@ -6005,7 +6009,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             chip.add_css_class("flat")
             chip.set_tooltip_text(f"{prefix} {number} — {title}\nClick to open on Hymnary  ·  Right-click to add to service")
             title_lbl = Gtk.Label(label=title)
-            title_lbl.add_css_class("caption")
             title_lbl.set_margin_start(6); title_lbl.set_margin_end(4)
             title_lbl.set_wrap(False)
             title_lbl.set_max_width_chars(22)
@@ -6028,21 +6031,38 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             chip.add_controller(rg)
             pill.append(chip)
 
-            # YouTube button — right side of linked pill; B&W icon
+            # YouTube button — right side of linked pill; white rect + accent-coloured play arrow
             yt_query = urllib.parse.quote(f"{prefix} {number} {title}")
             yt_url = f"https://www.youtube.com/results?search_query={yt_query}"
             yt_btn = Gtk.Button(tooltip_text=f"Search YouTube: {prefix} {number}")
             yt_btn.add_css_class("flat")
-            if _yt_pb:
-                # Desaturate via a greyscale pixbuf copy
+            import math as _math
+            _yt_da = Gtk.DrawingArea(); _yt_da.set_size_request(20, 14)
+            def _draw_yt(_da, cr, w, h):
+                r = 2.5
+                cr.new_path()
+                cr.arc(r, r, r, _math.pi, -_math.pi / 2)
+                cr.arc(w - r, r, r, -_math.pi / 2, 0)
+                cr.arc(w - r, h - r, r, 0, _math.pi / 2)
+                cr.arc(r, h - r, r, _math.pi / 2, _math.pi)
+                cr.close_path()
+                cr.set_source_rgb(1, 1, 1)
+                cr.fill()
                 try:
-                    grey_pb = _yt_pb.copy()
-                    _yt_pb.saturate_and_pixelate(grey_pb, 0.0, False)
-                    yt_btn.set_child(Gtk.Image.new_from_pixbuf(grey_pb))
+                    from gi.repository import Adw as _Adw
+                    _sm = _Adw.StyleManager.get_default()
+                    _rgba = _sm.get_accent_color().to_rgba(_sm.get_dark())
+                    cr.set_source_rgba(_rgba.red, _rgba.green, _rgba.blue, _rgba.alpha)
                 except Exception:
-                    yt_btn.set_child(Gtk.Image.new_from_pixbuf(_yt_pb))
-            else:
-                yt_lbl = Gtk.Label(label="▶"); yt_lbl.add_css_class("dim-label"); yt_btn.set_child(yt_lbl)
+                    cr.set_source_rgb(0.11, 0.44, 0.85)
+                mx, my = w * 0.36, h * 0.25
+                cr.move_to(mx, my)
+                cr.line_to(mx, h - my)
+                cr.line_to(w - mx * 0.55, h * 0.5)
+                cr.close_path()
+                cr.fill()
+            _yt_da.set_draw_func(_draw_yt)
+            yt_btn.set_child(_yt_da)
             yt_btn.connect("clicked", lambda _b, u=yt_url: Gtk.show_uri(None, u, 0))
             pill.append(yt_btn)
 
