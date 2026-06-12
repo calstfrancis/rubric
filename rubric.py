@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.4"
+APP_VERSION = "0.17.5-dev1"
 
 
 config = Config()
@@ -2901,7 +2901,9 @@ class MainWindow(Adw.ApplicationWindow):
             self._content_widget.set_content(entry.content_typst)
             row = self._find_row_for_index(idx)
             if isinstance(row, Adw.ActionRow):
-                row.set_subtitle(self._note_preview(entry.content_typst))
+                preview = self._note_preview(entry.content_typst) or self._scripture_inline_preview(entry.name)
+                sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
+                row.set_subtitle(sub)
             self._mark_modified()
         lookup_hymn(prefix, number, on_result)
 

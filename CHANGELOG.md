@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev1 — Fix hymn lookup and cached title HTML entities
+
+### Fixed
+
+- **Hymn title HTML entities** — titles stored in cache (and newly fetched) now have HTML entities decoded (`&#039;` → `'`, `&amp;` → `&`, etc.). Existing cached entries are decoded automatically at read time — no cache purge needed.
+- **Hymn title extraction robustness** — added JSON-LD structured data as a second extraction method (between og:title and `<title>` tag fallback), and relaxed the og:title regex to handle attribute variations.
+- **Hymn row subtitle** — after inserting a hymn via lookup, the service row subtitle now correctly shows the leader and note preview in `Leader · Note` format, matching other rows.
+
+---
+
 ## 0.17.4 — Accessibility improvements, beautification, smart save, live preview
 
 ### Added

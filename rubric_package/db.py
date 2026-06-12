@@ -12,6 +12,7 @@ The index stores each file's mtime so stale entries are re-read automatically.
 
 from __future__ import annotations
 
+import html as _html
 import json
 import sqlite3
 from pathlib import Path
@@ -87,7 +88,7 @@ def hymn_get(key: str) -> str | None:
     con = _open()
     try:
         row = con.execute("SELECT title FROM hymn_cache WHERE key = ?", (key,)).fetchone()
-        return row["title"] if row else None
+        return _html.unescape(row["title"]) if row else None
     finally:
         con.close()
 

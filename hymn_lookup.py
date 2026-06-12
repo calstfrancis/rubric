@@ -9,6 +9,7 @@ Supported hymnals:
 Results are cached in the Rubric SQLite database (~/.local/share/rubric/rubric.db).
 """
 
+import html as _html
 import threading
 import time
 import urllib.request
@@ -32,6 +33,39 @@ HYMNALS: dict[str, tuple[str, str]] = {
     "MV":  ("MV2007",   "More Voices"),
     "LUS": ("LUS2022",  "Let Us Sing"),
 }
+
+
+def _extract_hymn_title(html_text: str) -> str:
+    """Extract and clean the hymn title from a Hymnary.org page."""
+    title = ""
+
+    # 1. og:title meta tag — most reliable, set server-side
+    og = re.search(
+        r'<meta\s[^>]*property=["\']og:title["\']\s*[^>]*content=["\']([^"\']+)["\']'
+        r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s*[^>]*property=["\']og:title["\']',
+        html_text, re.IGNORECASE)
+    if og:
+        title = (og.group(1) or og.group(2) or "").strip()
+        clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
+        if clean:
+            title = clean.group(1).strip()
+
+    # 2. JSON-LD structured data (more machine-readable than og:title)
+    if not title:
+        jld = re.search(
+            r'"name"\s*:\s*"([^"]{3,120})"', html_text)
+        if jld:
+            title = jld.group(1).strip()
+
+    # 3. <title> tag fallback
+    if not title:
+        t = re.search(r"<title[^>]*>([^<]+)</title>", html_text, re.IGNORECASE)
+        if t:
+            raw = t.group(1).strip().split("|")[0].strip()
+            clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
+            title = clean.group(1).strip() if clean else raw
+
+    return _html.unescape(title)
 
 
 def parse_hymn_ref(text: str) -> tuple[str, int] | None:
@@ -79,22 +113,7 @@ def lookup_hymn(prefix: str, number: int, callback):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 html = resp.read().decode("utf-8", errors="replace")
 
-            title = ""
-            og = re.search(
-                r'<meta\s[^>]*property=["\']og:title["\']\s[^>]*content=["\']([^"\']+)["\']'
-                r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s[^>]*property=["\']og:title["\']',
-                html, re.IGNORECASE)
-            if og:
-                title = (og.group(1) or og.group(2) or "").strip()
-                clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
-                if clean:
-                    title = clean.group(1).strip()
-            else:
-                t = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
-                if t:
-                    raw = t.group(1).strip().split("|")[0].strip()
-                    clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
-                    title = clean.group(1).strip() if clean else raw
+            title = _extract_hymn_title(html)
 
             if title and "hymnary" not in title.lower() and len(title) > 2:
                 if _DB_OK:
@@ -163,25 +182,7 @@ def prefetch_hymnal(book: str, on_progress=None, on_done=None):
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     html = resp.read().decode("utf-8", errors="replace")
 
-                title = ""
-                # og:title is set server-side and reliable even on JS-rendered pages
-                og = re.search(
-                    r'<meta\s[^>]*property=["\']og:title["\']\s[^>]*content=["\']([^"\']+)["\']'
-                    r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s[^>]*property=["\']og:title["\']',
-                    html, re.IGNORECASE)
-                if og:
-                    title = (og.group(1) or og.group(2) or "").strip()
-                    # Strip leading "Book Name: NN. " prefix if present
-                    clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
-                    if clean:
-                        title = clean.group(1).strip()
-                else:
-                    # Fallback: <title> tag
-                    t = re.search(r"<title[^>]*>([^<]+)</title>", html, re.IGNORECASE)
-                    if t:
-                        raw = t.group(1).strip().split("|")[0].strip()
-                        clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
-                        title = clean.group(1).strip() if clean else raw
+                title = _extract_hymn_title(html)
 
                 if title and "hymnary" not in title.lower() and len(title) > 2:
                     if _DB_OK:
