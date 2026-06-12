@@ -7,14 +7,18 @@ Supported hymnals:
   LUS — Let Us Sing! (United Church of Canada supplement)
 
 Results are cached in the Rubric SQLite database (~/.local/share/rubric/rubric.db).
+
+Network requests use curl (via subprocess) rather than Python's urllib to avoid
+TLS fingerprint blocking that Hymnary.org applies to non-browser HTTP stacks.
+Inside a Flatpak sandbox, requests are routed through flatpak-spawn --host curl.
 """
 
 import html as _html
+import subprocess
 import threading
 import time
-import urllib.request
-import urllib.error
 import re
+from pathlib import Path
 
 import gi
 gi.require_version("GLib", "2.0")
@@ -27,12 +31,54 @@ except ImportError:
     _DB_OK = False
     def _hymn_search(q, limit=30): return []
 
+# Use flatpak-spawn --host when running inside the sandbox
+_IS_FLATPAK = Path("/.flatpak-info").exists()
+_CURL = ["flatpak-spawn", "--host", "curl"] if _IS_FLATPAK else ["curl"]
+
+_CURL_HEADERS = [
+    "-H", "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "-H", "Accept-Language: en-US,en;q=0.9",
+]
+
 # Hymnary.org book identifiers
 HYMNALS: dict[str, tuple[str, str]] = {
     "VU":  ("VU1996",   "Voices United"),
     "MV":  ("MV2007",   "More Voices"),
     "LUS": ("LUS2022",  "Let Us Sing"),
 }
+
+
+def _fetch_url(url: str) -> tuple[str | None, str | None]:
+    """Fetch URL via curl. Returns (html_text, error_message)."""
+    cmd = _CURL + [
+        "--silent", "--max-time", "15", "--location",
+        "--write-out", "\n__HTTP_CODE__%{http_code}",
+        *_CURL_HEADERS,
+        url,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+    except FileNotFoundError:
+        return None, "curl not found"
+    except subprocess.TimeoutExpired:
+        return None, "Request timed out"
+    except Exception as e:
+        return None, f"Error: {e}"
+
+    if result.returncode != 0:
+        return None, f"curl error {result.returncode}"
+
+    # Split status code off the end
+    body, _, code_str = result.stdout.rpartition("\n__HTTP_CODE__")
+    code = int(code_str.strip()) if code_str.strip().isdigit() else 0
+    if code == 403:
+        return None, "HTTP 403 — Hymnary.org blocked the request"
+    if code == 404:
+        return None, "404"
+    if code not in (200, 0):
+        return None, f"HTTP {code}"
+    return body, None
 
 
 def _extract_hymn_title(html_text: str) -> str:
@@ -50,10 +96,9 @@ def _extract_hymn_title(html_text: str) -> str:
         if clean:
             title = clean.group(1).strip()
 
-    # 2. JSON-LD structured data (more machine-readable than og:title)
+    # 2. JSON-LD structured data
     if not title:
-        jld = re.search(
-            r'"name"\s*:\s*"([^"]{3,120})"', html_text)
+        jld = re.search(r'"name"\s*:\s*"([^"]{3,120})"', html_text)
         if jld:
             title = jld.group(1).strip()
 
@@ -105,45 +150,30 @@ def lookup_hymn(prefix: str, number: int, callback):
             return
 
         url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"
-        _HEADERS = {
-            "User-Agent": (
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        try:
-            req = urllib.request.Request(url, headers=_HEADERS)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                raw_bytes = resp.read()
-            html_text = raw_bytes.decode("utf-8", errors="replace")
+        html_text, err = _fetch_url(url)
+        if err == "404":
+            GLib.idle_add(callback, None, f"#{number} not found in {hymnal_name}")
+            return
+        if err:
+            GLib.idle_add(callback, None, err)
+            return
 
-            # Dump first 4 KB to /tmp for diagnosis when title extraction fails
-            title = _extract_hymn_title(html_text)
-            if not title or "hymnary" in title.lower() or len(title) <= 2:
-                try:
-                    import tempfile, os
-                    dbg = os.path.join(tempfile.gettempdir(), "rubric_hymn_debug.html")
-                    with open(dbg, "w", encoding="utf-8") as fh:
-                        fh.write(html_text[:8192])
-                except Exception:
-                    pass
-                GLib.idle_add(callback, None,
-                              f"#{number} not found in {hymnal_name} (debug: /tmp/rubric_hymn_debug.html)")
-                return
-
-            if _DB_OK:
-                hymn_set(key, title)
-            GLib.idle_add(callback, title, None)
-
-        except urllib.error.HTTPError as e:
+        title = _extract_hymn_title(html_text)
+        if not title or "hymnary" in title.lower() or len(title) <= 2:
+            try:
+                import tempfile, os
+                dbg = os.path.join(tempfile.gettempdir(), "rubric_hymn_debug.html")
+                with open(dbg, "w", encoding="utf-8") as fh:
+                    fh.write(html_text[:8192])
+            except Exception:
+                pass
             GLib.idle_add(callback, None,
-                          f"HTTP {e.code} from Hymnary.org")
-        except urllib.error.URLError as e:
-            GLib.idle_add(callback, None, f"Network error: {e.reason}")
-        except Exception as e:
-            GLib.idle_add(callback, None, f"Error: {type(e).__name__}: {e}")
+                          f"#{number} not found in {hymnal_name} (debug: /tmp/rubric_hymn_debug.html)")
+            return
+
+        if _DB_OK:
+            hymn_set(key, title)
+        GLib.idle_add(callback, title, None)
 
     threading.Thread(target=fetch, daemon=True).start()
 
@@ -188,22 +218,14 @@ def prefetch_hymnal(book: str, on_progress=None, on_done=None):
                     GLib.idle_add(on_progress, n, max_n)
                 continue
             url = f"https://hymnary.org/hymn/{hymnal_id}/{n}"
-            try:
-                req = urllib.request.Request(
-                    url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    html = resp.read().decode("utf-8", errors="replace")
-
-                title = _extract_hymn_title(html)
-
+            html_text, err = _fetch_url(url)
+            if not err and html_text:
+                title = _extract_hymn_title(html_text)
                 if title and "hymnary" not in title.lower() and len(title) > 2:
                     if _DB_OK:
                         hymn_set(key, title)
                     added += 1
-            except Exception:
-                pass
-            time.sleep(0.25)
+            time.sleep(0.4)
             if on_progress:
                 GLib.idle_add(on_progress, n, max_n)
         if on_done:
