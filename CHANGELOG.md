@@ -4,12 +4,13 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.5-dev1 — Fix hymn lookup and cached title HTML entities
+## 0.17.5-dev1 — Fix hymn lookup: Wayback Machine fallback for Hymnary.org blocks
 
 ### Fixed
 
+- **Hymn lookup blocked by Hymnary.org** — Hymnary.org now returns HTTP 403 for all programmatic access (TLS fingerprinting + IP policy). Rubric now falls back to the Wayback Machine (archive.org) when Hymnary.org blocks the request. The Wayback Machine has full cached copies of all VU/MV/LUS hymn pages and allows programmatic access. Lookups work transparently; results are cached locally so each hymn is only fetched once.
 - **Hymn title HTML entities** — titles stored in cache (and newly fetched) now have HTML entities decoded (`&#039;` → `'`, `&amp;` → `&`, etc.). Existing cached entries are decoded automatically at read time — no cache purge needed.
-- **Hymn title extraction robustness** — added JSON-LD structured data as a second extraction method (between og:title and `<title>` tag fallback), and relaxed the og:title regex to handle attribute variations.
+- **Hymn title extraction robustness** — added JSON-LD structured data as a second extraction method and relaxed the og:title regex.
 - **Hymn row subtitle** — after inserting a hymn via lookup, the service row subtitle now correctly shows the leader and note preview in `Leader · Note` format, matching other rows.
 
 ---

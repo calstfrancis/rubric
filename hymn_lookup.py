@@ -49,36 +49,57 @@ HYMNALS: dict[str, tuple[str, str]] = {
 }
 
 
-def _fetch_url(url: str) -> tuple[str | None, str | None]:
-    """Fetch URL via curl. Returns (html_text, error_message)."""
+def _curl_get(url: str, extra_headers: list[str] | None = None) -> tuple[str | None, int]:
+    """Run curl and return (body, http_code). http_code=0 on curl failure."""
+    headers = _CURL_HEADERS + (extra_headers or [])
     cmd = _CURL + [
-        "--silent", "--max-time", "15", "--location",
+        "--silent", "--max-time", "20", "--location",
         "--write-out", "\n__HTTP_CODE__%{http_code}",
-        *_CURL_HEADERS,
-        url,
+        *headers, url,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-    except FileNotFoundError:
-        return None, "curl not found"
-    except subprocess.TimeoutExpired:
-        return None, "Request timed out"
-    except Exception as e:
-        return None, f"Error: {e}"
-
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        return None, 0
     if result.returncode != 0:
-        return None, f"curl error {result.returncode}"
-
-    # Split status code off the end
+        return None, 0
     body, _, code_str = result.stdout.rpartition("\n__HTTP_CODE__")
     code = int(code_str.strip()) if code_str.strip().isdigit() else 0
-    if code == 403:
-        return None, "HTTP 403 — Hymnary.org blocked the request"
+    return body, code
+
+
+def _wayback_url(url: str) -> str | None:
+    """Return the most recent Wayback Machine snapshot URL for url, or None."""
+    api = (
+        "http://archive.org/wayback/available?url="
+        + url.replace("https://", "").replace("http://", "")
+    )
+    body, code = _curl_get(api, extra_headers=["-H", "Accept: application/json"])
+    if not body or code not in (200, 0):
+        return None
+    m = re.search(r'"url"\s*:\s*"(https?://web\.archive\.org/web/[^"]+)"', body)
+    return m.group(1) if m else None
+
+
+def _fetch_url(url: str) -> tuple[str | None, str | None]:
+    """Fetch a Hymnary.org page, falling back to Wayback Machine on 403.
+    Returns (html_text, error_message)."""
+    body, code = _curl_get(url)
+    if code == 200 and body:
+        return body, None
     if code == 404:
         return None, "404"
-    if code not in (200, 0):
-        return None, f"HTTP {code}"
-    return body, None
+
+    # 403 or any block — try Wayback Machine archive
+    wayback = _wayback_url(url)
+    if wayback:
+        body, code = _curl_get(wayback)
+        if code == 200 and body:
+            return body, None
+
+    if code == 403:
+        return None, "HTTP 403 — Hymnary.org blocked the request"
+    return None, f"HTTP {code}" if code else "Network error"
 
 
 def _extract_hymn_title(html_text: str) -> str:
