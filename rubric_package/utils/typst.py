@@ -204,15 +204,50 @@ def parse_typst_errors(stderr: str) -> list[dict]:
     return errors
 
 
+_FRIENDLY_ERRORS = [
+    (r"expected closing `\}`",
+     "An opening `{` was never closed — check for a missing `}` near this line"),
+    (r"expected closing `\]`",
+     "A `[` was opened but never closed — check for a missing `]`"),
+    (r"expected closing `\)`",
+     "A `(` was opened but never closed — check for a missing `)`"),
+    (r"unknown variable[^`]*`([^`]+)`",
+     "'{0}' isn't recognised — remove the # or check the spelling"),
+    (r"not found in scope[^`]*`([^`]+)`",
+     "'{0}' couldn't be found — check the spelling or remove the #"),
+    (r"bibliography.*not found|bib.*file.*not.*found|cannot open.*\.bib",
+     "The bibliography file (.bib) wasn't found — check the path in Settings → Bibliography"),
+    (r"file not found|cannot open|no such file",
+     "A referenced file is missing — make sure all linked files are in the same folder"),
+    (r"font.*not found|cannot find font",
+     "A font isn't installed — try a different font in Settings, or install the missing one"),
+    (r"expected content",
+     "There's a formatting problem near this line — check for unclosed brackets or stray #"),
+    (r"unexpected end of file",
+     "The document ended unexpectedly — an opening bracket or block was never closed"),
+    (r"cannot convert|type mismatch",
+     "A value in your document is the wrong type — check numbers vs. text in function arguments"),
+]
+
+
 def format_typst_error(stderr: str) -> str:
-    """Return a short human-readable error string from typst stderr."""
+    """Return a plain-English error string from typst stderr."""
     errors = parse_typst_errors(stderr)
-    if not errors:
-        last = stderr.strip().splitlines()
-        return last[-1][:120] if last else "typst error"
-    e = errors[0]
-    loc = f" (line {e['line']})" if e["line"] else ""
-    return f"{e['message']}{loc}"
+    raw_msg = errors[0]["message"] if errors else (stderr.strip().splitlines() or [""])[-1]
+    line_no = errors[0]["line"] if errors else None
+    loc = f" (line {line_no})" if line_no else ""
+
+    import re as _re
+    for pattern, friendly in _FRIENDLY_ERRORS:
+        m = _re.search(pattern, raw_msg, _re.IGNORECASE)
+        if m:
+            try:
+                msg = friendly.format(*m.groups())
+            except (IndexError, KeyError):
+                msg = friendly
+            return msg + loc
+
+    return raw_msg[:140] + loc
 
 
 def strip_typst_plain(text: str) -> str:

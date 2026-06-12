@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.3"
+APP_VERSION = "0.17.4-dev1"
 
 
 config = Config()
@@ -330,7 +330,9 @@ class BulletinPrefsWindow(Adw.Window):
             config.bulletin["cover_image"] = ""
             config.save()
             cover_row.set_subtitle("None selected")
-            if self._main: self._main._schedule_preview_update()
+            if self._main:
+                self._main._schedule_preview_update()
+                self._main._refresh_cover_thumb()
 
         def _pick_cover(_btn):
             dlg = Gtk.FileDialog(title="Choose cover image")
@@ -347,7 +349,9 @@ class BulletinPrefsWindow(Adw.Window):
                 config.bulletin["cover_image"] = path
                 config.save()
                 cover_row.set_subtitle(Path(path).name)
-                if self._main: self._main._schedule_preview_update()
+                if self._main:
+                    self._main._schedule_preview_update()
+                    self._main._refresh_cover_thumb()
             dlg.open(self, None, _done)
 
         pick_btn = Gtk.Button(label="Choose…", valign=Gtk.Align.CENTER)
@@ -1615,6 +1619,11 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _build_ui(self):
         hdr = Adw.HeaderBar()
+        hdr.add_css_class("rubric-main-hdr")
+        self._season_hdr_css = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self._season_hdr_css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         # Palette sidebar toggle — all the way at the left
         self._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show",
@@ -1699,6 +1708,15 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.set_title_widget(title_btn)
         self.selected_date = None
 
+        # Cover art thumbnail — shown when a cover image is configured
+        self._cover_thumb = Gtk.Image()
+        self._cover_thumb.set_pixel_size(28)
+        self._cover_thumb.add_css_class("cover-thumb")
+        self._cover_thumb.set_visible(False)
+        self._cover_thumb.set_tooltip_text("Cover image — change in Settings → Bulletin")
+        hdr.pack_start(self._cover_thumb)
+        self._refresh_cover_thumb()
+
         sb = Gtk.Button(icon_name="document-save", tooltip_text="Save (Ctrl+S)")
         sb.add_css_class("suggested-action"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
 
@@ -1723,6 +1741,13 @@ class MainWindow(Adw.ApplicationWindow):
         self._menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic", tooltip_text="Menu")
         hdr.pack_end(self._menu_btn)
         self._refresh_menu()
+
+        _help_btn = Gtk.Button(icon_name="help-contents-symbolic",
+                               tooltip_text="Quick help — what each part of the screen does")
+        _help_btn.add_css_class("flat")
+        _help_btn.connect("clicked", self._show_ui_help_popover)
+        self._help_header_btn = _help_btn
+        hdr.pack_end(_help_btn)
 
         self._preview_visible = False
         self._preview_pending_id = None
@@ -1759,22 +1784,22 @@ class MainWindow(Adw.ApplicationWindow):
         _left_box.set_margin_start(2)
 
         self._simple_status_btn, self._simple_status_lbl = _status_toggle_btn(
-            "SIMPLE", "Simple mode — hides Typst export, GitHub sync, and advanced features")
+            "SIMPLE", "Simple mode — hides export, GitHub sync and other advanced options. Good for first-time use.")
         self._simple_status_btn.connect("clicked", self._on_simple_status_clicked)
         _left_box.append(self._simple_status_btn)
 
         self._gost_status_btn, self._gost_status_lbl = _status_toggle_btn(
-            "GOST", "Toggle GOST Type B engineering font for the whole UI")
+            "GOST", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
         self._gost_status_btn.connect("clicked", self._on_gost_status_clicked)
         _left_box.append(self._gost_status_btn)
 
         self._compact_status_btn, self._compact_status_lbl = _status_toggle_btn(
-            "Compact", "Compact view — tighter row spacing")
+            "Compact", "Compact view — reduces spacing between service elements so more fit on screen at once")
         self._compact_status_btn.connect("clicked", self._on_compact_status_clicked)
         _left_box.append(self._compact_status_btn)
 
         self._dev_status_btn, self._dev_status_lbl = _status_toggle_btn(
-            "Dev", "Developer mode — shows 'Copy Typst' button in preview footer")
+            "Dev", "Developer mode — shows a 'Copy Typst source' button in the preview panel for debugging bulletin layout")
         self._dev_status_btn.connect("clicked", self._on_dev_status_clicked)
         self._dev_mode = False
         _left_box.append(self._dev_status_btn)
@@ -1808,7 +1833,7 @@ class MainWindow(Adw.ApplicationWindow):
         _right_box.set_margin_end(2)
 
         self._focus_status_btn, self._focus_status_lbl = _status_toggle_btn(
-            "Focus", "Focus mode — hide palette and element list")
+            "Focus", "Focus mode — hides the element palette and list so you can concentrate on the notes editor")
         self._focus_status_btn.connect("clicked", lambda _: self._toggle_focus_mode())
         _right_box.append(self._focus_status_btn)
 
@@ -1822,6 +1847,14 @@ class MainWindow(Adw.ApplicationWindow):
         _git_btn.connect("clicked", lambda _: self.git_push())
         self._git_btn = _git_btn
         _right_box.append(_git_btn)
+
+        # Save-state chip — shows "● Unsaved" when modified, hidden when saved
+        self._save_state_lbl = Gtk.Label()
+        self._save_state_lbl.add_css_class("caption")
+        self._save_state_lbl.set_margin_start(6); self._save_state_lbl.set_margin_end(4)
+        self._save_state_lbl.set_visible(False)
+        self._save_state_lbl.set_tooltip_text("Unsaved changes — press Ctrl+S to save")
+        _right_box.append(self._save_state_lbl)
 
         ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
         ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")
@@ -2111,9 +2144,15 @@ class MainWindow(Adw.ApplicationWindow):
             if keyval == Gdk.KEY_Delete else False)
         self.order_listbox.add_controller(_list_key)
         placeholder = Adw.StatusPage(title="Service is empty",
-            description="Double-click an element in the palette, or drag elements here.",
+            description="Double-click an element in the palette to add it, or drag elements here.",
             icon_name="rubric-symbolic")
-        placeholder.set_vexpand(True); self.order_listbox.set_placeholder(placeholder)
+        placeholder.set_vexpand(True)
+        _new_svc_btn = Gtk.Button(label="Start with lectionary")
+        _new_svc_btn.add_css_class("suggested-action")
+        _new_svc_btn.set_halign(Gtk.Align.CENTER)
+        _new_svc_btn.connect("clicked", lambda _: self._seed_lectionary_service_today())
+        placeholder.set_child(_new_svc_btn)
+        self.order_listbox.set_placeholder(placeholder)
         self._flat_scroll.set_child(self.order_listbox)
         self._view_stack.add_named(self._flat_scroll, "list")
 
@@ -2127,12 +2166,20 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
 
-        # Season colour strip — 3px bar at top of order panel
+        # Season colour strip — 5px gradient bar at top of order panel
         self._order_season_strip = Gtk.DrawingArea()
-        self._order_season_strip.set_size_request(-1, 3)
-        def _draw_order_strip(_da, cr, _w, _h):
+        self._order_season_strip.set_size_request(-1, 5)
+        def _draw_order_strip(_da, cr, w, _h):
+            import cairo as _cairo
             r, g, b = self._colour_bar_rgb
-            cr.set_source_rgb(r, g, b)
+            try:
+                pat = _cairo.LinearGradient(0, 0, w, 0)
+                pat.add_color_stop_rgba(0.0, r, g, b, 0.9)
+                pat.add_color_stop_rgba(0.6, r, g, b, 0.65)
+                pat.add_color_stop_rgba(1.0, r, g, b, 0.2)
+                cr.set_source(pat)
+            except Exception:
+                cr.set_source_rgb(r, g, b)
             cr.paint()
         self._order_season_strip.set_draw_func(_draw_order_strip)
         order_box.append(self._order_season_strip)
@@ -2346,8 +2393,11 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Row factories ─────────────────────────────────────────────────────────
 
     def _make_item_row(self, si: ServiceItem, global_idx: int) -> Adw.ActionRow:
-        preview = self._note_preview(si.content_typst)
-        subtitle_text = si.leader if si.leader else preview
+        preview = self._note_preview(si.content_typst) or self._scripture_inline_preview(si.name)
+        if si.leader and preview:
+            subtitle_text = f"{si.leader} · {preview}"
+        else:
+            subtitle_text = si.leader or preview
         row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
         row.set_subtitle_lines(1); row._entry = si
         colour = _section_colour(si.section)
@@ -2371,6 +2421,14 @@ class MainWindow(Adw.ApplicationWindow):
         bx.set_margin_top(4); bx.set_margin_bottom(4); bx.set_margin_start(8); bx.set_margin_end(8)
         bx.add_css_class("divider-pill")
         colour = _section_colour(div.title)
+        # Left accent stripe in section colour
+        r, g, b = _hex_to_rgb(colour)
+        stripe = Gtk.DrawingArea(); stripe.set_size_request(4, -1)
+        def _draw_stripe(_da, cr, _w, _h, _r=r, _g=g, _b=b):
+            cr.set_source_rgb(_r, _g, _b); cr.paint()
+        stripe.set_draw_func(_draw_stripe)
+        stripe.set_valign(Gtk.Align.FILL)
+        bx.append(stripe)
         dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER); bx.append(dot)
         handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER); bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
@@ -3087,6 +3145,28 @@ class MainWindow(Adw.ApplicationWindow):
                 i += 1
         return None
 
+    _BIBLE_REF_RE = re.compile(
+        r'\b((?:[1-3]\s*)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(\d+:\d+(?:[–\-]\d+)?)\b'
+    )
+
+    def _scripture_inline_preview(self, name: str) -> str:
+        """Return a short verse snippet if the element name is a Bible reference and it's cached."""
+        m = self._BIBLE_REF_RE.search(name)
+        if not m:
+            return ""
+        ref = f"{m.group(1)} {m.group(2)}"
+        try:
+            from rubric_package.db import bible_get as _bg
+            translation = getattr(config, "bible_translation", "web")
+            text = _bg(f"{translation}:{ref}")
+            if not text:
+                return ""
+            plain = strip_typst_plain(text) if text.startswith('#') else text
+            words = plain.split()
+            return '"' + ' '.join(words[:8]) + ('…"' if len(words) > 8 else '"')
+        except Exception:
+            return ""
+
     def _note_preview(self, note: str) -> str:
         if not note:
             return ""
@@ -3107,7 +3187,9 @@ class MainWindow(Adw.ApplicationWindow):
         entry.content_typst = content
         row = self._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
-            row.set_subtitle(self._note_preview(content))
+            preview = self._note_preview(content) or self._scripture_inline_preview(entry.name)
+            sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
+            row.set_subtitle(sub)
         self._mark_modified()
         self._detect_scripture_ref(content)
 
@@ -3323,6 +3405,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.season_dot.set_markup(f'<span color="{cx}">●</span>')
         self.season_label.set_markup(f'<span color="{cx}">{GLib.markup_escape_text(info["week"])}</span>')
         self._colour_bar_rgb = _hex_to_rgb(cx); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
+        if hasattr(self, "_season_hdr_css"):
+            r8, g8, b8 = (int(cx.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+            self._season_hdr_css.load_from_data(
+                f".rubric-main-hdr {{ background-image: linear-gradient("
+                f"to right, rgba({r8},{g8},{b8},0.09) 0%, transparent 55%); }}".encode())
         if hasattr(self, "_sb_season_dot"):
             self._sb_season_dot.set_markup(f'<span color="{cx}">●</span>')
             self._sb_season_dot.set_visible(True)
@@ -3464,6 +3551,20 @@ class MainWindow(Adw.ApplicationWindow):
         mode_box.append(self._preview_manuscript_btn)
         hdr.append(mode_box)
 
+        # Live toggle — forces instant HTML preview (no Typst compile)
+        self._preview_live_btn = Gtk.ToggleButton(label="Live")
+        self._preview_live_btn.set_tooltip_text(
+            "Live mode — instant HTML preview that updates as you type, without waiting for Typst to compile")
+        self._preview_live_btn.add_css_class("flat")
+        self._preview_live_mode = False
+
+        def _on_live_toggled(btn):
+            self._preview_live_mode = btn.get_active()
+            self._do_preview_update()
+
+        self._preview_live_btn.connect("toggled", _on_live_toggled)
+        hdr.append(self._preview_live_btn)
+
         self._bulletin_edit_btn = Gtk.ToggleButton(icon_name="document-edit-symbolic",
                                                    tooltip_text="Edit bulletin text for this service")
         self._bulletin_edit_btn.add_css_class("flat")
@@ -3502,6 +3603,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         box.append(hdr)
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        box.add_css_class("preview-pane")
 
         self._preview_stack = Gtk.Stack()
         self._preview_stack.set_vexpand(True)
@@ -3800,7 +3902,8 @@ class MainWindow(Adw.ApplicationWindow):
             self._bulletin_edit_btn.set_visible(mode == "bulletin")
 
         typst = self._find_typst()
-        if typst and not getattr(self, "_preview_compiling", False):
+        live_mode = getattr(self, "_preview_live_mode", False)
+        if typst and not live_mode and not getattr(self, "_preview_compiling", False):
             # Capture Typst source in main thread (GTK widget access required)
             try:
                 if mode == "manuscript":
@@ -3819,7 +3922,7 @@ class MainWindow(Adw.ApplicationWindow):
             ).start()
             return False
 
-        # Typst not found or compile in progress — HTML fallback
+        # Live mode, Typst not found, or compile already in progress — HTML fallback
         try:
             if mode == "manuscript":
                 html = self._build_manuscript_html()
@@ -3959,7 +4062,58 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_popout_win = win  # prevent GC
         win.present()
 
-    def _mark_modified(self): self.modified=True; self._update_title(); self._schedule_preview_update()
+    def _mark_modified(self):
+        self.modified = True
+        self._update_title()
+        self._schedule_preview_update()
+        self._update_save_state_chip()
+        if self.current_file:
+            if getattr(self, "_deferred_save_id", None):
+                GLib.source_remove(self._deferred_save_id)
+            self._deferred_save_id = GLib.timeout_add(2000, self._deferred_save)
+
+    def _refresh_cover_thumb(self):
+        if not hasattr(self, "_cover_thumb"):
+            return
+        path = config.bulletin.get("cover_image", "").strip()
+        if path and Path(path).is_file():
+            try:
+                from gi.repository import GdkPixbuf
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 28, 28, True)
+                self._cover_thumb.set_from_pixbuf(pb)
+                self._cover_thumb.set_visible(True)
+                return
+            except Exception:
+                pass
+        self._cover_thumb.set_visible(False)
+
+    def _update_save_state_chip(self):
+        if not hasattr(self, "_save_state_lbl"):
+            return
+        if self.modified:
+            self._save_state_lbl.set_markup("<span foreground='#e5a50a'>● Unsaved</span>")
+            self._save_state_lbl.set_visible(True)
+            # Start pulse animation after 30s of being unsaved
+            if not getattr(self, "_unsaved_pulse_id", None):
+                self._unsaved_pulse_id = GLib.timeout_add_seconds(30, self._start_unsaved_pulse)
+        else:
+            self._save_state_lbl.set_visible(False)
+            self._save_state_lbl.remove_css_class("unsaved-pulse")
+            if getattr(self, "_unsaved_pulse_id", None):
+                GLib.source_remove(self._unsaved_pulse_id)
+                self._unsaved_pulse_id = None
+
+    def _start_unsaved_pulse(self):
+        self._unsaved_pulse_id = None
+        if self.modified and hasattr(self, "_save_state_lbl"):
+            self._save_state_lbl.add_css_class("unsaved-pulse")
+        return False
+
+    def _deferred_save(self):
+        self._deferred_save_id = None
+        if self.modified and self.current_file:
+            self._write(self.current_file)
+        return False
 
     def _update_title(self):
         svc = self.service_title_entry.get_text() or "New service"
@@ -4310,6 +4464,62 @@ class MainWindow(Adw.ApplicationWindow):
         config.quickstart_dismissed = True
         config.save()
 
+    # ── UI help overlay ───────────────────────────────────────────────────────
+
+    def _show_ui_help_popover(self, _btn=None):
+        _AREAS = [
+            ("sidebar-show", "Element palette (left panel)",
+             "Drag elements from here into your service order — hymns, prayers, scripture, and more."),
+            ("view-list-symbolic", "Service order (centre)",
+             "Your running order. Click any row to edit its name, notes, or bulletin text. "
+             "Drag rows to reorder. Dividers create labelled sections (e.g. Gathering, Offering)."),
+            ("document-edit-symbolic", "Notes editor (right)",
+             "Write leader notes, liturgical text, or scripture here. "
+             "Supports Typst markup: *bold*, _italic_, #scripture[…]."),
+            ("web-browser-symbolic", "Preview panel",
+             "Live bulletin or manuscript preview. Bulletin mode compiles a PDF via Typst. "
+             "Live mode shows an instant HTML version while you type."),
+            ("view-more-horizontal-symbolic", "Status bar (bottom)",
+             "SIMPLE hides advanced features. Compact tightens spacing. "
+             "Dev shows Typst source. Focus hides the palette. "
+             "The ● Unsaved chip appears when you have unsaved changes."),
+            ("preferences-system-symbolic", "Menu (top-right ☰)",
+             "Settings, bulletin options, GitHub sync, scripture lookup, snippets, and the changelog."),
+        ]
+        pop = Gtk.Popover()
+        pop.set_has_arrow(True)
+        pop.set_position(Gtk.PositionType.BOTTOM)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_top(12); outer.set_margin_bottom(12)
+        outer.set_margin_start(4); outer.set_margin_end(4)
+        outer.set_size_request(320, -1)
+        hdr_lbl = Gtk.Label(label="What's on screen")
+        hdr_lbl.add_css_class("heading"); hdr_lbl.set_xalign(0)
+        hdr_lbl.set_margin_start(8); hdr_lbl.set_margin_bottom(6)
+        outer.append(hdr_lbl)
+        for icon, title, desc in _AREAS:
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            row_box.set_margin_start(4); row_box.set_margin_end(4)
+            row_box.set_margin_top(4); row_box.set_margin_bottom(4)
+            ico = Gtk.Image(icon_name=icon); ico.set_pixel_size(20)
+            ico.set_valign(Gtk.Align.START); ico.set_margin_top(2)
+            row_box.append(ico)
+            text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            t_lbl = Gtk.Label(label=title); t_lbl.add_css_class("body"); t_lbl.set_xalign(0)
+            d_lbl = Gtk.Label(label=desc); d_lbl.add_css_class("caption"); d_lbl.add_css_class("dim-label")
+            d_lbl.set_xalign(0); d_lbl.set_wrap(True); d_lbl.set_max_width_chars(40)
+            text_box.append(t_lbl); text_box.append(d_lbl)
+            row_box.append(text_box)
+            outer.append(row_box)
+            outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        more_btn = Gtk.Button(label="Open full help…")
+        more_btn.add_css_class("flat"); more_btn.set_margin_top(4)
+        more_btn.connect("clicked", lambda _: (pop.popdown(), self.open_help("help")))
+        outer.append(more_btn)
+        pop.set_child(outer)
+        pop.set_parent(self._help_header_btn)
+        pop.popup()
+
     # ── First-launch wizard ───────────────────────────────────────────────────
 
     def _show_first_launch_wizard(self):
@@ -4334,76 +4544,136 @@ class MainWindow(Adw.ApplicationWindow):
         hdr = Adw.HeaderBar(); hdr.set_show_end_title_buttons(False)
         win.set_content(tv); tv.add_top_bar(hdr)
 
+        # Scrollable content wrapper
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_propagate_natural_height(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        tv.set_content(scroll)
+
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         outer.set_margin_start(24); outer.set_margin_end(24)
         outer.set_margin_top(20); outer.set_margin_bottom(24)
+        scroll.set_child(outer)
 
-        # Hero
-        hero_icon = Gtk.Image(icon_name="rubric-symbolic")
-        hero_icon.set_pixel_size(48); hero_icon.set_margin_bottom(10)
-        outer.append(hero_icon)
-        title_lbl = Gtk.Label(label="Welcome to Rubric")
-        title_lbl.add_css_class("title-1"); title_lbl.set_margin_bottom(4)
-        outer.append(title_lbl)
-        sub_lbl = Gtk.Label(label="How would you like to start today's service?")
-        sub_lbl.add_css_class("dim-label"); sub_lbl.set_margin_bottom(20)
-        outer.append(sub_lbl)
+        # ── Step 1: church name (only if not set yet) ─────────────────────────
+        needs_church_name = not config.bulletin.get("church_name", "").strip()
 
-        # Choice cards
-        lb = Gtk.ListBox()
-        lb.set_selection_mode(Gtk.SelectionMode.NONE)
-        lb.add_css_class("boxed-list")
+        def _show_choice_step():
+            # Clear outer and rebuild for step 2
+            while True:
+                child = outer.get_first_child()
+                if child is None:
+                    break
+                outer.remove(child)
+            _build_choice_step()
 
-        def _choice_row(icon_name, title_text, subtitle_text):
-            row = Adw.ActionRow(title=title_text, subtitle=subtitle_text)
-            row.set_activatable(True)
-            img = Gtk.Image(icon_name=icon_name); img.set_pixel_size(28)
-            row.add_prefix(img)
-            row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
-            lb.append(row); return row
+        def _build_church_step():
+            hero_icon = Gtk.Image(icon_name="rubric-symbolic")
+            hero_icon.set_pixel_size(48); hero_icon.set_margin_bottom(10)
+            outer.append(hero_icon)
+            title_lbl = Gtk.Label(label="Welcome to Rubric")
+            title_lbl.add_css_class("title-1"); title_lbl.set_margin_bottom(4)
+            outer.append(title_lbl)
+            sub_lbl = Gtk.Label(label="First, what's the name of your church or community?")
+            sub_lbl.add_css_class("dim-label"); sub_lbl.set_margin_bottom(20)
+            outer.append(sub_lbl)
 
-        lect_subtitle = f"{week_label} — readings and standard order pre-filled"
-        lect_row   = _choice_row("x-office-calendar-symbolic",
-                                  "Start with today's lectionary", lect_subtitle)
-        blank_row  = _choice_row("document-new-symbolic",
-                                  "Blank service",
-                                  "Build your order from scratch")
-        tour_row   = _choice_row("help-about-symbolic",
-                                  "Show me around",
-                                  "Open the quick-start guide and tip strip")
-        outer.append(lb)
+            name_lb = Gtk.ListBox(); name_lb.add_css_class("boxed-list")
+            name_lb.set_selection_mode(Gtk.SelectionMode.NONE)
+            name_row = Adw.EntryRow(title="Church name")
+            name_row.set_text(config.bulletin.get("church_name", ""))
+            name_lb.append(name_row)
+            outer.append(name_lb)
 
-        skip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        skip_row.set_margin_top(14)
-        sp = Gtk.Box(); sp.set_hexpand(True); skip_row.append(sp)
-        skip_btn = Gtk.Button(label="Skip for now")
-        skip_btn.add_css_class("flat"); skip_row.append(skip_btn)
-        sp2 = Gtk.Box(); sp2.set_hexpand(True); skip_row.append(sp2)
-        outer.append(skip_row)
+            hint = Gtk.Label(label="This appears on printed bulletins. You can change it any time in Settings.")
+            hint.add_css_class("caption"); hint.add_css_class("dim-label")
+            hint.set_wrap(True); hint.set_xalign(0); hint.set_margin_top(6); hint.set_margin_bottom(16)
+            outer.append(hint)
 
-        tv.set_content(outer)
+            next_btn = Gtk.Button(label="Continue →")
+            next_btn.add_css_class("suggested-action")
+            next_btn.set_halign(Gtk.Align.END)
+            outer.append(next_btn)
 
-        def _finish(choice: str):
-            config.first_launch_completed = True
-            config.last_seen_version = APP_VERSION
-            config.save()
-            win.close()
-            if choice == "lect":
-                self._seed_lectionary_service(today, info)
-                self._show_quickstart_banner()
-            elif choice == "tour":
-                self._show_welcome(is_new_version=False)
-                self._show_quickstart_banner()
-            else:
-                self._show_quickstart_banner()
+            def _on_next(_b):
+                name = name_row.get_text().strip()
+                if name:
+                    config.bulletin["church_name"] = name
+                    config.save()
+                _show_choice_step()
 
-        def _on_row_activated(_lb, row):
-            if row is lect_row:  _finish("lect")
-            elif row is blank_row: _finish("blank")
-            elif row is tour_row:  _finish("tour")
-        lb.connect("row-activated", _on_row_activated)
-        skip_btn.connect("clicked", lambda _: _finish("blank"))
-        win.connect("close-request", lambda _w: _finish("blank") or False)
+            next_btn.connect("clicked", _on_next)
+            name_row.connect("apply", lambda _: _on_next(None))
+
+        def _build_choice_step():
+            # Hero
+            hero_icon = Gtk.Image(icon_name="rubric-symbolic")
+            hero_icon.set_pixel_size(48); hero_icon.set_margin_bottom(10)
+            outer.append(hero_icon)
+            title_lbl = Gtk.Label(label="Welcome to Rubric")
+            title_lbl.add_css_class("title-1"); title_lbl.set_margin_bottom(4)
+            outer.append(title_lbl)
+            sub_lbl = Gtk.Label(label="How would you like to start today's service?")
+            sub_lbl.add_css_class("dim-label"); sub_lbl.set_margin_bottom(20)
+            outer.append(sub_lbl)
+
+            lb = Gtk.ListBox()
+            lb.set_selection_mode(Gtk.SelectionMode.NONE)
+            lb.add_css_class("boxed-list")
+            outer.append(lb)
+
+            def _choice_row(icon_name, title_text, subtitle_text):
+                row = Adw.ActionRow(title=title_text, subtitle=subtitle_text)
+                row.set_activatable(True)
+                img = Gtk.Image(icon_name=icon_name); img.set_pixel_size(28)
+                row.add_prefix(img)
+                row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+                lb.append(row); return row
+
+            lect_subtitle = f"{week_label} — readings and standard order pre-filled"
+            lect_row   = _choice_row("x-office-calendar-symbolic",
+                                      "Start with today's lectionary", lect_subtitle)
+            blank_row  = _choice_row("document-new-symbolic",
+                                      "Blank service",
+                                      "Build your order from scratch")
+            tour_row   = _choice_row("help-about-symbolic",
+                                      "Show me around",
+                                      "Open the quick-start guide and tip strip")
+
+            skip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            skip_row.set_margin_top(14)
+            sp = Gtk.Box(); sp.set_hexpand(True); skip_row.append(sp)
+            skip_btn = Gtk.Button(label="Skip for now")
+            skip_btn.add_css_class("flat"); skip_row.append(skip_btn)
+            sp2 = Gtk.Box(); sp2.set_hexpand(True); skip_row.append(sp2)
+            outer.append(skip_row)
+
+            def _finish(choice: str):
+                config.first_launch_completed = True
+                config.last_seen_version = APP_VERSION
+                config.save()
+                win.close()
+                if choice == "lect":
+                    self._seed_lectionary_service(today, info)
+                    self._show_quickstart_banner()
+                elif choice == "tour":
+                    self._show_welcome(is_new_version=False)
+                    self._show_quickstart_banner()
+                else:
+                    self._show_quickstart_banner()
+
+            def _on_row_activated(_lb, row):
+                if row is lect_row:  _finish("lect")
+                elif row is blank_row: _finish("blank")
+                elif row is tour_row:  _finish("tour")
+            lb.connect("row-activated", _on_row_activated)
+            skip_btn.connect("clicked", lambda _: _finish("blank"))
+            win.connect("close-request", lambda _w: _finish("blank") or False)
+
+        if needs_church_name:
+            _build_church_step()
+        else:
+            _build_choice_step()
         win.present()
 
     # ── Lectionary service seeding ────────────────────────────────────────────
@@ -4469,6 +4739,15 @@ class MainWindow(Adw.ApplicationWindow):
         self._update_title()
         self._show_toast(f"Service pre-filled for {week or today.strftime('%-d %B %Y')}",
                          timeout=5)
+
+    def _seed_lectionary_service_today(self):
+        from datetime import date as _pydate
+        today = _pydate.today()
+        try:
+            info = get_liturgical_info(today)
+        except Exception:
+            info = {}
+        self._seed_lectionary_service(today, info)
 
     def _show_welcome(self, is_new_version: bool = False, on_done=None):
         win = Adw.Window(transient_for=self, modal=True)
@@ -4883,6 +5162,9 @@ class MainWindow(Adw.ApplicationWindow):
             data = self._service_data()
             with open(path,"w",encoding="utf-8") as f: json.dump(data,f,indent=2,ensure_ascii=False)
             self.modified=False; self._update_title(); self._clear_autosave()
+            self._update_save_state_chip()
+            if getattr(self, "_deferred_save_id", None):
+                GLib.source_remove(self._deferred_save_id); self._deferred_save_id = None
             config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
             self._index_service(path, data)
             if getattr(self, "_close_after_save", False):
@@ -9463,11 +9745,21 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
 .bulletin-toggle { background: transparent; box-shadow: none; }
 .bulletin-toggle:checked { font-weight: bold; }
 .bulletin-toggle:not(:checked) { border-color: transparent; box-shadow: none; }
-/* Drag handle: fade in on row hover only */
-.order-list row .drag-handle { opacity: 0; transition: opacity 100ms; }
-.order-list row:hover .drag-handle { opacity: 0.45; }
+/* Drag handle: subtle at rest, visible on hover, grab cursor */
+.order-list row .drag-handle { opacity: 0.18; transition: opacity 120ms; cursor: grab; }
+.order-list row:hover .drag-handle { opacity: 0.6; }
 /* Section divider pill */
-.divider-pill { background: alpha(@accent_bg_color, 0.10); border-radius: 6px; padding: 2px 4px; }
+.divider-pill { background: alpha(@accent_bg_color, 0.08); border-radius: 6px; padding: 2px 4px; }
+/* Unsaved chip: pulse animation after 30s */
+@keyframes rubric-unsaved-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+.unsaved-pulse { animation: rubric-unsaved-pulse 1.6s ease-in-out infinite; }
+/* Preview pane: warm off-white page background */
+.preview-pane { background-color: #fafaf8; }
+/* Cover art thumbnail: rounded corners */
+.cover-thumb { border-radius: 4px; }
 """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css,

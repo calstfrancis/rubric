@@ -4,14 +4,34 @@ All notable changes are documented here, newest first.
 
 ---
 
-## dev — Multi-week planner, bulletin publisher, element frequency library
+## 0.17.4-dev1 — Accessibility improvements, beautification, smart save, live preview
 
 ### Added
 
+- **Smart save** — a "● Unsaved" chip appears in the status bar whenever there are unsaved changes. When a file is already open, changes are automatically saved 2 seconds after you stop typing. The chip clears on save.
+- **Live preview mode** — a "Live" toggle button in the preview panel bypasses Typst compilation and shows an instant HTML preview as you type. Useful when Typst isn't installed or for fast feedback.
+- **Quick help overlay** — a `?` button in the header opens a popover that describes each area of the screen in plain English (palette, service order, notes editor, preview panel, status bar, menu).
+- **Church name wizard step** — the first-launch wizard now asks for your church name before the service-type choice, so bulletin headers are populated from the first service.
 - **Plan this Sunday** — unplanned calendar rows now show a "Plan…" button that opens a dialog to create a new service file; choose default template, blank, or copy element structure from any past service.
 - **Publish bulletin to web** — after compiling a bulletin PDF, a second toast offers "Publish…"; Rubric copies the PDF to `bulletins/` in the GitHub repo, generates an `index.html`, commits, and pushes. The URL (`username.github.io/repo/bulletins/`) is shown in a toast.
 - **Most used elements view** — the Element Library tab now has a "Most used" / "By service" toggle. "Most used" shows every element name ranked by how many distinct services it has appeared in, with an age stamp ("3w ago").
 - **Element name suggestions** — the Add Custom Element dialog now shows an inline suggestion list as you type (≥2 characters), drawn from the element library and ranked by frequency.
+- **Friendly Typst errors** — compilation errors are translated into plain English (e.g. "An opening `{` was never closed").
+
+- **Section divider accent stripe** — each section divider (Gathering, Word, etc.) now shows a 4px left-border stripe in its liturgical colour, making sections easier to scan at a glance.
+- **Seasonal header tint** — the main header bar picks up a subtle gradient tint from the current liturgical season colour.
+- **Season strip gradient** — the 5px season colour bar at the top of the service order fades left-to-right for a softer look.
+- **Cover art thumbnail** — when a cover image is set in Settings, a 28px rounded thumbnail appears in the header beside the service title.
+- **Row subtitle shows both leader and note** — service rows now show `Leader · note preview` when both are set, instead of only one.
+- **Drag handles always visible** — the ⠿ reorder handle is now faintly visible at rest (not hidden until hover), with a `grab` cursor.
+- **Inline scripture preview** — if an element name is a Bible reference and that passage is cached (e.g. from a prior lookup), the first 8 words of the verse appear as a subtitle on the row.
+- **Empty-state "Start with lectionary" button** — the empty service placeholder now includes a shortcut button to pre-fill today's lectionary order.
+- **Unsaved pulse animation** — the "● Unsaved" chip pulses after 30 seconds of unsaved changes, prompting a save.
+- **Preview pane warm background** — the preview panel uses a warm off-white background (#fafaf8) to feel more page-like.
+
+### Changed
+
+- Status bar tooltips rewritten to plain English — all five status buttons (SIMPLE, GOST, Compact, Dev, Focus) now have descriptive tooltips explaining what they do.
 
 ---
 
