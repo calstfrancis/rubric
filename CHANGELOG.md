@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.4-dev1 — Accessibility improvements, beautification, smart save, live preview
+## 0.17.4 — Accessibility improvements, beautification, smart save, live preview
 
 ### Added
 

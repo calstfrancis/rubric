@@ -41,6 +41,25 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.4" date="2026-06-12">
+      <description>
+        <p>Accessibility improvements, visual polish, smart save, and live preview.</p>
+        <ul>
+          <li>Smart save — "● Unsaved" chip in the status bar; auto-saves 2 seconds after you stop typing when a file is open.</li>
+          <li>Live preview mode — instant HTML bulletin preview that bypasses Typst compilation.</li>
+          <li>Quick help overlay — ? button in the header explains each area of the screen in plain English.</li>
+          <li>First-launch wizard now asks for church name before the service-type choice.</li>
+          <li>Section dividers show a coloured left-border stripe in their liturgical colour.</li>
+          <li>Seasonal gradient strip and subtle header tint follow the liturgical season colour.</li>
+          <li>Cover art thumbnail in the header when a cover image is configured.</li>
+          <li>Service rows show both leader and note preview (e.g. "All · In the beginning…").</li>
+          <li>Inline scripture preview — cached verse text appears as a subtitle on Scripture element rows.</li>
+          <li>Empty service placeholder includes a "Start with lectionary" button.</li>
+          <li>Friendly Typst error messages replace raw compiler output.</li>
+          <li>Fixed: What's New changelog was not shown in installed flatpak builds.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.3" date="2026-06-10">
       <description>
         <p>Notes panel can now compress horizontally.</p>
