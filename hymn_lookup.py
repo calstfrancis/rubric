@@ -105,32 +105,45 @@ def lookup_hymn(prefix: str, number: int, callback):
             return
 
         url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"
+        _HEADERS = {
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         try:
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"},
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                html = resp.read().decode("utf-8", errors="replace")
+            req = urllib.request.Request(url, headers=_HEADERS)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw_bytes = resp.read()
+            html_text = raw_bytes.decode("utf-8", errors="replace")
 
-            title = _extract_hymn_title(html)
-
-            if title and "hymnary" not in title.lower() and len(title) > 2:
-                if _DB_OK:
-                    hymn_set(key, title)
-                GLib.idle_add(callback, title, None)
+            # Dump first 4 KB to /tmp for diagnosis when title extraction fails
+            title = _extract_hymn_title(html_text)
+            if not title or "hymnary" in title.lower() or len(title) <= 2:
+                try:
+                    import tempfile, os
+                    dbg = os.path.join(tempfile.gettempdir(), "rubric_hymn_debug.html")
+                    with open(dbg, "w", encoding="utf-8") as fh:
+                        fh.write(html_text[:8192])
+                except Exception:
+                    pass
+                GLib.idle_add(callback, None,
+                              f"#{number} not found in {hymnal_name} (debug: /tmp/rubric_hymn_debug.html)")
                 return
 
-            GLib.idle_add(callback, None, f"#{number} not found in {hymnal_name}")
+            if _DB_OK:
+                hymn_set(key, title)
+            GLib.idle_add(callback, title, None)
 
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                GLib.idle_add(callback, None,
-                              f"#{number} not found in {hymnal_name}")
-            else:
-                GLib.idle_add(callback, None, f"HTTP error {e.code}")
+            GLib.idle_add(callback, None,
+                          f"HTTP {e.code} from Hymnary.org")
+        except urllib.error.URLError as e:
+            GLib.idle_add(callback, None, f"Network error: {e.reason}")
         except Exception as e:
-            GLib.idle_add(callback, None, f"Network error: {type(e).__name__}")
+            GLib.idle_add(callback, None, f"Error: {type(e).__name__}: {e}")
 
     threading.Thread(target=fetch, daemon=True).start()
 
