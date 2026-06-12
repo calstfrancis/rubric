@@ -347,6 +347,48 @@ def element_prune(keep_paths: set[str]) -> None:
         con.close()
 
 
+def element_name_stats(query: str = "", limit: int = 100) -> list[dict]:
+    """Return distinct element names with cross-service usage counts, sorted by frequency."""
+    con = _open()
+    try:
+        if query:
+            q = f"%{query}%"
+            rows = con.execute(
+                "SELECT name, COUNT(DISTINCT service_path) AS use_count, "
+                "MAX(service_date) AS last_used "
+                "FROM element_index WHERE name LIKE ? "
+                "GROUP BY name ORDER BY use_count DESC, last_used DESC LIMIT ?",
+                (q, limit),
+            ).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT name, COUNT(DISTINCT service_path) AS use_count, "
+                "MAX(service_date) AS last_used "
+                "FROM element_index "
+                "GROUP BY name ORDER BY use_count DESC, last_used DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def element_suggestions(prefix: str, limit: int = 8) -> list[dict]:
+    """Return element names starting with prefix, ranked by cross-service frequency."""
+    con = _open()
+    try:
+        q = f"{prefix}%"
+        rows = con.execute(
+            "SELECT name, COUNT(DISTINCT service_path) AS use_count "
+            "FROM element_index WHERE name LIKE ? "
+            "GROUP BY name ORDER BY use_count DESC LIMIT ?",
+            (q, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
 # ── One-time migration from legacy JSON files ─────────────────────────────────
 
 def migrate_from_json() -> None:

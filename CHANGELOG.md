@@ -4,6 +4,17 @@ All notable changes are documented here, newest first.
 
 ---
 
+## dev — Multi-week planner, bulletin publisher, element frequency library
+
+### Added
+
+- **Plan this Sunday** — unplanned calendar rows now show a "Plan…" button that opens a dialog to create a new service file; choose default template, blank, or copy element structure from any past service.
+- **Publish bulletin to web** — after compiling a bulletin PDF, a second toast offers "Publish…"; Rubric copies the PDF to `bulletins/` in the GitHub repo, generates an `index.html`, commits, and pushes. The URL (`username.github.io/repo/bulletins/`) is shown in a toast.
+- **Most used elements view** — the Element Library tab now has a "Most used" / "By service" toggle. "Most used" shows every element name ranked by how many distinct services it has appeared in, with an age stamp ("3w ago").
+- **Element name suggestions** — the Add Custom Element dialog now shows an inline suggestion list as you type (≥2 characters), drawn from the element library and ranked by frequency.
+
+---
+
 ## 0.17.3 — Notes panel can compress for preview
 
 ### Fixed

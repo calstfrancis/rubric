@@ -2713,6 +2713,49 @@ class MainWindow(Adw.ApplicationWindow):
         name_row = Adw.EntryRow(title="Element name")
         grp.add(name_row)
 
+        # Inline suggestion list — shown when ≥2 chars match library entries
+        sugg_list = Gtk.ListBox()
+        sugg_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        sugg_list.add_css_class("boxed-list")
+        sugg_list.set_margin_start(0); sugg_list.set_margin_end(0)
+        sugg_revealer = Gtk.Revealer()
+        sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        sugg_revealer.set_child(sugg_list)
+        outer.append(sugg_revealer)
+
+        def _refresh_suggestions(entry):
+            prefix = entry.get_text().strip()
+            while sugg_list.get_first_child():
+                sugg_list.remove(sugg_list.get_first_child())
+            if len(prefix) < 2:
+                sugg_revealer.set_reveal_child(False); return
+            try:
+                from rubric_package.db import element_suggestions as _esugg
+                matches = _esugg(prefix)
+            except Exception:
+                sugg_revealer.set_reveal_child(False); return
+            if not matches:
+                sugg_revealer.set_reveal_child(False); return
+            for m in matches:
+                r = Gtk.ListBoxRow(); r._sugg_name = m["name"]
+                lbl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                lbl_box.set_margin_start(12); lbl_box.set_margin_end(12)
+                lbl_box.set_margin_top(6); lbl_box.set_margin_bottom(6)
+                nl = Gtk.Label(label=m["name"]); nl.set_hexpand(True); nl.set_xalign(0)
+                lbl_box.append(nl)
+                cl = Gtk.Label(label=f"{m['use_count']}×")
+                cl.add_css_class("caption"); cl.add_css_class("dim-label")
+                lbl_box.append(cl)
+                r.set_child(lbl_box); sugg_list.append(r)
+            sugg_revealer.set_reveal_child(True)
+
+        def _on_sugg_activated(_lb, row):
+            name_row.set_text(row._sugg_name)
+            sugg_revealer.set_reveal_child(False)
+
+        name_row.connect("changed", _refresh_suggestions)
+        sugg_list.connect("row-activated", _on_sugg_activated)
+
         section_row = Adw.ComboRow(title="Palette section")
         pal = get_palette()
         section_row.set_model(Gtk.StringList.new([s for s, _ in pal]))
@@ -5419,9 +5462,92 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             toast.set_button_label("Send by email…")
             toast.connect("button-clicked", lambda _: self._show_send_bulletin_dialog(pdf_path))
             self._toast_overlay.add_toast(toast)
+            if config.github_repo:
+                pub_toast = Adw.Toast.new("Publish bulletin to web?")
+                pub_toast.set_timeout(10)
+                pub_toast.set_button_label("Publish…")
+                pub_toast.connect("button-clicked", lambda _, p=pdf_path: self._publish_bulletin_to_web(p))
+                self._toast_overlay.add_toast(pub_toast)
             Gtk.show_uri(None, pdf_path.as_uri(), 0)
         else:
             self._show_toast("Compiled — PDF not found.", timeout=6)
+
+    def _publish_bulletin_to_web(self, pdf_path: Path):
+        """Copy the bulletin PDF to the repo's bulletins/ folder, regenerate the index, and push."""
+        repo = config.github_repo
+        if not repo:
+            self._show_toast("Set up a GitHub repo in Preferences first"); return
+        bulletins_dir = Path(repo) / "bulletins"
+        try:
+            bulletins_dir.mkdir(exist_ok=True)
+        except OSError as e:
+            self._show_toast(f"Could not create bulletins/ folder: {e}"); return
+
+        dest = bulletins_dir / pdf_path.name
+        if pdf_path.resolve() != dest.resolve() and pdf_path.exists():
+            try:
+                shutil.copy2(str(pdf_path), str(dest))
+            except OSError as e:
+                self._show_toast(f"Could not copy PDF: {e}"); return
+
+        self._generate_bulletins_index(bulletins_dir)
+        self._show_toast("Pushing bulletin to GitHub…", timeout=30)
+
+        def run():
+            try:
+                date_str = dest.stem
+                subprocess.run(
+                    _GIT + ["-C", repo, "add", "bulletins/"],
+                    check=True, capture_output=True, timeout=30)
+                subprocess.run(
+                    _GIT + ["-C", repo, "commit", "-m", f"Bulletin {date_str}"],
+                    check=True, capture_output=True, timeout=30)
+                subprocess.run(
+                    _GIT + ["-C", repo, "push"],
+                    check=True, capture_output=True, timeout=60)
+                url = self._github_pages_url("bulletins/")
+                msg = f"Published! {url}" if url else "Published to GitHub!"
+                GLib.idle_add(lambda: self._show_toast(msg, timeout=12) or False)
+            except subprocess.CalledProcessError as e:
+                err = (e.stderr or b"").decode(errors="replace").strip()[:120]
+                GLib.idle_add(lambda: self._show_toast(f"Publish failed: {err}", timeout=10) or False)
+            except Exception as exc:
+                GLib.idle_add(lambda: self._show_toast(f"Publish failed: {exc}", timeout=10) or False)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _generate_bulletins_index(self, bulletins_dir: Path):
+        """Write bulletins/index.html listing all PDFs, newest first."""
+        pdfs = sorted(bulletins_dir.glob("*.pdf"), key=lambda p: p.stem, reverse=True)
+        church = config.bulletin.get("church_name", "") or "Bulletins"
+        rows = "".join(
+            f'      <li><a href="{p.name}">{p.stem.replace("_", " ")}</a></li>\n'
+            for p in pdfs
+        )
+        html = (
+            f'<!DOCTYPE html>\n<html lang="en">\n<head>\n'
+            f'<meta charset="UTF-8">\n'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+            f'<title>{church}</title>\n'
+            f'<style>body{{font-family:Georgia,serif;max-width:600px;margin:40px auto;padding:0 20px}}'
+            f'h1{{font-size:1.4em}}ul{{list-style:none;padding:0}}li{{margin:.5em 0}}'
+            f'a{{color:#333;text-decoration:none;border-bottom:1px solid #ccc}}'
+            f'a:hover{{border-color:#333}}</style>\n</head>\n<body>\n'
+            f'<h1>{church}</h1>\n<ul>\n{rows}</ul>\n</body>\n</html>\n'
+        )
+        (bulletins_dir / "index.html").write_text(html, encoding="utf-8")
+
+    def _github_pages_url(self, subpath: str = "") -> str:
+        """Derive a GitHub Pages URL from the repo's git remote."""
+        import re
+        remote = self._detect_github_remote()
+        if not remote:
+            return ""
+        m = re.search(r'github\.com[:/]([^/]+)/([^/\.]+)', remote)
+        if not m:
+            return ""
+        user, repo = m.group(1), m.group(2).rstrip(".git")
+        return f"https://{user}.github.io/{repo}/{subpath}"
 
     def _show_send_bulletin_dialog(self, pdf_path=None):
         """Show a helper dialog for emailing the bulletin."""
@@ -7464,7 +7590,7 @@ class ServicesWindow(Adw.Window):
         self.set_modal(False)
         self._planner_folder: "Path | None" = None
         self._lib_search = ""; self._lib_expanded: set = set(); self._lib_selected = None
-        self._lib_rebuilding = False
+        self._lib_rebuilding = False; self._lib_mode = "services"
         self._arch_search = ""; self._arch_expanded: set = set()
 
         tv = Adw.ToolbarView()
@@ -7649,6 +7775,117 @@ class ServicesWindow(Adw.Window):
         self._planner_services = services
         self._load_planner_calendar(services, today)
 
+    def _plan_sunday(self, sunday):
+        """Show a dialog to create a new .liturgy file for an unplanned Sunday."""
+        folder = self._planner_folder
+        if not folder:
+            self._show_toast("No folder selected"); return
+
+        try:
+            info = get_liturgical_info(sunday)
+            default_title = info.get("week", sunday.strftime("%-d %B %Y"))
+        except Exception:
+            default_title = sunday.strftime("%-d %B %Y")
+
+        dlg = Adw.Window(transient_for=self, modal=True)
+        dlg.set_title(f"Plan {sunday.strftime('%-d %B %Y')}")
+        dlg.set_default_size(400, -1)
+        tv = Adw.ToolbarView()
+        tv.add_top_bar(Adw.HeaderBar())
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_top(16); outer.set_margin_bottom(16)
+        outer.set_margin_start(16); outer.set_margin_end(16)
+
+        grp = Adw.PreferencesGroup()
+        title_row = Adw.EntryRow(title="Service title")
+        title_row.set_text(default_title)
+        grp.add(title_row)
+
+        # Build source list: "Default template", "Blank", then past services
+        source_labels = ["Default template", "Blank service"]
+        try:
+            from rubric_package.db import element_services as _esvc
+            past_svcs = _esvc(limit=30)
+        except Exception:
+            past_svcs = []
+        for svc in past_svcs:
+            stem = Path(svc["service_path"]).stem
+            label = f"Copy structure: {svc.get('service_title') or stem}"
+            if svc.get("service_date"):
+                label += f"  ({svc['service_date']})"
+            source_labels.append(label)
+
+        source_row = Adw.ComboRow(title="Start from")
+        source_row.set_model(Gtk.StringList.new(source_labels))
+        source_row.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        grp.add(source_row)
+        outer.append(grp)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_row.set_margin_top(16)
+        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda _: dlg.close())
+        btn_row.append(cancel_btn)
+        create_btn = Gtk.Button(label="Create & Open")
+        create_btn.add_css_class("suggested-action")
+
+        def on_create(_b):
+            title  = title_row.get_text().strip() or default_title
+            idx    = source_row.get_selected()
+            items  = []
+
+            if idx == 0:
+                # Default template
+                tmpl = config.templates.get(
+                    config.default_template,
+                    next(iter(config.templates.values()), None))
+                if tmpl:
+                    for d in tmpl:
+                        item = dict(d)
+                        item["note"] = ""; item["bulletin_note"] = ""; item["content_typst"] = ""
+                        items.append(item)
+            elif idx >= 2 and past_svcs and (idx - 2) < len(past_svcs):
+                # Copy element structure (names/sections only) from a past service
+                svc = past_svcs[idx - 2]
+                try:
+                    from rubric_package.db import element_for_service as _ef
+                    cur_sec = ""
+                    for e in _ef(svc["service_path"]):
+                        sec = e.get("section", "")
+                        if sec and sec != cur_sec:
+                            items.append({"type": "divider", "title": sec})
+                            cur_sec = sec
+                        items.append({"type": "item", "name": e.get("name", ""),
+                                      "section": sec, "leader": e.get("leader", ""),
+                                      "note": "", "bulletin_note": "", "content_typst": "",
+                                      "show_in_bulletin": True, "duration": 0})
+                except Exception:
+                    pass
+            # idx == 1 → blank, items stays []
+
+            data = {"title": title, "date": sunday.isoformat(), "items": items}
+            path = folder / f"{sunday.isoformat()}.liturgy"
+            if not path.exists():
+                try:
+                    path.write_text(
+                        __import__("json").dumps(data, indent=2, ensure_ascii=False),
+                        encoding="utf-8")
+                except Exception as exc:
+                    self._show_toast(f"Could not create file: {exc}")
+                    dlg.close(); return
+            dlg.close()
+            self._open_service(str(path))
+            GLib.timeout_add(300, lambda: (self._load_planner(), False)[1])
+
+        create_btn.connect("clicked", on_create)
+        title_row.connect("entry-activated", lambda _: on_create(None))
+        btn_row.append(create_btn)
+        outer.append(btn_row)
+
+        tv.set_content(outer); dlg.set_content(tv); dlg.present()
+
     def _load_planner_calendar(self, services, today):
         """Populate the calendar view: 4 past Sundays + 8 upcoming Sundays."""
         from datetime import date as _date, timedelta
@@ -7700,9 +7937,16 @@ class ServicesWindow(Adw.Window):
                 row = Adw.ActionRow(title=date_lbl if not week_str else date_lbl,
                                     subtitle=subtitle)
                 row.set_activatable(False)
-                not_planned = Gtk.Label(label="Not planned")
-                not_planned.add_css_class("dim-label"); not_planned.add_css_class("caption")
-                row.add_suffix(not_planned)
+                if not is_past and self._planner_folder:
+                    plan_btn = Gtk.Button(label="Plan…")
+                    plan_btn.add_css_class("flat")
+                    plan_btn.set_valign(Gtk.Align.CENTER)
+                    plan_btn.connect("clicked", lambda _b, s=sunday: self._plan_sunday(s))
+                    row.add_suffix(plan_btn)
+                else:
+                    not_planned = Gtk.Label(label="Not planned")
+                    not_planned.add_css_class("dim-label"); not_planned.add_css_class("caption")
+                    row.add_suffix(not_planned)
 
             # Colour dot for liturgical season
             dot = Gtk.Label()
@@ -7720,10 +7964,30 @@ class ServicesWindow(Adw.Window):
 
     def _build_library_tab(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        se = Gtk.SearchEntry(); se.set_placeholder_text("Search elements…")
-        se.set_margin_start(12); se.set_margin_end(12); se.set_margin_top(10); se.set_margin_bottom(6)
+
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        top.set_margin_start(12); top.set_margin_end(12); top.set_margin_top(10); top.set_margin_bottom(6)
+        se = Gtk.SearchEntry(); se.set_placeholder_text("Search elements…"); se.set_hexpand(True)
         se.connect("search-changed", lambda e: self._lib_rebuild(e.get_text().strip()))
-        box.append(se); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        top.append(se)
+
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        mode_box.add_css_class("linked")
+        self._lib_btn_svc  = Gtk.ToggleButton(label="By service")
+        self._lib_btn_freq = Gtk.ToggleButton(label="Most used")
+        self._lib_btn_freq.set_group(self._lib_btn_svc)
+        self._lib_btn_svc.set_active(True)
+        mode_box.append(self._lib_btn_svc); mode_box.append(self._lib_btn_freq)
+        top.append(mode_box)
+
+        def on_mode_toggle(btn):
+            if not btn.get_active(): return
+            self._lib_mode = "freq" if btn is self._lib_btn_freq else "services"
+            self._lib_rebuild(se.get_text().strip())
+        self._lib_btn_svc.connect("toggled", on_mode_toggle)
+        self._lib_btn_freq.connect("toggled", on_mode_toggle)
+
+        box.append(top); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         self._lib_insert_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._lib_insert_bar.set_margin_start(12); self._lib_insert_bar.set_margin_end(12)
@@ -7752,9 +8016,18 @@ class ServicesWindow(Adw.Window):
         while self._lib_list.get_first_child(): self._lib_list.remove(self._lib_list.get_first_child())
         self._lib_selected = None; self._lib_insert_bar.set_visible(False)
         try:
-            from rubric_package.db import element_search, element_services, element_for_service
+            from rubric_package.db import (element_search, element_services,
+                                            element_for_service, element_name_stats)
         except ImportError:
             self._lib_list.append(self._status_row("Database not available"))
+            self._lib_rebuilding = False; return
+
+        if self._lib_mode == "freq":
+            rows = element_name_stats(query, limit=120)
+            if not rows:
+                self._lib_list.append(self._status_row("No elements indexed yet"))
+            else:
+                for r in rows: self._lib_list.append(self._lib_freq_row(r))
             self._lib_rebuilding = False; return
 
         if query:
@@ -7806,6 +8079,37 @@ class ServicesWindow(Adw.Window):
             svc_lbl = Gtk.Label(label=f'{r["service_title"]}  ·  {r.get("service_date","") or ""}')
             svc_lbl.set_xalign(0); svc_lbl.add_css_class("caption"); svc_lbl.add_css_class("dim-label")
             box.append(svc_lbl)
+        row.set_child(box); return row
+
+    def _lib_freq_row(self, r: dict) -> Gtk.ListBoxRow:
+        """Row for the 'Most used' frequency view."""
+        row = Gtk.ListBoxRow(); row._is_service = False; row._element = {}
+        row.set_activatable(False)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_margin_start(12); box.set_margin_end(12)
+        box.set_margin_top(8); box.set_margin_bottom(8)
+        name_lbl = Gtk.Label(label=r.get("name", "(unnamed)"))
+        name_lbl.set_hexpand(True); name_lbl.set_xalign(0)
+        box.append(name_lbl)
+        use_count = r.get("use_count", 0)
+        last_used = r.get("last_used", "") or ""
+        badge_text = f"{use_count}×"
+        badge = Gtk.Label(label=badge_text)
+        badge.add_css_class("caption"); badge.add_css_class("dim-label")
+        badge.set_valign(Gtk.Align.CENTER)
+        box.append(badge)
+        if last_used:
+            try:
+                from datetime import date as _date, timedelta
+                ld = _date.fromisoformat(last_used)
+                weeks = ((_date.today() - ld).days) // 7
+                when = f"{weeks}w ago" if weeks > 0 else "this week"
+            except Exception:
+                when = last_used
+            when_lbl = Gtk.Label(label=when)
+            when_lbl.add_css_class("caption"); when_lbl.add_css_class("dim-label")
+            when_lbl.set_valign(Gtk.Align.CENTER)
+            box.append(when_lbl)
         row.set_child(box); return row
 
     def _on_lib_row_selected(self, _lb, row):
