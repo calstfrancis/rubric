@@ -6683,8 +6683,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     parts.append(_note_for_typst(ann))
                     parts.append('#v(6pt)')
 
-        # ── Back page: mission + contact ──────────────────────────────────────
-        if mission or email or website:
+        # ── Back page: mission, contact, accessibility ────────────────────────
+        if mission or access or email or website:
             parts += ['#pagebreak()', '#v(1fr)', '#align(center)[']
             if mission:
                 parts.append(f'  #emph[#text(size: 0.9em)[{mission}]]')
@@ -6698,18 +6698,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 if phone:
                     parts.append(f'    {phone} #linebreak()')
                 parts.append('  ]')
+            if access:
+                parts.append('  #linebreak()')
+                parts.append(f'  #text(size: 0.9em)[{access}]')
             parts += [']', '#v(1fr)']
-
-        # ── Accessibility note: its own page ──────────────────────────────────
-        if access:
-            parts += [
-                '#pagebreak()',
-                '#v(1fr)',
-                '#align(center)[',
-                f'  #text(size: 0.9em)[{access}]',
-                ']',
-                '#v(1fr)',
-            ]
 
         return "\n".join(parts) + "\n"
 
