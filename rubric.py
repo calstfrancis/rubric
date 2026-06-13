@@ -6834,14 +6834,13 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     in_columns = False
                 if _ms_cols >= 2:
                     parts += [
-                        '#pagebreak(weak: true)',
                         f'= {_typst_escape(sec)}',
                         f'#columns({_ms_cols})[',
                         '',
                     ]
                     in_columns = True
                 else:
-                    parts += ['#pagebreak(weak: true)', f'= {_typst_escape(sec)}', '']
+                    parts += [f'= {_typst_escape(sec)}', '']
 
             for si in items:
                 leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
