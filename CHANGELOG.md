@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev10 — Font discovery, bulletin fixes
+
+### Fixed
+
+- **Font family now applies** — all Typst compile invocations now pass `--font-path` for common system font directories (`/usr/share/fonts`, `/run/host/fonts`, `~/.local/share/fonts`, etc.). This fixes the issue where the bundled Typst binary couldn't locate system fonts inside the Flatpak sandbox, causing it to silently fall back to its built-in font.
+- **"All (Lord's Prayer)" no longer appears in acknowledgements** — generic assembly-direction leader labels ("All", "Congregation", "Everyone") are now excluded from the acknowledgements block at the end of the bulletin. Only named people appear there.
+- **Accessibility note on its own page** — the accessibility note now prints on a dedicated page (centred, with generous whitespace), separate from the mission statement and contact info.
+
+---
+
 ## 0.17.5-dev9 — Bulletin style presets, preview and font fixes
 
 ### Added

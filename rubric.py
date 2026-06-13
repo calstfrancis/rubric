@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev9"
+APP_VERSION = "0.17.5-dev10"
 
 
 config = Config()
@@ -4430,9 +4430,10 @@ class MainWindow(Adw.ApplicationWindow):
                 f.write(typ_src)
                 typ_path = Path(f.name)
             pdf_path = self._preview_pdf_path()
+            cmd = self._typst_compile_cmd(typst_bin, str(typ_path), str(pdf_path))
             try:
                 result = subprocess.run(
-                    [typst_bin, "compile", str(typ_path), str(pdf_path)],
+                    cmd,
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
@@ -4452,6 +4453,25 @@ class MainWindow(Adw.ApplicationWindow):
             if typ_path:
                 typ_path.unlink(missing_ok=True)
             GLib.idle_add(self._preview_compile_done)
+
+    @staticmethod
+    def _typst_compile_cmd(typst_bin: str, src: str, dst: str, extra: list[str] | None = None) -> list[str]:
+        """Build a typst compile command with font-path arguments for common font locations."""
+        cmd = [typst_bin, "compile"]
+        for _fp in [
+            "/run/host/fonts",
+            "/run/host/usr/share/fonts",
+            "/usr/share/fonts",
+            "/usr/local/share/fonts",
+            str(Path.home() / ".fonts"),
+            str(Path.home() / ".local/share/fonts"),
+        ]:
+            if Path(_fp).is_dir():
+                cmd += ["--font-path", _fp]
+        if extra:
+            cmd += extra
+        cmd += [src, dst]
+        return cmd
 
     def _find_typst(self) -> str | None:
         """Return path to the typst binary, or None."""
@@ -5938,8 +5958,10 @@ class MainWindow(Adw.ApplicationWindow):
                     typ_path = Path(f.name)
                 html_path = typ_path.with_suffix(".html")
                 result = subprocess.run(
-                    [typst, "compile", "--format", "html",
-                     str(typ_path), str(html_path)],
+                    self._typst_compile_cmd(
+                        typst, str(typ_path), str(html_path),
+                        extra=["--format", "html"],
+                    ),
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
@@ -6267,7 +6289,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         def run():
             try:
                 result = subprocess.run(
-                    [typst, "compile", str(typ_path), str(pdf_path)],
+                    self._typst_compile_cmd(typst, str(typ_path), str(pdf_path)),
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
@@ -6608,9 +6630,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         # ── Acknowledgements block ────────────────────────────────────────────
         staff = b.get("staff", [])
+        _congregation_leaders = {"all", "congregation", "everyone", "all:"}
         leaders: dict[str, list[str]] = {}
         for entry in self.service_entries:
-            if isinstance(entry, ServiceItem) and entry.leader and entry.show_in_bulletin:
+            if (isinstance(entry, ServiceItem) and entry.leader and entry.show_in_bulletin
+                    and entry.leader.strip().lower() not in _congregation_leaders):
                 leaders.setdefault(entry.leader, []).append(entry.name)
 
         if staff or leaders:
@@ -6660,13 +6684,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     parts.append('#v(6pt)')
 
         # ── Back page: mission + contact ──────────────────────────────────────
-        if mission or access or email or website:
+        if mission or email or website:
             parts += ['#pagebreak()', '#v(1fr)', '#align(center)[']
             if mission:
                 parts.append(f'  #emph[#text(size: 0.9em)[{mission}]]')
-                parts.append('  #linebreak()')
-            if access:
-                parts.append(f'  #text(size: 0.9em)[{access}]')
                 parts.append('  #linebreak()')
             if website or email or phone:
                 parts.append('  #text(size: 0.85em)[')
@@ -6678,6 +6699,17 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     parts.append(f'    {phone} #linebreak()')
                 parts.append('  ]')
             parts += [']', '#v(1fr)']
+
+        # ── Accessibility note: its own page ──────────────────────────────────
+        if access:
+            parts += [
+                '#pagebreak()',
+                '#v(1fr)',
+                '#align(center)[',
+                f'  #text(size: 0.9em)[{access}]',
+                ']',
+                '#v(1fr)',
+            ]
 
         return "\n".join(parts) + "\n"
 
@@ -6879,7 +6911,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         def run_typst():
             try:
                 result = subprocess.run(
-                    [typst, "compile", str(typ_path), str(pdf_path)],
+                    self._typst_compile_cmd(typst, str(typ_path), str(pdf_path)),
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
@@ -7413,7 +7445,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         def run():
             try:
                 result = subprocess.run(
-                    [typst, "compile", str(typ_path), str(pdf_path)],
+                    self._typst_compile_cmd(typst, str(typ_path), str(pdf_path)),
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
