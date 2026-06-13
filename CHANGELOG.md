@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.5-dev1 — Fix hymn lookup: Wayback Machine fallback for Hymnary.org blocks
+## 0.17.5-dev2 — Fix hymn lookup: Wayback Machine fallback for Hymnary.org blocks
 
 ### Fixed
 

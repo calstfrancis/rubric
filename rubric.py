@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev1"
+APP_VERSION = "0.17.5-dev2"
 
 
 config = Config()
