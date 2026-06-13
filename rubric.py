@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev2"
+APP_VERSION = "0.17.5-dev3"
 
 
 config = Config()
@@ -2886,10 +2886,17 @@ class MainWindow(Adw.ApplicationWindow):
         if not text: return
         result = parse_hymn_ref(text)
         if not result: self.hymn_status.set_label("Format: VU 16  MV 120  LUS 5"); return
-        prefix, number = result; self.hymn_status.set_label("Looking up…")
+        prefix, number = result
+        self.hymn_status.set_label("Looking up…")
+        if hasattr(self, "_hymn_manual_box"):
+            self._hymn_manual_box.set_visible(False)
+            self._hymn_manual_entry.set_text("")
         def on_result(title, error):
             if error:
-                self.hymn_status.set_label(f"{error} — search cached hymns in the By Title tab")
+                self.hymn_status.set_label(f"Couldn't fetch — enter the title manually:")
+                self._hymn_manual_box.set_visible(True)
+                self._hymn_manual_entry.grab_focus()
+                self._hymn_manual_ref = (prefix, number)
                 return
             # Short format: "VU 16 — O Come, O Come, Emmanuel"
             short_ref = f"{prefix.upper()} {number}"
@@ -2910,6 +2917,42 @@ class MainWindow(Adw.ApplicationWindow):
                 row.set_subtitle(sub)
             self._mark_modified()
         lookup_hymn(prefix, number, on_result)
+
+    def _save_manual_hymn(self):
+        title = self._hymn_manual_entry.get_text().strip()
+        if not title:
+            return
+        ref = getattr(self, "_hymn_manual_ref", None)
+        if not ref:
+            return
+        prefix, number = ref
+        key = f"{prefix}{number}"
+        try:
+            from rubric_package.db import hymn_set as _hset
+            _hset(key, title)
+        except Exception:
+            pass
+        short_ref = f"{prefix} {number}"
+        hymn_line = f"{short_ref} — {title}"
+        self.hymn_status.set_label(hymn_line)
+        self._hymn_manual_box.set_visible(False)
+        self._hymn_manual_entry.set_text("")
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)):
+            return
+        entry = self.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            return
+        self._push_undo()
+        entry.content_typst = (hymn_line + "\n" + entry.content_typst
+                               if entry.content_typst else hymn_line)
+        self._content_widget.set_content(entry.content_typst)
+        row = self._find_row_for_index(idx)
+        if isinstance(row, Adw.ActionRow):
+            preview = self._note_preview(entry.content_typst) or self._scripture_inline_preview(entry.name)
+            sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
+            row.set_subtitle(sub)
+        self._mark_modified()
 
     def _build_hymn_search_popover(self) -> Gtk.Popover:
         pop = Gtk.Popover()
@@ -2953,8 +2996,27 @@ class MainWindow(Adw.ApplicationWindow):
         self.hymn_status.add_css_class("dim-label"); self.hymn_status.add_css_class("caption")
         self.hymn_status.set_wrap(True); self.hymn_status.set_xalign(0)
         self.hymn_status.set_margin_start(10); self.hymn_status.set_margin_end(10)
-        self.hymn_status.set_margin_bottom(10)
+        self.hymn_status.set_margin_bottom(4)
         lookup_page.append(self.hymn_status)
+
+        # Manual title entry — shown when lookup fails or user wants to add directly
+        manual_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        manual_box.set_margin_start(10); manual_box.set_margin_end(10)
+        manual_box.set_margin_bottom(10)
+        manual_box.set_visible(False)
+        self._hymn_manual_box = manual_box
+
+        self._hymn_manual_entry = Gtk.Entry()
+        self._hymn_manual_entry.set_placeholder_text("Enter title from your hymnal…")
+        self._hymn_manual_entry.set_hexpand(True)
+        self._hymn_manual_entry.connect("activate", lambda _: self._save_manual_hymn())
+        manual_box.append(self._hymn_manual_entry)
+
+        save_btn = Gtk.Button(label="Save")
+        save_btn.add_css_class("suggested-action")
+        save_btn.connect("clicked", lambda _: self._save_manual_hymn())
+        manual_box.append(save_btn)
+        lookup_page.append(manual_box)
 
         stack.add_titled(lookup_page, "lookup", "Lookup")
 

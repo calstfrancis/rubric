@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev3 — Hymn manual entry fallback; By Title shows all cached hymns
+
+### Fixed / Added
+
+- **Manual hymn entry** — when a lookup fails (Hymnary.org blocked), a title field appears inline. Type the title from your physical hymnal and press Save — it's cached locally and inserted just like a successful lookup.
+- **By Title tab shows all cached hymns on open** — no longer requires typing 2+ characters; all 113+ cached hymns are visible immediately when the popover opens.
+- **HTML entities decoded in hymn search** — cached titles with `&#039;` etc. now display correctly in search results.
+
+---
+
 ## 0.17.5-dev2 — Fix hymn lookup: Wayback Machine fallback for Hymnary.org blocks
 
 ### Fixed
