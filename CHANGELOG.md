@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev5 — Typst source editor toggle (Dev mode)
+
+### Added
+
+- **Typst editor toggle** — a "Typst" button appears in the status bar when Dev mode is on. Clicking it switches the content editor from rich text to raw Typst source (with syntax highlighting if GtkSourceView has a typst/markdown language). Switching back commits the raw source to the rich editor. Changes in either mode fire through to the live preview.
+
+---
+
 ## 0.17.5-dev4 — Leader notes and rubric visible in manuscript preview
 
 ### Fixed

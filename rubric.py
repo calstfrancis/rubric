@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev4"
+APP_VERSION = "0.17.5-dev5"
 
 
 config = Config()
@@ -1495,6 +1495,15 @@ class MainWindow(Adw.ApplicationWindow):
         self._dev_mode = not getattr(self, "_dev_mode", False)
         self._apply_dev_mode()
 
+    def _on_typst_edit_clicked(self, _btn):
+        self._typst_edit_active = not self._typst_edit_active
+        if self._typst_edit_active:
+            self._typst_edit_lbl.set_markup("<b>Typst</b>")
+        else:
+            self._typst_edit_lbl.set_text("Typst")
+        if hasattr(self, "_content_widget"):
+            self._content_widget.set_typst_mode(self._typst_edit_active)
+
     def _apply_dev_mode(self):
         dev = getattr(self, "_dev_mode", False)
         if hasattr(self, "_dev_status_lbl"):
@@ -1504,6 +1513,14 @@ class MainWindow(Adw.ApplicationWindow):
                 self._dev_status_lbl.set_text("Dev")
         if hasattr(self, "_preview_copy_typst_bar"):
             self._preview_copy_typst_bar.set_visible(dev)
+        if hasattr(self, "_typst_edit_btn"):
+            self._typst_edit_btn.set_visible(dev)
+            if not dev and self._typst_edit_active:
+                # Turn off typst mode when dev mode is disabled
+                self._typst_edit_active = False
+                self._typst_edit_lbl.set_text("Typst")
+                if hasattr(self, "_content_widget"):
+                    self._content_widget.set_typst_mode(False)
 
     def _dev_copy_typst(self):
         """Copy the current preview's Typst source to clipboard (Dev mode)."""
@@ -1803,6 +1820,13 @@ class MainWindow(Adw.ApplicationWindow):
         self._dev_status_btn.connect("clicked", self._on_dev_status_clicked)
         self._dev_mode = False
         _left_box.append(self._dev_status_btn)
+
+        self._typst_edit_btn, self._typst_edit_lbl = _status_toggle_btn(
+            "Typst", "Switch the content editor to raw Typst source mode")
+        self._typst_edit_btn.connect("clicked", self._on_typst_edit_clicked)
+        self._typst_edit_btn.set_visible(False)
+        self._typst_edit_active = False
+        _left_box.append(self._typst_edit_btn)
 
         status_bar.append(_left_box)
 

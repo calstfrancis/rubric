@@ -187,7 +187,42 @@ class ElementContentWidget(Gtk.Box):
         self._refresh_tag_colors()
         self._rich_buf.connect("changed", self._on_rich_changed)
         rich_sw.set_child(self._rich_view)
-        self.append(rich_sw)
+
+        # ── Raw Typst editor (dev mode) ───────────────────────────────────────
+        typst_sw = Gtk.ScrolledWindow()
+        typst_sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        typst_sw.set_vexpand(True)
+        typst_sw.set_margin_start(12); typst_sw.set_margin_end(12)
+        typst_sw.set_margin_top(8);    typst_sw.set_margin_bottom(8)
+        if _SOURCE_OK:
+            self._typst_buf = _GtkSource.Buffer()
+            lm = _GtkSource.LanguageManager.get_default()
+            for lang_id in ("typst", "markdown", "latex"):
+                lang = lm.get_language(lang_id)
+                if lang:
+                    self._typst_buf.set_language(lang)
+                    break
+            self._typst_view = _GtkSource.View.new_with_buffer(self._typst_buf)
+            self._typst_view.set_show_line_numbers(True)
+            self._typst_view.set_highlight_current_line(True)
+        else:
+            self._typst_view = Gtk.TextView()
+            self._typst_buf = self._typst_view.get_buffer()
+        self._typst_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self._typst_view.add_css_class("card")
+        self._typst_view.set_top_margin(8);   self._typst_view.set_bottom_margin(8)
+        self._typst_view.set_left_margin(10); self._typst_view.set_right_margin(10)
+        self._typst_buf.connect("changed", self._on_typst_buf_changed)
+        typst_sw.set_child(self._typst_view)
+
+        self._editor_stack = Gtk.Stack()
+        self._editor_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self._editor_stack.set_transition_duration(100)
+        self._editor_stack.add_named(rich_sw, "rich")
+        self._editor_stack.add_named(typst_sw, "typst")
+        self._typst_mode = False
+        self._typst_updating = False
+        self.append(self._editor_stack)
 
         # Keyboard shortcuts
         key_ctrl = Gtk.EventControllerKey()
@@ -229,14 +264,48 @@ class ElementContentWidget(Gtk.Box):
         try:
             has_unsup = typst_to_tags(typst_str or "", self._rich_buf)
             self._notice_rev.set_reveal_child(has_unsup)
+            if self._typst_mode:
+                self._typst_updating = True
+                try:
+                    self._typst_buf.set_text(typst_str or "", -1)
+                finally:
+                    self._typst_updating = False
         finally:
             self._updating = False
 
     def get_content(self) -> str:
+        if self._typst_mode:
+            s, e = self._typst_buf.get_bounds()
+            return self._typst_buf.get_text(s, e, False)
         return tags_to_typst(self._rich_buf)
 
     def clear(self) -> None:
         self.set_content("")
+
+    def set_typst_mode(self, enabled: bool) -> None:
+        """Switch between rich text editor (False) and raw Typst source editor (True)."""
+        if enabled == self._typst_mode:
+            return
+        if enabled:
+            # Flush rich editor → raw typst view
+            raw = tags_to_typst(self._rich_buf)
+            self._typst_updating = True
+            try:
+                self._typst_buf.set_text(raw, -1)
+            finally:
+                self._typst_updating = False
+            self._editor_stack.set_visible_child_name("typst")
+            self._toolbar.set_sensitive(False)
+        else:
+            # Flush raw typst → rich editor
+            s, e = self._typst_buf.get_bounds()
+            raw = self._typst_buf.get_text(s, e, False)
+            self._editor_stack.set_visible_child_name("rich")
+            self._toolbar.set_sensitive(True)
+            self.set_content(raw)
+            if self._on_changed:
+                self._on_changed(raw)
+        self._typst_mode = enabled
 
     def set_rubric_note(self, text: str) -> None:
         self._updating = True
@@ -323,6 +392,11 @@ class ElementContentWidget(Gtk.Box):
     def _on_rubric_buf_changed(self, _buf) -> None:
         if not self._updating and self._on_rubric_changed:
             self._on_rubric_changed(self.get_rubric_note())
+
+    def _on_typst_buf_changed(self, _buf) -> None:
+        if not self._typst_updating and self._on_changed:
+            s, e = self._typst_buf.get_bounds()
+            self._on_changed(self._typst_buf.get_text(s, e, False))
 
     def _emit_changed(self) -> None:
         if self._on_changed:
