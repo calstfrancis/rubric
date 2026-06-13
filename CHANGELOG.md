@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev11 — Section pagebreak removed, bulletin polish
+
+### Fixed
+
+- **No pagebreak before sections** — manuscript sections (Gathering, Word, Response, Sending) no longer force a page break; they flow continuously.
+- **"All (Lord's Prayer)" removed from acknowledgements** — generic congregation-direction labels are excluded from the named-leader block at the end of the bulletin.
+- **Accessibility note at end of back page** — appears after contact info on the back page, no dedicated page.
+
+---
+
 ## 0.17.5-dev10 — Font discovery, bulletin fixes
 
 ### Fixed
