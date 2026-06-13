@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev12 — Balanced columns, undo fix, scroll fix, window fit
+
+### Added
+
+- **Balanced bulletin columns** — bulletin sections now use a `#grid(columns: (1fr, 1fr))` with items split evenly by count, so both columns always fill to the same depth.
+
+### Fixed
+
+- **Undo/redo in notes editor** — Ctrl+Z / Ctrl+Shift+Z now delegates to the notes text buffer when the editor is focused, so text edits undo correctly; when the service list is focused, undo/redo works on the service order as before.
+- **Preview jiggle while scrolling** — scroll-position polling reduced from 400 ms to 2 s (with compile suppression during polls). A one-shot snapshot is taken at the start of each compile so the correct position is always restored without continuous polling.
+- **Font search filters correctly** — the font family ComboRow now has its expression set to the string property, so typing in the search box actually filters the list.
+- **Unsaved indicator moved left of Focus** — "● Unsaved" chip now appears to the left of the Focus button.
+- **Window fits 1200 px / 110% screen** — reduced minimum widths (title entry 280→180 px, order-list pane 260→220 px) so the window no longer overflows when both sidebar and preview are open.
+- **CI release workflow** — release `.deb`/`.rpm` workflow now only triggers on clean version tags (`v1.2.3`), not dev tags (`v1.2.3-dev4`), fixing spurious CI failures.
+
+---
+
 ## 0.17.5-dev11 — Section pagebreak removed, bulletin polish
 
 ### Fixed

@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev11"
+APP_VERSION = "0.17.5-dev12"
 
 
 config = Config()
@@ -1704,7 +1704,7 @@ class MainWindow(Adw.ApplicationWindow):
         pop_box.append(tl)
         self.service_title_entry = Gtk.Entry()
         self.service_title_entry.set_placeholder_text("Title, date, or occasion…")
-        self.service_title_entry.set_size_request(280, -1)
+        self.service_title_entry.set_size_request(180, -1)
         self.service_title_entry.connect("changed", lambda _: self._mark_modified())
         pop_box.append(self.service_title_entry)
 
@@ -1889,6 +1889,14 @@ class MainWindow(Adw.ApplicationWindow):
         _right_box.set_halign(Gtk.Align.END)
         _right_box.set_margin_end(2)
 
+        # Save-state chip — shows "● Unsaved" when modified, hidden when saved
+        self._save_state_lbl = Gtk.Label()
+        self._save_state_lbl.add_css_class("caption")
+        self._save_state_lbl.set_margin_start(4); self._save_state_lbl.set_margin_end(6)
+        self._save_state_lbl.set_visible(False)
+        self._save_state_lbl.set_tooltip_text("Unsaved changes — press Ctrl+S to save")
+        _right_box.append(self._save_state_lbl)
+
         self._focus_status_btn, self._focus_status_lbl = _status_toggle_btn(
             "Focus", "Focus mode — hides the element palette and list so you can concentrate on the notes editor")
         self._focus_status_btn.connect("clicked", lambda _: self._toggle_focus_mode())
@@ -1904,14 +1912,6 @@ class MainWindow(Adw.ApplicationWindow):
         _git_btn.connect("clicked", lambda _: self.git_push())
         self._git_btn = _git_btn
         _right_box.append(_git_btn)
-
-        # Save-state chip — shows "● Unsaved" when modified, hidden when saved
-        self._save_state_lbl = Gtk.Label()
-        self._save_state_lbl.add_css_class("caption")
-        self._save_state_lbl.set_margin_start(6); self._save_state_lbl.set_margin_end(4)
-        self._save_state_lbl.set_visible(False)
-        self._save_state_lbl.set_tooltip_text("Unsaved changes — press Ctrl+S to save")
-        _right_box.append(self._save_state_lbl)
 
         ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
         ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")
@@ -2258,6 +2258,8 @@ class MainWindow(Adw.ApplicationWindow):
         font_model = Gtk.StringList.new(font_names)
         font_row = Adw.ComboRow(title="Font family", model=font_model)
         font_row.set_enable_search(True)
+        font_row.set_expression(
+            Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
         current_font = p.get("font", defaults["font"])
         try:
             font_row.set_selected(system_fonts.index(current_font) + 1 if current_font else 0)
@@ -2491,7 +2493,7 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(True)
-        self._order_hpaned.set_position(260); self._order_hpaned.set_vexpand(True)
+        self._order_hpaned.set_position(220); self._order_hpaned.set_vexpand(True)
 
         # ── Order pane (left) ─────────────────────────────────────────────────
         order_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -3259,6 +3261,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
 
     def undo(self):
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.TextView):
+            buf = focus.get_buffer()
+            if buf.get_can_undo():
+                buf.undo()
+            return
         if not self._undo_stack: return
         self._redo_stack.append([e.to_dict() for e in self.service_entries])
         self.redo_btn.set_sensitive(True)
@@ -3266,6 +3274,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_order_list(); self.undo_btn.set_sensitive(bool(self._undo_stack)); self._mark_modified()
 
     def redo(self):
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.TextView):
+            buf = focus.get_buffer()
+            if buf.get_can_redo():
+                buf.redo()
+            return
         if not self._redo_stack: return
         self._undo_stack.append([e.to_dict() for e in self.service_entries])
         self.undo_btn.set_sensitive(True)
@@ -4389,6 +4403,23 @@ class MainWindow(Adw.ApplicationWindow):
                     typ_src = self._build_bulletin_typst(digital=False)
             except Exception:
                 return False
+            # Snapshot scroll position now (compile takes seconds; callback fires well before reload)
+            _wv = self._preview_webview
+            if _wv is not None:
+                def _snap(source, result, _):
+                    try:
+                        jr = source.evaluate_javascript_finish(result)
+                        if jr is not None:
+                            try:
+                                self._preview_scroll_y = int(jr.get_js_value().to_double())
+                            except AttributeError:
+                                self._preview_scroll_y = int(jr.to_double())
+                    except Exception:
+                        pass
+                try:
+                    _wv.evaluate_javascript("window.scrollY", -1, None, None, None, _snap, None)
+                except Exception:
+                    pass
             self._preview_compiling = True
             self._preview_spinner.set_visible(True)
             self._preview_spinner.start()
@@ -4577,13 +4608,15 @@ class MainWindow(Adw.ApplicationWindow):
                 GLib.timeout_add(120, _restore)
 
     def _start_scroll_poll(self):
-        """Poll scroll position every 400 ms so it's always current before a reload."""
+        """Slow fallback poll (2 s) — the compile-start snapshot handles the real capture."""
         self._stop_scroll_poll()
         def _poll():
             wv = self._preview_webview
             if wv is None or not getattr(self, "_preview_visible", False):
                 self._preview_scroll_poll_id = None
                 return False
+            if getattr(self, "_preview_compiling", False):
+                return True  # skip while compile is in flight; snapshot handles it
             def _got(source, result, _):
                 try:
                     js_result = source.evaluate_javascript_finish(result)
@@ -4598,8 +4631,8 @@ class MainWindow(Adw.ApplicationWindow):
                 wv.evaluate_javascript("window.scrollY", -1, None, None, None, _got, None)
             except Exception:
                 pass
-            return True  # keep polling
-        self._preview_scroll_poll_id = GLib.timeout_add(400, _poll)
+            return True
+        self._preview_scroll_poll_id = GLib.timeout_add(2000, _poll)
 
     def _stop_scroll_poll(self):
         pid = getattr(self, "_preview_scroll_poll_id", None)
@@ -6575,58 +6608,68 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             parts += [']', '#pagebreak()', '']
 
         # ── Service order ─────────────────────────────────────────────────────
-        in_columns = False
+        # Two-pass: group by section, then render with balanced columns.
+        _bul_sections: list[tuple[str | None, list]] = []
+        _cur_title: str | None = None
+        _cur_items: list = []
+        for _entry in self.service_entries:
+            if isinstance(_entry, SectionDivider):
+                _bul_sections.append((_cur_title, _cur_items))
+                _cur_title = _entry.title
+                _cur_items = []
+            elif isinstance(_entry, ServiceItem) and _entry.show_in_bulletin:
+                _cur_items.append(_entry)
+        _bul_sections.append((_cur_title, _cur_items))
 
-        for entry in self.service_entries:
-            if isinstance(entry, SectionDivider):
-                if in_columns:
-                    parts.append(']')
-                    parts.append('')
-                    in_columns = False
-                if _bul_cols >= 2:
-                    parts += [
-                        f'= {_typst_escape(entry.title)}',
-                        f'#columns({_bul_cols})[',
-                        '',
-                    ]
-                    in_columns = True
-                else:
-                    parts += [f'= {_typst_escape(entry.title)}', '']
-                continue
-
-            if not isinstance(entry, ServiceItem) or not entry.show_in_bulletin:
-                continue
-
-            parts += ['', f'== {_typst_escape(entry.name)}', '']
-
-            # Bulletin-heading-only: show title only, no body content
-            if getattr(entry, "bulletin_heading_only", False):
-                continue
-
-            name_lower = entry.name.lower()
-            is_hymn = any(k in name_lower
-                          for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
-            content = entry.content_typst
-
-            if is_hymn and content:
-                m = re.match(
+        def _render_bul_item(si: "ServiceItem", target: list) -> None:
+            target += ['', f'== {_typst_escape(si.name)}', '']
+            if getattr(si, "bulletin_heading_only", False):
+                return
+            _name_lower = si.name.lower()
+            _is_hymn = any(k in _name_lower
+                           for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
+            _content = si.content_typst
+            if _is_hymn and _content:
+                _hm = re.match(
                     r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)',
-                    content, re.DOTALL)
-                if m:
-                    ref  = _typst_escape(m.group(1).strip())
-                    rest = _typst_escape(
-                        m.group(2).strip().split("\n")[0]) if m.group(2).strip() else ""
-                    if rest:
-                        parts.append(f'#hymnref("{ref}", [_{rest}_])')
+                    _content, re.DOTALL)
+                if _hm:
+                    _ref  = _typst_escape(_hm.group(1).strip())
+                    _rest = _typst_escape(
+                        _hm.group(2).strip().split("\n")[0]) if _hm.group(2).strip() else ""
+                    if _rest:
+                        target.append(f'#hymnref("{_ref}", [_{_rest}_])')
                     else:
-                        parts.append(f'*{ref}*')
+                        target.append(f'*{_ref}*')
                 else:
-                    parts.append(strip_leader_notes(content))
-            elif content:
-                parts.append(strip_leader_notes(content))
+                    target.append(strip_leader_notes(_content))
+            elif _content:
+                target.append(strip_leader_notes(_content))
 
-        if in_columns:
-            parts += ['', ']', '']
+        for _sec_title, _sec_items in _bul_sections:
+            if _sec_title is not None:
+                parts += [f'= {_typst_escape(_sec_title)}', '']
+            if not _sec_items:
+                continue
+            if _bul_cols >= 2 and len(_sec_items) > 1:
+                _mid = (len(_sec_items) + 1) // 2
+                _left: list[str] = []
+                _right: list[str] = []
+                for _si in _sec_items[:_mid]:
+                    _render_bul_item(_si, _left)
+                for _si in _sec_items[_mid:]:
+                    _render_bul_item(_si, _right)
+                parts += [
+                    f'#grid(columns: (1fr, 1fr), gutter: 0.5em, align: top, [',
+                    '\n'.join(_left),
+                    '], [',
+                    '\n'.join(_right),
+                    '])',
+                    '',
+                ]
+            else:
+                for _si in _sec_items:
+                    _render_bul_item(_si, parts)
 
         # ── Acknowledgements block ────────────────────────────────────────────
         staff = b.get("staff", [])
