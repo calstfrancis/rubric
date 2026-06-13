@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev4 — Leader notes and rubric visible in manuscript preview
+
+### Fixed
+
+- **Manuscript HTML preview now shows leader notes and rubric notes** — `#leader-note[…]` blocks in the content and the separate rubric note field both render as red italic blocks in the manuscript view (live HTML preview mode). They remain completely stripped from the bulletin preview as before.
+
+---
+
 ## 0.17.5-dev3 — Hymn manual entry fallback; By Title shows all cached hymns
 
 ### Fixed / Added

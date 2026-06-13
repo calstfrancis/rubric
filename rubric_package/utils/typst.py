@@ -98,11 +98,12 @@ def passage_to_typst(reference: str, text: str, translation: str = "web") -> str
     )
 
 
-def strip_typst_for_html(text: str) -> str:
+def strip_typst_for_html(text: str, manuscript: bool = False) -> str:
     """Strip Typst (or legacy LaTeX) markup, returning HTML-safe text.
 
-    Used by the HTML bulletin preview where markup should be rendered
-    as formatted HTML, not raw Typst source.
+    Used by the HTML bulletin/manuscript preview.  Pass manuscript=True to
+    render #leader-note and #rubric-note blocks as red italic spans instead
+    of stripping them.
     """
     import re as _re
 
@@ -124,9 +125,18 @@ def strip_typst_for_html(text: str) -> str:
     text = _re.sub(r"\*([^*\n]+)\*",        r"<strong>\1</strong>", text)
     text = _re.sub(r"_([^_\n]+)_",          r"<em>\1</em>",         text)
 
-    # Strip leader-note and rubric-note blocks entirely (congregation HTML)
-    text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
-    text = _re.sub(r"#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+    if manuscript:
+        # Render leader-note and rubric-note as red italic blocks (manuscript only)
+        text = _re.sub(
+            r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]",
+            r"<span class='leader-note'>\1</span>", text, flags=_re.DOTALL)
+        text = _re.sub(
+            r"#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]",
+            r"<span class='rubric-note'>\1</span>", text, flags=_re.DOTALL)
+    else:
+        # Strip leader-note and rubric-note entirely (congregation bulletin)
+        text = _re.sub(r"#leader-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
+        text = _re.sub(r"#rubric-note\[((?:[^[\]]|\[[^\]]*\])*)\]", "", text, flags=_re.DOTALL)
 
     # Strip remaining Typst function calls — emit their content arg if present
     text = _re.sub(r"#[a-z][a-z-]*\((?:[^()]*)\)", "", text)

@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev3"
+APP_VERSION = "0.17.5-dev4"
 
 
 config = Config()
@@ -5649,8 +5649,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             border-bottom: 0.5px solid #bbb; margin: 10px 0 2px; padding-bottom: 2px; }
 .leader { font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }
 .note   { font-size: 10pt; margin: 4px 0 0 0; line-height: 1.6; white-space: pre-wrap; }
-.leader-note { background: #f0f0f0; padding: 6px 8px; border-radius: 3px;
-               font-size: 9.5pt; margin: 4px 0; }
+.leader-note, .rubric-note { display: block; background: #fff0f0;
+               border-left: 3px solid #b91c1c; padding: 5px 8px; border-radius: 0 3px 3px 0;
+               font-size: 9.5pt; font-style: italic; color: #b91c1c; margin: 4px 0; }
 """
         scroll_script = (
             "<script>"
@@ -5683,8 +5684,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 leader_html = (f"<span class='leader'>({esc(si.leader)})</span>"
                                if si.leader else "")
                 lines.append(f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
+                rubric = getattr(si, "rubric_note", "").strip()
+                if rubric:
+                    lines.append(f"<span class='rubric-note'>{esc(rubric)}</span>")
                 if si.content_typst:
-                    clean = strip_typst_for_html(si.content_typst)
+                    clean = strip_typst_for_html(si.content_typst, manuscript=True)
                     lines.append(f"<div class='note'>{clean.replace(chr(10), '<br>')}</div>")
 
         lines.append("</body></html>")
