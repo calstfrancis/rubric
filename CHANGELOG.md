@@ -4,6 +4,27 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev7 — Template panel improvements, scroll preservation
+
+### Added
+
+- **Font family dropdown** — the Template panel now shows a searchable dropdown of all system/user fonts (via PangoCairo). The previously missing font picker is now functional.
+- **Heading style and columns settings** — Template panel now includes a heading style selector (bold + small-caps + rule, bold + small-caps, bold, plain) and a columns toggle for both manuscript and bulletin layouts.
+- **Live preview in Template panel** — opening the Template panel now automatically shows the preview pane so font, margin, and heading changes are immediately visible.
+- **Columns support in manuscript** — the manuscript `#columns(N)` is now driven by the Template panel setting rather than hardcoded to 2; setting columns to 1 removes the columns wrapper entirely.
+- **Multicolumn toggle for bulletin** — bulletin columns is now a simple on/off toggle (2 columns vs 1) in the Template panel.
+
+### Fixed
+
+- **Preview no longer jumps to top on recompile** — the preview panel saves scroll position before each PDF/HTML reload and restores it after the page finishes loading.
+
+### Changed
+
+- **"Preamble" renamed to "Template"** — the status bar button and panel header now say "Template" instead of "Preamble". Internal identifiers are unchanged.
+- **Typst Files section hidden in Settings** — the raw Typst template file list is hidden; use the Template panel instead.
+
+---
+
 ## 0.17.5-dev6 — Preamble panel, Bulletin heading-only, styling fixes
 
 ### Added

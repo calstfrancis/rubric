@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev6"
+APP_VERSION = "0.17.5-dev7"
 
 
 config = Config()
@@ -560,7 +560,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         if _SNIP_OK and not config.simple_mode:
             self._build_snippets()
         self._build_github(); self._build_scripture()
-        # self._build_typst_files()  # hidden — use Preamble panel instead
+        # self._build_typst_files()  # hidden — use Template panel instead
         self.connect("close-request", self._on_close)
 
     def _build_view(self):
@@ -1832,7 +1832,7 @@ class MainWindow(Adw.ApplicationWindow):
         _left_box.append(self._typst_edit_btn)
 
         self._preamble_btn, self._preamble_lbl = _status_toggle_btn(
-            "Preamble", "Document preamble — set fonts, margins, and layout for generated PDFs")
+            "Template", "Document template — set fonts, margins, and layout for generated PDFs")
         self._preamble_btn.connect("clicked", self._on_preamble_clicked)
         self._preamble_active = False
         _left_box.append(self._preamble_btn)
@@ -2067,11 +2067,32 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_preamble_clicked(self, _btn):
         self._preamble_active = not self._preamble_active
         if self._preamble_active:
-            self._preamble_lbl.set_markup("<b>Preamble</b>")
+            self._preamble_lbl.set_markup("<b>Template</b>")
             self._main_stack.set_visible_child_name("preamble")
+            if not self._preview_visible:
+                self._toggle_preview_panel()
         else:
-            self._preamble_lbl.set_text("Preamble")
+            self._preamble_lbl.set_text("Template")
             self._main_stack.set_visible_child_name("order")
+
+    def _preamble_heading_typst(self, key: str) -> str:
+        """Return Typst #show heading override for the given template key, or '' for default."""
+        style = config.preamble.get(key, {}).get("heading_style", "bold-smallcaps-rule")
+        if style == "bold-smallcaps-rule":
+            return ""  # Default — already in TYPST_SHARED
+        if style == "bold-smallcaps":
+            body = "text(weight: \"bold\", smallcaps(it.body))"
+        elif style == "bold":
+            body = "text(weight: \"bold\", it.body)"
+        else:
+            body = "it.body"
+        return (
+            "#show heading.where(level: 2): it => {\n"
+            "  v(6pt, weak: true)\n"
+            f"  {body}\n"
+            "  v(4pt, weak: true)\n"
+            "}"
+        )
 
     def _on_preamble_changed(self, key: str, field: str, value) -> None:
         if key not in config.preamble:
@@ -2080,35 +2101,61 @@ class MainWindow(Adw.ApplicationWindow):
         config.save()
         self._schedule_preview_update()
 
+    @staticmethod
+    def _get_system_fonts() -> list[str]:
+        try:
+            from gi.repository import PangoCairo
+            fm = PangoCairo.font_map_get_default()
+            return sorted(f.get_name() for f in fm.list_families())
+        except Exception:
+            return []
+
     def _build_preamble_form(self, key: str) -> Gtk.Widget:
-        """Scrollable preference form for manuscript or bulletin preamble settings."""
-        _MS_DEFAULTS = {
+        """Scrollable preference form for manuscript or bulletin template settings."""
+        _MS_DEF = {
             "font": "", "size": 11.0,
             "margin_top": 1.0, "margin_bottom": 1.0,
             "margin_left": 0.7, "margin_right": 0.7,
+            "heading_style": "bold-smallcaps-rule",
+            "columns": 2,
         }
-        _BUL_DEFAULTS = {
+        _BUL_DEF = {
             "font": "", "size": 11.0,
             "margin_top": 0.7, "margin_bottom": 0.7,
             "margin_left": 0.6, "margin_right": 0.6,
+            "heading_style": "bold-smallcaps-rule",
+            "columns": 2,
         }
-        defaults = _MS_DEFAULTS if key == "manuscript" else _BUL_DEFAULTS
+        defaults = _MS_DEF if key == "manuscript" else _BUL_DEF
         p = config.preamble.get(key, {})
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
-
         page = Adw.PreferencesPage()
         page.set_vexpand(True)
 
+        # ── Typography ────────────────────────────────────────────────────────
         typo_grp = Adw.PreferencesGroup(title="Typography")
         page.add(typo_grp)
 
-        font_row = Adw.EntryRow(title="Font family")
-        font_row.set_text(p.get("font", defaults["font"]))
-        font_row.set_tooltip_text("Typst font name — leave empty to use the document default")
-        font_row.connect("changed", lambda r: self._on_preamble_changed(key, "font", r.get_text()))
+        # Font family — dropdown of system fonts
+        system_fonts = self._get_system_fonts()
+        font_names = ["Default"] + system_fonts
+        font_model = Gtk.StringList.new(font_names)
+        font_row = Adw.ComboRow(title="Font family", model=font_model)
+        font_row.set_enable_search(True)
+        current_font = p.get("font", defaults["font"])
+        try:
+            font_row.set_selected(system_fonts.index(current_font) + 1 if current_font else 0)
+        except ValueError:
+            font_row.set_selected(0)
+
+        def _on_font_selected(row, _prop):
+            sel = row.get_selected()
+            self._on_preamble_changed(key, "font", "" if sel == 0 else font_names[sel])
+
+        font_row.connect("notify::selected", _on_font_selected)
         typo_grp.add(font_row)
 
         size_adj = Gtk.Adjustment(
@@ -2119,6 +2166,7 @@ class MainWindow(Adw.ApplicationWindow):
                          lambda r, _p: self._on_preamble_changed(key, "size", r.get_value()))
         typo_grp.add(size_row)
 
+        # ── Margins ───────────────────────────────────────────────────────────
         margin_grp = Adw.PreferencesGroup(title="Margins (inches)")
         page.add(margin_grp)
 
@@ -2136,18 +2184,56 @@ class MainWindow(Adw.ApplicationWindow):
                         lambda r, _p, f=field: self._on_preamble_changed(key, f, r.get_value()))
             margin_grp.add(row)
 
+        # ── Layout ────────────────────────────────────────────────────────────
+        layout_grp = Adw.PreferencesGroup(title="Layout")
+        page.add(layout_grp)
+
+        col_row = Adw.SwitchRow(title="Two-column layout",
+                                subtitle="Service order flows in two columns per section")
+        col_row.set_active(p.get("columns", defaults["columns"]) >= 2)
+        col_row.connect("notify::active",
+                        lambda r, _p: self._on_preamble_changed(
+                            key, "columns", 2 if r.get_active() else 1))
+        layout_grp.add(col_row)
+
+        # ── Headings ──────────────────────────────────────────────────────────
+        hdg_grp = Adw.PreferencesGroup(title="Headings")
+        page.add(hdg_grp)
+
+        _HDG_LABELS = [
+            "Bold small-caps + rule",
+            "Bold small-caps",
+            "Bold",
+            "Plain",
+        ]
+        _HDG_KEYS = ["bold-smallcaps-rule", "bold-smallcaps", "bold", "plain"]
+        hdg_model = Gtk.StringList.new(_HDG_LABELS)
+        hdg_row = Adw.ComboRow(title="Element heading style", model=hdg_model)
+        current_style = p.get("heading_style", defaults["heading_style"])
+        try:
+            hdg_row.set_selected(_HDG_KEYS.index(current_style))
+        except ValueError:
+            hdg_row.set_selected(0)
+
+        def _on_hdg_selected(row, _prop):
+            self._on_preamble_changed(key, "heading_style",
+                                      _HDG_KEYS[row.get_selected()])
+
+        hdg_row.connect("notify::selected", _on_hdg_selected)
+        hdg_grp.add(hdg_row)
+
         scroll.set_child(page)
         return scroll
 
     def _build_preamble_panel(self) -> Gtk.Box:
-        """Build the document preamble editor panel (font, margins, etc.)."""
+        """Build the document template editor panel (font, margins, etc.)."""
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         hdr.set_margin_start(12); hdr.set_margin_end(12)
         hdr.set_margin_top(10); hdr.set_margin_bottom(8)
 
-        hdr_lbl = Gtk.Label(label="Document Preamble")
+        hdr_lbl = Gtk.Label(label="Document Template")
         hdr_lbl.add_css_class("title-4")
         hdr_lbl.set_hexpand(True); hdr_lbl.set_xalign(0)
         hdr.append(hdr_lbl)
@@ -3780,6 +3866,7 @@ class MainWindow(Adw.ApplicationWindow):
         def _on_preview_mode(btn, mode):
             if btn.get_active():
                 self._preview_mode = mode
+                self._preview_scroll_y = 0
                 self._do_preview_update()
 
         self._preview_bulletin_btn.connect("toggled", _on_preview_mode, "bulletin")
@@ -3851,6 +3938,8 @@ class MainWindow(Adw.ApplicationWindow):
             self._preview_webview = _WebKit.WebView()
             self._preview_webview.set_vexpand(True)
             self._preview_webview.set_hexpand(True)
+            self._preview_scroll_y = 0
+            self._preview_webview.connect("load-changed", self._on_preview_load_changed)
             self._preview_stack.add_named(self._preview_webview, "preview")
         else:
             self._preview_webview = None
@@ -4170,6 +4259,7 @@ class MainWindow(Adw.ApplicationWindow):
                 html = self._build_manuscript_html()
             else:
                 html = self._build_bulletin_html()
+            self._preview_save_scroll()
             self._preview_webview.load_html(html, None)
         except Exception:
             pass
@@ -4297,11 +4387,46 @@ class MainWindow(Adw.ApplicationWindow):
         if self._preview_webview:
             uri = f"file://{pdf_path}"
             current = (self._preview_webview.get_uri() or "").split("?")[0].split("#")[0]
+            self._preview_save_scroll()
             if current == uri:
                 self._preview_webview.reload()
             else:
                 self._preview_webview.load_uri(uri)
         return False
+
+    def _on_preview_load_changed(self, wv, event):
+        if _WebKit and event == _WebKit.LoadEvent.FINISHED:
+            y = self._preview_scroll_y
+            if y > 0:
+                js = f"window.scrollTo(0, {y});"
+                try:
+                    wv.evaluate_javascript(js, -1, None, None, None, None, None)
+                except (AttributeError, TypeError):
+                    try:
+                        wv.run_javascript(js, None, None, None)
+                    except Exception:
+                        pass
+
+    def _preview_save_scroll(self):
+        """Capture current scroll Y before a reload; fires JS async."""
+        wv = self._preview_webview
+        if wv is None:
+            return
+        def _got_scroll(source, result, _data):
+            try:
+                js_result = source.evaluate_javascript_finish(result)
+                if js_result is not None:
+                    try:
+                        jsc_val = js_result.get_js_value()
+                        self._preview_scroll_y = int(jsc_val.to_double())
+                    except AttributeError:
+                        self._preview_scroll_y = int(js_result.to_double())
+            except Exception:
+                pass
+        try:
+            wv.evaluate_javascript("window.scrollY", -1, None, None, None, _got_scroll, None)
+        except (AttributeError, TypeError):
+            pass
 
     def _preview_compile_done(self):
         self._preview_compiling = False
@@ -6194,6 +6319,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
 
         template_name = "bulletin_digital" if digital else "bulletin_print"
+        _bul_cols = config.preamble.get("bulletin", {}).get("columns", 2)
+        _hdg_override = self._preamble_heading_typst("bulletin")
         parts: list[str] = [
             "// Congregational Bulletin — generated by Rubric",
             self._load_typst_preamble(template_name),
@@ -6201,6 +6328,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             TYPST_SHARED,
             '',
         ]
+        if _hdg_override:
+            parts += [_hdg_override, '']
 
         # ── Cover page ────────────────────────────────────────────────────────
         cover_img = b.get("cover_image", "").strip()
@@ -6256,12 +6385,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     parts.append(']')
                     parts.append('')
                     in_columns = False
-                parts += [
-                    f'= {_typst_escape(entry.title)}',
-                    '#columns(2)[',
-                    '',
-                ]
-                in_columns = True
+                if _bul_cols >= 2:
+                    parts += [
+                        f'= {_typst_escape(entry.title)}',
+                        f'#columns({_bul_cols})[',
+                        '',
+                    ]
+                    in_columns = True
+                else:
+                    parts += [f'= {_typst_escape(entry.title)}', '']
                 continue
 
             if not isinstance(entry, ServiceItem) or not entry.show_in_bulletin:
@@ -6480,14 +6612,18 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         date_str = _typst_escape(
             self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
 
+        _ms_cols = config.preamble.get("manuscript", {}).get("columns", 2)
+        _ms_hdg_override = self._preamble_heading_typst("manuscript")
         parts = [
             "// Leader Manuscript — generated by Rubric",
             self._load_typst_preamble("manuscript"),
             '',
             TYPST_SHARED,
             '',
-            f'#align(center)[#text(size: 1.5em, weight: "bold")[{title}]]',
         ]
+        if _ms_hdg_override:
+            parts += [_ms_hdg_override, '']
+        parts += [f'#align(center)[#text(size: 1.5em, weight: "bold")[{title}]]']
         if date_str:
             parts.append(f'#align(center)[#text(size: 1.1em, style: "italic")[{date_str}]]')
         parts += ['#v(6pt)', '#line(length: 100%, stroke: 0.5pt)', '#v(8pt)', '']
@@ -6500,13 +6636,16 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 if in_columns:
                     parts.append(']')
                     in_columns = False
-                parts += [
-                    '#pagebreak(weak: true)',
-                    f'= {_typst_escape(sec)}',
-                    '#columns(2)[',
-                    '',
-                ]
-                in_columns = True
+                if _ms_cols >= 2:
+                    parts += [
+                        '#pagebreak(weak: true)',
+                        f'= {_typst_escape(sec)}',
+                        f'#columns({_ms_cols})[',
+                        '',
+                    ]
+                    in_columns = True
+                else:
+                    parts += ['#pagebreak(weak: true)', f'= {_typst_escape(sec)}', '']
 
             for si in items:
                 leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
