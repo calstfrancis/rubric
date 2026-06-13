@@ -4,6 +4,25 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev6 — Preamble panel, Bulletin heading-only, styling fixes
+
+### Added
+
+- **Preamble panel** — a "Preamble" toggle in the status bar opens a document settings editor (font family, font size, margins for manuscript and bulletin). Settings are stored in config and used when generating PDFs, overriding the bundled template files.
+- **Bulletin heading-only toggle** — the "Bulletin" button in the element toolbar now marks an element as *heading only*: the element title appears in the congregation bulletin but the body text is omitted. Rows in the order list dim slightly (0.7 opacity) when heading-only is active. The toggle is bold when on, regular when off — consistent with other status bar controls.
+
+### Fixed
+
+- **Leader note Typst output** — highlighted text tagged as a leader note no longer appends a trailing ` \` before the closing `]`, which caused a Typst compilation error (`\]` escapes the bracket). Multi-line leader notes still preserve line breaks for all lines except the last.
+
+### Changed
+
+- **Preview button** — moved from a ToggleButton (with active-state highlight) to a flat button. Bold when the preview panel is open, regular when closed — same pattern as the status bar toggles.
+- **Responsive reading** — the builder dialog and toolbar button have been removed. Responsive readings can be formatted with Bold.
+- **Bulletin toggle semantics** — the per-element Bulletin toggle previously hid items from the bulletin entirely; it now marks items as heading-only (always in bulletin, body text omitted).
+
+---
+
 ## 0.17.5-dev5 — Typst source editor toggle (Dev mode)
 
 ### Added

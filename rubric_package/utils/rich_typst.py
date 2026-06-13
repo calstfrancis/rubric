@@ -286,6 +286,10 @@ def tags_to_typst(buf) -> str:
             pending_leader.append(inline + (' \\' if inline.strip() else ''))
         else:
             if pending_leader:
+                # Strip trailing ' \' from the last line — it would escape the closing ']'
+                last = pending_leader[-1]
+                if last.endswith(' \\'):
+                    pending_leader[-1] = last[:-2]
                 out.append(f'#leader-note[{chr(10).join(pending_leader)}]')
                 pending_leader = []
 
@@ -306,6 +310,9 @@ def tags_to_typst(buf) -> str:
         line_off = line_end + 1
 
     if pending_leader:
+        last = pending_leader[-1]
+        if last.endswith(' \\'):
+            pending_leader[-1] = last[:-2]
         out.append(f'#leader-note[{chr(10).join(pending_leader)}]')
 
     return '\n'.join(out)

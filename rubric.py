@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev5"
+APP_VERSION = "0.17.5-dev6"
 
 
 config = Config()
@@ -560,7 +560,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         if _SNIP_OK and not config.simple_mode:
             self._build_snippets()
         self._build_github(); self._build_scripture()
-        self._build_typst_files()
+        # self._build_typst_files()  # hidden — use Preamble panel instead
         self.connect("close-request", self._on_close)
 
     def _build_view(self):
@@ -1455,6 +1455,8 @@ class MainWindow(Adw.ApplicationWindow):
             self._gost_status_btn.set_visible(not simple)
         if hasattr(self, "_compact_status_btn"):
             self._compact_status_btn.set_visible(not simple)
+        if hasattr(self, "_preamble_btn"):
+            self._preamble_btn.set_visible(not simple)
         if hasattr(self, "_git_btn"):
             self._git_btn.set_visible(not simple)
         if hasattr(self, "_time_bar"):
@@ -1562,7 +1564,6 @@ class MainWindow(Adw.ApplicationWindow):
         if not simple:
             adv_sec = Gio.Menu()
             adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
-            adv_sec.append("Responsive reading (Ctrl+R)", "win.responsive-reading")
             menu.append_section("Advanced", adv_sec)
 
         menu.append("Help…", "win.open-help")
@@ -1597,7 +1598,6 @@ class MainWindow(Adw.ApplicationWindow):
             ("tab-rename",         self._tab_rename_action, None),
             ("tab-delete",         self._tab_delete_action, None),
             ("unlink-typ",         self._unlink_typ,           None),
-            ("responsive-reading", self.open_responsive_reading,"<Ctrl>r"),
             ("snippets",           self.open_snippets,          "<Ctrl><Shift>i"),
             ("scripture-search",   self.open_scripture_search,  "<Ctrl><Shift>f"),
             ("export-csv",         self.export_csv,             None),
@@ -1769,9 +1769,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_mode = "bulletin"
-        self._preview_btn = Gtk.ToggleButton(label="Preview",
-                                             tooltip_text="Toggle live preview")
-        self._preview_btn.connect("toggled", self._toggle_preview_panel)
+        self._preview_lbl = Gtk.Label(label="Preview")
+        self._preview_lbl.set_use_markup(True)
+        self._preview_btn = Gtk.Button(tooltip_text="Toggle live preview")
+        self._preview_btn.set_child(self._preview_lbl)
+        self._preview_btn.add_css_class("flat")
+        self._preview_btn.connect("clicked", self._toggle_preview_panel)
         hdr.pack_end(self._preview_btn)
 
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
@@ -1827,6 +1830,12 @@ class MainWindow(Adw.ApplicationWindow):
         self._typst_edit_btn.set_visible(False)
         self._typst_edit_active = False
         _left_box.append(self._typst_edit_btn)
+
+        self._preamble_btn, self._preamble_lbl = _status_toggle_btn(
+            "Preamble", "Document preamble — set fonts, margins, and layout for generated PDFs")
+        self._preamble_btn.connect("clicked", self._on_preamble_clicked)
+        self._preamble_active = False
+        _left_box.append(self._preamble_btn)
 
         status_bar.append(_left_box)
 
@@ -1906,13 +1915,20 @@ class MainWindow(Adw.ApplicationWindow):
         self._palette_visible = True
         GLib.idle_add(lambda: paned.set_position(290))
 
-        # Inner paned: order panel | bulletin preview (preview hidden by default)
+        # Main stack: order panel or preamble editor
+        self._main_stack = Gtk.Stack()
+        self._main_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self._main_stack.set_transition_duration(120)
+        self._main_stack.add_named(self._build_order_panel(), "order")
+        self._main_stack.add_named(self._build_preamble_panel(), "preamble")
+
+        # Inner paned: order/preamble stack | bulletin preview (preview hidden by default)
         self._preview_panel = self._build_preview_panel()
         self._preview_panel.set_visible(False)
         self._preview_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self._preview_paned.set_shrink_start_child(False)
         self._preview_paned.set_shrink_end_child(False)
-        self._preview_paned.set_start_child(self._build_order_panel())
+        self._preview_paned.set_start_child(self._main_stack)
         self._preview_paned.set_end_child(self._preview_panel)
         paned.set_end_child(self._preview_paned)
 
@@ -2045,6 +2061,128 @@ class MainWindow(Adw.ApplicationWindow):
             row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
             row._item_name = rname; row._section_name = self._section_for_item(rname)
             lb.append(row)
+
+    # ── Preamble panel ────────────────────────────────────────────────────────
+
+    def _on_preamble_clicked(self, _btn):
+        self._preamble_active = not self._preamble_active
+        if self._preamble_active:
+            self._preamble_lbl.set_markup("<b>Preamble</b>")
+            self._main_stack.set_visible_child_name("preamble")
+        else:
+            self._preamble_lbl.set_text("Preamble")
+            self._main_stack.set_visible_child_name("order")
+
+    def _on_preamble_changed(self, key: str, field: str, value) -> None:
+        if key not in config.preamble:
+            config.preamble[key] = {}
+        config.preamble[key][field] = value
+        config.save()
+        self._schedule_preview_update()
+
+    def _build_preamble_form(self, key: str) -> Gtk.Widget:
+        """Scrollable preference form for manuscript or bulletin preamble settings."""
+        _MS_DEFAULTS = {
+            "font": "", "size": 11.0,
+            "margin_top": 1.0, "margin_bottom": 1.0,
+            "margin_left": 0.7, "margin_right": 0.7,
+        }
+        _BUL_DEFAULTS = {
+            "font": "", "size": 11.0,
+            "margin_top": 0.7, "margin_bottom": 0.7,
+            "margin_left": 0.6, "margin_right": 0.6,
+        }
+        defaults = _MS_DEFAULTS if key == "manuscript" else _BUL_DEFAULTS
+        p = config.preamble.get(key, {})
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+
+        page = Adw.PreferencesPage()
+        page.set_vexpand(True)
+
+        typo_grp = Adw.PreferencesGroup(title="Typography")
+        page.add(typo_grp)
+
+        font_row = Adw.EntryRow(title="Font family")
+        font_row.set_text(p.get("font", defaults["font"]))
+        font_row.set_tooltip_text("Typst font name — leave empty to use the document default")
+        font_row.connect("changed", lambda r: self._on_preamble_changed(key, "font", r.get_text()))
+        typo_grp.add(font_row)
+
+        size_adj = Gtk.Adjustment(
+            value=p.get("size", defaults["size"]),
+            lower=6, upper=36, step_increment=0.5)
+        size_row = Adw.SpinRow(adjustment=size_adj, digits=1, title="Font size (pt)")
+        size_row.connect("notify::value",
+                         lambda r, _p: self._on_preamble_changed(key, "size", r.get_value()))
+        typo_grp.add(size_row)
+
+        margin_grp = Adw.PreferencesGroup(title="Margins (inches)")
+        page.add(margin_grp)
+
+        for field, label in (
+            ("margin_top",    "Top"),
+            ("margin_bottom", "Bottom"),
+            ("margin_left",   "Left"),
+            ("margin_right",  "Right"),
+        ):
+            adj = Gtk.Adjustment(
+                value=p.get(field, defaults[field]),
+                lower=0.0, upper=4.0, step_increment=0.05)
+            row = Adw.SpinRow(adjustment=adj, digits=2, title=label)
+            row.connect("notify::value",
+                        lambda r, _p, f=field: self._on_preamble_changed(key, f, r.get_value()))
+            margin_grp.add(row)
+
+        scroll.set_child(page)
+        return scroll
+
+    def _build_preamble_panel(self) -> Gtk.Box:
+        """Build the document preamble editor panel (font, margins, etc.)."""
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        hdr.set_margin_start(12); hdr.set_margin_end(12)
+        hdr.set_margin_top(10); hdr.set_margin_bottom(8)
+
+        hdr_lbl = Gtk.Label(label="Document Preamble")
+        hdr_lbl.add_css_class("title-4")
+        hdr_lbl.set_hexpand(True); hdr_lbl.set_xalign(0)
+        hdr.append(hdr_lbl)
+
+        self._preamble_ms_btn = Gtk.ToggleButton(label="Manuscript")
+        self._preamble_ms_btn.set_active(True)
+        self._preamble_ms_btn.add_css_class("flat")
+        self._preamble_bul_btn = Gtk.ToggleButton(label="Bulletin")
+        self._preamble_bul_btn.set_group(self._preamble_ms_btn)
+        self._preamble_bul_btn.add_css_class("flat")
+        toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        toggle_box.add_css_class("linked")
+        toggle_box.append(self._preamble_ms_btn)
+        toggle_box.append(self._preamble_bul_btn)
+        hdr.append(toggle_box)
+        outer.append(hdr)
+        outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self._preamble_form_stack = Gtk.Stack()
+        self._preamble_form_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self._preamble_form_stack.set_transition_duration(100)
+        self._preamble_form_stack.set_vexpand(True)
+        self._preamble_form_stack.add_named(self._build_preamble_form("manuscript"), "manuscript")
+        self._preamble_form_stack.add_named(self._build_preamble_form("bulletin"), "bulletin")
+        outer.append(self._preamble_form_stack)
+
+        def _on_type_toggled(btn):
+            if btn.get_active():
+                self._preamble_form_stack.set_visible_child_name(
+                    "manuscript" if btn == self._preamble_ms_btn else "bulletin")
+
+        self._preamble_ms_btn.connect("toggled", _on_type_toggled)
+        self._preamble_bul_btn.connect("toggled", _on_type_toggled)
+
+        return outer
 
     # ── Order panel ───────────────────────────────────────────────────────────
 
@@ -2291,12 +2429,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.duration_spin.connect("value-changed", self._on_duration_changed)
         row1.append(self.duration_spin)
 
-        self.bulletin_toggle = Gtk.ToggleButton(label="Bulletin")
-        self.bulletin_toggle.set_tooltip_text("Include in congregational bulletin")
+        self._bulletin_heading_lbl = Gtk.Label(label="Bulletin")
+        self._bulletin_heading_lbl.set_use_markup(True)
+        self.bulletin_toggle = Gtk.Button(
+            tooltip_text="Bulletin heading only — element title appears in the bulletin, body text omitted")
+        self.bulletin_toggle.set_child(self._bulletin_heading_lbl)
         self.bulletin_toggle.add_css_class("flat")
-        self.bulletin_toggle.add_css_class("bulletin-toggle")
-        self.bulletin_toggle.set_active(True)
-        self.bulletin_toggle.connect("toggled", self._on_bulletin_toggled)
+        self._bulletin_heading_only_active = False
+        self.bulletin_toggle.connect("clicked", self._on_bulletin_toggled)
         row1.append(self.bulletin_toggle)
 
         icon_btn = Gtk.MenuButton(icon_name="preferences-desktop-wallpaper-symbolic",
@@ -2345,9 +2485,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._snip_btn = Gtk.Button(label="Snippet", tooltip_text="Insert snippet (Ctrl+Shift+I)")
         self._snip_btn.add_css_class("flat")
         self._snip_btn.connect("clicked", lambda _: self.open_snippets()); row2.append(self._snip_btn)
-        self._rr_btn = Gtk.Button(label="Responsive", tooltip_text="Responsive reading builder (Ctrl+R)")
-        self._rr_btn.add_css_class("flat")
-        self._rr_btn.connect("clicked", lambda _: self.open_responsive_reading()); row2.append(self._rr_btn)
         self._hymn_mode_btn = Gtk.ToggleButton(label="Hymn",
                                                tooltip_text="Toggle hymn search and suggestions for this element")
         self._hymn_mode_btn.add_css_class("flat")
@@ -2439,6 +2576,10 @@ class MainWindow(Adw.ApplicationWindow):
             row.add_prefix(_ico)
         handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER)
         row.add_suffix(handle)
+        if not si.show_in_bulletin:
+            row.set_opacity(0.45)
+        elif getattr(si, "bulletin_heading_only", False):
+            row.set_opacity(0.7)
         self._attach_dnd(row, global_idx); return row
 
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
@@ -2672,8 +2813,13 @@ class MainWindow(Adw.ApplicationWindow):
             # Show the combined toolbar
             self.item_toolbar_revealer.set_reveal_child(True)
             self.leader_entry.set_text(si.leader)
-            # Bulletin toggle — set state without triggering handler
-            self.bulletin_toggle.set_active(si.show_in_bulletin)
+            # Bulletin heading-only toggle — update label without triggering handler
+            _bho = getattr(si, "bulletin_heading_only", False)
+            self._bulletin_heading_only_active = _bho
+            if _bho:
+                self._bulletin_heading_lbl.set_markup("<b>Bulletin</b>")
+            else:
+                self._bulletin_heading_lbl.set_text("Bulletin")
             self.duration_spin.set_value(getattr(si, "duration", 0))
             # Set hymn toggle and sync visibility directly (handler blocked by _updating_note)
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
@@ -3876,10 +4022,15 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._palette_paned.set_position(0)
 
-    def _toggle_preview_panel(self, btn):
-        visible = btn.get_active()
+    def _toggle_preview_panel(self, _btn=None):
+        self._preview_visible = not self._preview_visible
+        visible = self._preview_visible
+        if hasattr(self, "_preview_lbl"):
+            if visible:
+                self._preview_lbl.set_markup("<b>Preview</b>")
+            else:
+                self._preview_lbl.set_text("Preview")
         self._preview_panel.set_visible(visible)
-        self._preview_visible = visible
         if visible:
             def _set_pos():
                 total = self._preview_paned.get_allocated_width()
@@ -4079,7 +4230,42 @@ class MainWindow(Adw.ApplicationWindow):
         return shutil.which("typst")
 
     def _load_typst_preamble(self, name: str) -> str:
-        """Return a Typst document preamble, checking user override first."""
+        """Return a Typst document preamble.
+
+        Priority: GUI preamble config → user template override → bundled template.
+        """
+        preamble_key = "manuscript" if name == "manuscript" else "bulletin"
+        p = config.preamble.get(preamble_key)
+        if p:
+            ms = (name == "manuscript")
+            mt = p.get("margin_top",    1.0 if ms else 0.7)
+            mb = p.get("margin_bottom", 1.0 if ms else 0.7)
+            ml = p.get("margin_left",   0.7 if ms else 0.6)
+            mr = p.get("margin_right",  0.7 if ms else 0.6)
+            sz = p.get("size", 11)
+            font = p.get("font", "").strip()
+            parts: list[str] = []
+            if name == "manuscript":
+                parts.append(
+                    f'#set page(paper: "us-letter", '
+                    f'margin: (top: {mt}in, bottom: {mb}in, left: {ml}in, right: {mr}in))')
+            elif name == "bulletin_print":
+                parts.append(
+                    f'#set page(width: 5.5in, height: 8.5in, '
+                    f'margin: (top: {mt}in, bottom: {mb}in, left: {ml}in, right: {mr}in))')
+            elif name == "bulletin_digital":
+                parts.append(
+                    f'#set page(paper: "us-letter", '
+                    f'margin: (top: {mt}in, bottom: {mb}in, left: {ml}in, right: {mr}in))')
+            text_args = [f'size: {sz}pt']
+            if font:
+                text_args.append(f'font: "{font}"')
+            parts.append(f'#set text({", ".join(text_args)})')
+            parts.append('#set par(justify: false)')
+            if name == "bulletin_digital":
+                parts.append('#show link: it => text(fill: rgb("1e3a6e"), it)')
+            return '\n'.join(parts)
+
         user_path = Path.home() / ".config/rubric/templates" / f"{name}.typ"
         if user_path.exists():
             return user_path.read_text(encoding="utf-8").strip()
@@ -4908,8 +5094,7 @@ class MainWindow(Adw.ApplicationWindow):
             "Drag the ⠿ handle to reorder. Use ＋ Divider to separate movements "
             "(Gathering, Word, Response, Sending).\n\n"
             "**Add content** — select any element to see the item toolbar: Leader name, "
-            "Scripture lookup, Hymn number lookup (VU/MV/LUS), Snippets (✂), and "
-            "Responsive Reading builder (℟).\n\n"
+            "Scripture lookup, Hymn number lookup (VU/MV/LUS), and Snippets.\n\n"
             "**Hymn suggestions** — when a date is set, suggested hymns appear below the "
             "order list. Left-click to view on Hymnary.org; right-click to inject into the "
             "selected element.\n\n"
@@ -6084,6 +6269,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
             parts += ['', f'== {_typst_escape(entry.name)}', '']
 
+            # Bulletin-heading-only: show title only, no body content
+            if getattr(entry, "bulletin_heading_only", False):
+                continue
+
             name_lower = entry.name.lower()
             is_hymn = any(k in name_lower
                           for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
@@ -6473,17 +6662,27 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                              else self._note_preview(entry_obj.content_typst))
         self._mark_modified()
 
-    def _on_bulletin_toggled(self, btn):
+    def _on_bulletin_toggled(self, _btn):
         if self._updating_note: return
         idx = self._selected_index()
         if not (0 <= idx < len(self.service_entries)): return
         e = self.service_entries[idx]
         if not isinstance(e, ServiceItem): return
         self._push_undo()
-        e.show_in_bulletin = btn.get_active()
+        self._bulletin_heading_only_active = not self._bulletin_heading_only_active
+        e.bulletin_heading_only = self._bulletin_heading_only_active
+        if self._bulletin_heading_only_active:
+            self._bulletin_heading_lbl.set_markup("<b>Bulletin</b>")
+        else:
+            self._bulletin_heading_lbl.set_text("Bulletin")
         row = self._find_row_for_index(idx)
         if row:
-            row.set_opacity(1.0 if btn.get_active() else 0.45)
+            if not e.show_in_bulletin:
+                row.set_opacity(0.45)
+            elif e.bulletin_heading_only:
+                row.set_opacity(0.7)
+            else:
+                row.set_opacity(1.0)
         self._mark_modified()
 
     def _on_duration_changed(self, spin):
@@ -6701,285 +6900,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if active:
             if hasattr(self, "hymn_status"): self.hymn_status.set_label("")
             if hasattr(self, "hymn_entry"): self.hymn_entry.set_text("")
-
-    # ── Responsive reading builder ────────────────────────────────────────────
-
-    def open_responsive_reading(self):
-        dlg = Adw.Window(transient_for=self, modal=True)
-        dlg.set_title("Responsive Reading Builder")
-        dlg.set_default_size(660, 580)
-
-        tv = Adw.ToolbarView()
-        hdr = Adw.HeaderBar()
-        tv.add_top_bar(hdr)
-
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-
-        # Instructions
-        instr = Gtk.Label(
-            label='Press Enter to add a line. Toggle "All" on a line to mark it as the '
-                  'congregation\'s response — bold in the bulletin, prefixed "All: " on '
-                  'the first in each consecutive group.'
-        )
-        instr.add_css_class("caption"); instr.add_css_class("dim-label")
-        instr.set_wrap(True); instr.set_xalign(0)
-        instr.set_margin_start(16); instr.set_margin_end(16)
-        instr.set_margin_top(12); instr.set_margin_bottom(8)
-        outer.append(instr)
-
-        # Row list (scrollable)
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True)
-        scroll.set_margin_start(12); scroll.set_margin_end(12); scroll.set_margin_bottom(4)
-
-        rows_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        rows_box.set_margin_top(4); rows_box.set_margin_bottom(4)
-        rows_box.set_margin_start(4); rows_box.set_margin_end(4)
-
-        rr_rows: list[dict] = []
-
-        def _renumber():
-            for i, rd in enumerate(rr_rows):
-                rd["num_lbl"].set_text(f"{i + 1:2d}")
-
-        def _make_rr_row(text: str = "", is_all: bool = False) -> dict:
-            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            row_box.set_margin_top(1); row_box.set_margin_bottom(1)
-
-            num_lbl = Gtk.Label(label=" 1")
-            num_lbl.add_css_class("caption"); num_lbl.add_css_class("dim-label")
-            num_lbl.set_width_chars(3); num_lbl.set_xalign(1.0)
-            num_lbl.set_valign(Gtk.Align.START); num_lbl.set_margin_top(6)
-            row_box.append(num_lbl)
-
-            tv_widget = Gtk.TextView()
-            tv_widget.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            tv_widget.set_hexpand(True)
-            tv_widget.set_top_margin(4); tv_widget.set_bottom_margin(4)
-            tv_widget.set_left_margin(6); tv_widget.set_right_margin(6)
-            tv_widget.add_css_class("card")
-            if text:
-                tv_widget.get_buffer().set_text(text)
-            row_box.append(tv_widget)
-
-            all_btn = Gtk.ToggleButton(label="All")
-            all_btn.set_active(is_all)
-            all_btn.add_css_class("flat")
-            all_btn.set_tooltip_text('Congregation response — bold, "All: " prefix on first in group')
-            all_btn.set_valign(Gtk.Align.START)
-            row_box.append(all_btn)
-
-            del_btn = Gtk.Button(icon_name="list-remove-symbolic")
-            del_btn.add_css_class("flat"); del_btn.set_valign(Gtk.Align.START)
-            row_box.append(del_btn)
-
-            rd = {"tv": tv_widget, "all_btn": all_btn, "box": row_box, "num_lbl": num_lbl}
-
-            def on_delete(_b, rd=rd):
-                if len(rr_rows) > 1:
-                    rr_rows.remove(rd)
-                    rows_box.remove(rd["box"])
-                    _renumber()
-            del_btn.connect("clicked", on_delete)
-
-            key_ctrl = Gtk.EventControllerKey()
-            def on_key(ctrl, keyval, keycode, state, rd=rd):
-                if keyval == Gdk.KEY_Return and not (state & Gdk.ModifierType.SHIFT_MASK):
-                    idx = rr_rows.index(rd)
-                    buf = rd["tv"].get_buffer()
-                    insert_mark = buf.get_insert()
-                    cursor_it = buf.get_iter_at_mark(insert_mark)
-                    end_it = buf.get_end_iter()
-                    after = buf.get_text(cursor_it, end_it, False)
-                    buf.delete(cursor_it, buf.get_end_iter())
-                    new_rd = _make_rr_row(after)
-                    rr_rows.insert(idx + 1, new_rd)
-                    rows_box.insert_child_after(new_rd["box"], rd["box"])
-                    new_rd["tv"].grab_focus()
-                    new_rd["tv"].get_buffer().place_cursor(
-                        new_rd["tv"].get_buffer().get_start_iter())
-                    _renumber()
-                    return True
-                return False
-            key_ctrl.connect("key-pressed", on_key)
-            tv_widget.add_controller(key_ctrl)
-
-            return rd
-
-        def _add_rr_row(text: str = "", is_all: bool = False):
-            rd = _make_rr_row(text, is_all)
-            rr_rows.append(rd)
-            rows_box.append(rd["box"])
-
-        # Default starter rows
-        starters = [
-            ("The Lord is my shepherd;", False),
-            ("I shall not want.", True),
-            ("He makes me lie down in green pastures;", False),
-            ("He leads me beside still waters.", True),
-        ]
-        for t, a in starters:
-            _add_rr_row(t, a)
-        _renumber()
-
-        scroll.set_child(rows_box); outer.append(scroll)
-
-        outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        # Bottom buttons
-        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        btn_row.set_margin_start(16); btn_row.set_margin_end(16)
-        btn_row.set_margin_top(10); btn_row.set_margin_bottom(14)
-        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
-        cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda _: dlg.close())
-        btn_row.append(cancel_btn)
-
-        insert_btn = Gtk.Button(label="Insert into element")
-        insert_btn.add_css_class("suggested-action")
-
-        def on_insert(_b):
-            typst = self._build_rr_typst_from_rows(rr_rows)
-            self._on_bible_insert(typst)
-            dlg.close()
-
-        insert_btn.connect("clicked", on_insert)
-        btn_row.append(insert_btn)
-        outer.append(btn_row)
-
-        tv.set_content(outer); dlg.set_content(tv); dlg.present()
-
-    def _build_rr_typst_from_rows(self, rr_rows: list) -> str:
-        """Build Typst from the row-based responsive reading editor.
-
-        Off rows = plain leader text.
-        On rows = bold congregation response; first in each consecutive run gets "All: " prefix.
-        """
-        lines_out = []
-        prev_all = False
-        for rd in rr_rows:
-            buf = rd["tv"].get_buffer()
-            text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip()
-            if not text:
-                continue
-            is_all = rd["all_btn"].get_active()
-            if is_all:
-                if not prev_all:
-                    # First in consecutive run — add "All: " prefix
-                    lines_out.append(f"*All: {_typst_escape(text)}* \\")
-                else:
-                    lines_out.append(f"*{_typst_escape(text)}* \\")
-            else:
-                lines_out.append(f"{_typst_escape(text)} \\")
-            prev_all = is_all
-        return "\n".join(lines_out)
-
-    def _build_responsive_typst(self, raw: str) -> str:
-        """Convert L: / P: annotated text to Typst using #ldr / #ppl."""
-        lines_out = ["// Responsive reading"]
-        auto_leader = True
-        for line in raw.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if line.lower().startswith("l:"):
-                text = _typst_escape(line[2:].strip())
-                lines_out.append(f"#ldr[Leader: {text}]")
-                auto_leader = False
-            elif line.lower().startswith("p:"):
-                text = _typst_escape(line[2:].strip())
-                lines_out.append(f"#ppl[People: {text}]")
-                auto_leader = True
-            else:
-                text = _typst_escape(line)
-                if auto_leader:
-                    lines_out.append(f"#ldr[Leader: {text}]")
-                else:
-                    lines_out.append(f"#ppl[People: {text}]")
-                auto_leader = not auto_leader
-        return "\n".join(lines_out)
-
-    def _export_reading_cards(self, raw: str):
-        """Generate printable HTML role cards from the responsive reading text."""
-        import tempfile
-
-        title = self.service_title_entry.get_text() or "Responsive Reading"
-        date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
-        header = f"{title}" + (f" — {date_str}" if date_str else "")
-
-        lines = raw.strip().splitlines()
-        parsed: list[tuple[str, str]] = []  # (role, text)
-        auto_leader = True
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            if line.lower().startswith("l:"):
-                parsed.append(("L", line[2:].strip()))
-                auto_leader = False
-            elif line.lower().startswith("p:"):
-                parsed.append(("P", line[2:].strip()))
-                auto_leader = True
-            else:
-                parsed.append(("L" if auto_leader else "P", line))
-                auto_leader = not auto_leader
-
-        def esc(s): return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-
-        def _card(role_label: str, entries, role_filter: str | None) -> str:
-            rows = []
-            for role, text in entries:
-                if role_filter and role != role_filter:
-                    rows.append(f"<div class='line skip'>&nbsp;</div>")
-                else:
-                    cls = "leader" if role == "L" else "people"
-                    prefix = "<b>Leader:</b> " if role == "L" else "<i>People:</i> "
-                    rows.append(f"<div class='line {cls}'>{prefix}{esc(text)}</div>")
-            return "\n".join([
-                f"<div class='card'>",
-                f"<div class='card-title'>{esc(role_label)}</div>",
-                f"<div class='card-sub'>{esc(header)}</div>",
-                "<div class='reading'>",
-            ] + rows + ["</div></div>"])
-
-        css = """
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Georgia, serif; font-size: 11pt; color: #111; }
-.card { border: 1px solid #bbb; border-radius: 6px; padding: 18px 22px;
-        margin: 0 auto 20px; max-width: 5.5in; page-break-inside: avoid; }
-.card-title { font-size: 13pt; font-weight: bold; font-variant: small-caps;
-              letter-spacing: 0.06em; margin-bottom: 2px; }
-.card-sub { font-size: 9pt; color: #666; margin-bottom: 12px; }
-.reading { line-height: 1.7; }
-.line { margin-bottom: 3px; }
-.leader { font-weight: bold; }
-.people { font-style: italic; }
-.skip { color: #ccc; user-select: none; }
-@media print {
-  body { margin: 0; }
-  @page { size: letter; margin: 0.6in; }
-  .card { border: 1px solid #999; page-break-after: always; }
-  .card:last-child { page-break-after: auto; }
-}
-"""
-
-        leader_card  = _card("Leader / Minister",  parsed, "L")
-        people_card  = _card("People's Insert",     parsed, "P")
-        full_card    = _card("Full Pew Card",        parsed, None)
-
-        html = "\n".join([
-            "<!DOCTYPE html><html lang='en'>",
-            f"<head><meta charset='utf-8'><title>Reading Cards — {esc(header)}</title>",
-            f"<style>{css}</style></head><body>",
-            leader_card, people_card, full_card,
-            "</body></html>",
-        ])
-
-        with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".html", delete=False, encoding="utf-8") as f:
-            f.write(html); tmp = f.name
-        Gtk.show_uri(None, GLib.filename_to_uri(tmp, None), 0)
 
     # ── AV sheet export ───────────────────────────────────────────────────────
 
@@ -7823,7 +7743,6 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         <child>
           <object class='GtkShortcutsGroup'>
             <property name='title'>Tools</property>
-            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;r</property><property name='title'>Responsive reading builder</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;f</property><property name='title'>Scripture search</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;i</property><property name='title'>Snippets library</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;k</property><property name='title'>Services library</property></object></child>
@@ -9836,10 +9755,6 @@ notebook > header.left tab:checked { background: alpha(@accent_bg_color, 0.15); 
 /* Header bar buttons: square, not tall */
 headerbar button { min-width: 32px; min-height: 32px; padding: 4px; }
 headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 4px; }
-/* Bulletin toggle: bold when active, transparent border when inactive */
-.bulletin-toggle { background: transparent; box-shadow: none; }
-.bulletin-toggle:checked { font-weight: bold; }
-.bulletin-toggle:not(:checked) { border-color: transparent; box-shadow: none; }
 /* Drag handle: subtle at rest, visible on hover, grab cursor */
 .order-list row .drag-handle { opacity: 0.18; transition: opacity 120ms; cursor: grab; }
 .order-list row:hover .drag-handle { opacity: 0.6; }
