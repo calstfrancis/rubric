@@ -4,6 +4,25 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev9 — Bulletin style presets, preview and font fixes
+
+### Added
+
+- **Bulletin style presets** — the Template → Bulletin form now has four one-click style presets at the top:
+  - **Classic** — two columns, bold small-caps + rule headings, 11 pt. Traditional, formal.
+  - **Contemporary** — two columns, clean bold headings, 10.5 pt. Modern, welcoming.
+  - **Large Print** — single column, bold small-caps headings, 14 pt. Accessible for low-vision readers.
+  - **Compact** — two columns, plain headings, 9.5 pt, tight margins. Fits long services on fewer pages.
+  - Each preset applies all layout settings at once; individual fields remain editable afterwards.
+
+### Fixed
+
+- **Font size now applies correctly** — changing template settings while a compile was in progress caused the HTML fallback (hardcoded 11 pt) to display instead of the correct PDF. The update is now rescheduled until the compile finishes, so every change gets compiled.
+- **Preview scroll preservation** — scroll position is now polled every 400 ms while the preview is open, so the position is always current when a PDF reloads. A 120 ms post-load delay lets the PDF renderer settle before the scroll is restored.
+- **Template panel → preview sync** — opening the Template panel now immediately switches the preview to manuscript or bulletin mode based on the active sub-toggle.
+
+---
+
 ## 0.17.5-dev8 — Template panel sync, heading spacing, UX polish
 
 ### Added

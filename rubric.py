@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev8"
+APP_VERSION = "0.17.5-dev9"
 
 
 config = Config()
@@ -1789,6 +1789,7 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.pack_end(_help_btn)
 
         self._preview_visible = False
+        self._preview_scroll_poll_id = None
         self._preview_pending_id = None
         self._preview_mode = "bulletin"
         self._preview_paned_positioned = False
@@ -2092,8 +2093,22 @@ class MainWindow(Adw.ApplicationWindow):
         if self._preamble_active:
             self._preamble_lbl.set_markup("<b>Template</b>")
             self._main_stack.set_visible_child_name("preamble")
+            # Sync preview mode to whichever sub-toggle is active
+            active_key = (
+                "manuscript" if getattr(self, "_preamble_ms_btn", None)
+                and self._preamble_ms_btn.get_active()
+                else "bulletin"
+            )
+            self._preview_mode = active_key
+            if hasattr(self, "_preview_manuscript_btn"):
+                if active_key == "manuscript":
+                    self._preview_manuscript_btn.set_active(True)
+                else:
+                    self._preview_bulletin_btn.set_active(True)
             if not self._preview_visible:
                 self._toggle_preview_panel()
+            else:
+                self._do_preview_update()
         else:
             self._preamble_lbl.set_text("Template")
             self._main_stack.set_visible_child_name("order")
@@ -2123,6 +2138,67 @@ class MainWindow(Adw.ApplicationWindow):
         config.preamble[key][field] = value
         config.save()
         self._schedule_preview_update()
+
+    _BULLETIN_PRESETS = [
+        (
+            "Classic",
+            "Two columns · small-caps headings with rule · 11 pt\n"
+            "Traditional, formal — suits most congregations",
+            {
+                "font": "", "size": 11.0,
+                "margin_top": 0.65, "margin_bottom": 0.65,
+                "margin_left": 0.6,  "margin_right": 0.6,
+                "columns": 2, "heading_style": "bold-smallcaps-rule",
+            },
+        ),
+        (
+            "Contemporary",
+            "Two columns · clean bold headings · 10.5 pt\n"
+            "Modern, welcoming — less ornate than Classic",
+            {
+                "font": "", "size": 10.5,
+                "margin_top": 0.55, "margin_bottom": 0.55,
+                "margin_left": 0.5,  "margin_right": 0.5,
+                "columns": 2, "heading_style": "bold",
+            },
+        ),
+        (
+            "Large Print",
+            "Single column · bold small-caps headings · 14 pt\n"
+            "Accessible — clear for low-vision readers",
+            {
+                "font": "", "size": 14.0,
+                "margin_top": 0.6,  "margin_bottom": 0.6,
+                "margin_left": 0.65, "margin_right": 0.65,
+                "columns": 1, "heading_style": "bold-smallcaps",
+            },
+        ),
+        (
+            "Compact",
+            "Two columns · plain headings · 9.5 pt · tight margins\n"
+            "Fits long services on fewer pages",
+            {
+                "font": "", "size": 9.5,
+                "margin_top": 0.5,  "margin_bottom": 0.5,
+                "margin_left": 0.45, "margin_right": 0.45,
+                "columns": 2, "heading_style": "plain",
+            },
+        ),
+    ]
+
+    def _apply_bulletin_preset(self, preset: dict) -> None:
+        config.preamble["bulletin"] = dict(preset)
+        config.save()
+        self._rebuild_preamble_form("bulletin")
+        self._do_preview_update()
+
+    def _rebuild_preamble_form(self, key: str) -> None:
+        old = self._preamble_form_stack.get_child_by_name(key)
+        if old:
+            self._preamble_form_stack.remove(old)
+        new_form = self._build_preamble_form(key)
+        self._preamble_form_stack.add_named(new_form, key)
+        self._preamble_form_stack.set_visible_child_name(key)
 
     @staticmethod
     def _get_system_fonts() -> list[str]:
@@ -2157,6 +2233,20 @@ class MainWindow(Adw.ApplicationWindow):
         scroll.set_vexpand(True)
         page = Adw.PreferencesPage()
         page.set_vexpand(True)
+
+        # ── Style presets (bulletin only) ─────────────────────────────────────
+        if key == "bulletin":
+            preset_grp = Adw.PreferencesGroup(
+                title="Style presets",
+                description="Apply a starting point — you can fine-tune below")
+            page.add(preset_grp)
+            for p_name, p_desc, p_vals in self._BULLETIN_PRESETS:
+                row = Adw.ActionRow(title=p_name, subtitle=p_desc.replace("\n", " · "))
+                btn = Gtk.Button(label="Apply", valign=Gtk.Align.CENTER)
+                btn.add_css_class("flat")
+                btn.connect("clicked", lambda _b, v=p_vals: self._apply_bulletin_preset(v))
+                row.add_suffix(btn)
+                preset_grp.add(row)
 
         # ── Typography ────────────────────────────────────────────────────────
         typo_grp = Adw.PreferencesGroup(title="Typography")
@@ -4177,8 +4267,10 @@ class MainWindow(Adw.ApplicationWindow):
                     self._preview_paned.set_position(pos)
                     return False
                 GLib.idle_add(_set_pos)
+            self._start_scroll_poll()
             self._do_preview_update()
         else:
+            self._stop_scroll_poll()
             if getattr(self, "_preview_pending_id", None) is not None:
                 GLib.source_remove(self._preview_pending_id)
                 self._preview_pending_id = None
@@ -4284,7 +4376,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         typst = self._find_typst()
         live_mode = getattr(self, "_preview_live_mode", False)
-        if typst and not live_mode and not getattr(self, "_preview_compiling", False):
+        if typst and not live_mode:
+            if getattr(self, "_preview_compiling", False):
+                # Compile in progress — reschedule so we pick up latest settings
+                self._preview_pending_id = GLib.timeout_add(500, self._do_preview_update)
+                return False
             # Capture Typst source in main thread (GTK widget access required)
             try:
                 if mode == "manuscript":
@@ -4303,7 +4399,7 @@ class MainWindow(Adw.ApplicationWindow):
             ).start()
             return False
 
-        # Live mode, Typst not found, or compile already in progress — HTML fallback
+        # Live mode or Typst not found — HTML fallback
         try:
             if mode == "manuscript":
                 html = self._build_manuscript_html()
@@ -4448,35 +4544,51 @@ class MainWindow(Adw.ApplicationWindow):
         if _WebKit and event == _WebKit.LoadEvent.FINISHED:
             y = self._preview_scroll_y
             if y > 0:
-                js = f"window.scrollTo(0, {y});"
-                try:
-                    wv.evaluate_javascript(js, -1, None, None, None, None, None)
-                except (AttributeError, TypeError):
+                def _restore(wv=wv, y=y):
+                    js = f"window.scrollTo(0, {y});"
                     try:
-                        wv.run_javascript(js, None, None, None)
-                    except Exception:
-                        pass
+                        wv.evaluate_javascript(js, -1, None, None, None, None, None)
+                    except (AttributeError, TypeError):
+                        try:
+                            wv.run_javascript(js, None, None, None)
+                        except Exception:
+                            pass
+                    return False
+                GLib.timeout_add(120, _restore)
 
-    def _preview_save_scroll(self):
-        """Capture current scroll Y before a reload; fires JS async."""
-        wv = self._preview_webview
-        if wv is None:
-            return
-        def _got_scroll(source, result, _data):
+    def _start_scroll_poll(self):
+        """Poll scroll position every 400 ms so it's always current before a reload."""
+        self._stop_scroll_poll()
+        def _poll():
+            wv = self._preview_webview
+            if wv is None or not getattr(self, "_preview_visible", False):
+                self._preview_scroll_poll_id = None
+                return False
+            def _got(source, result, _):
+                try:
+                    js_result = source.evaluate_javascript_finish(result)
+                    if js_result is not None:
+                        try:
+                            self._preview_scroll_y = int(js_result.get_js_value().to_double())
+                        except AttributeError:
+                            self._preview_scroll_y = int(js_result.to_double())
+                except Exception:
+                    pass
             try:
-                js_result = source.evaluate_javascript_finish(result)
-                if js_result is not None:
-                    try:
-                        jsc_val = js_result.get_js_value()
-                        self._preview_scroll_y = int(jsc_val.to_double())
-                    except AttributeError:
-                        self._preview_scroll_y = int(js_result.to_double())
+                wv.evaluate_javascript("window.scrollY", -1, None, None, None, _got, None)
             except Exception:
                 pass
-        try:
-            wv.evaluate_javascript("window.scrollY", -1, None, None, None, _got_scroll, None)
-        except (AttributeError, TypeError):
-            pass
+            return True  # keep polling
+        self._preview_scroll_poll_id = GLib.timeout_add(400, _poll)
+
+    def _stop_scroll_poll(self):
+        pid = getattr(self, "_preview_scroll_poll_id", None)
+        if pid is not None:
+            GLib.source_remove(pid)
+            self._preview_scroll_poll_id = None
+
+    def _preview_save_scroll(self):
+        pass  # kept for call-site compatibility; polling handles this now
 
     def _preview_compile_done(self):
         self._preview_compiling = False
@@ -6687,10 +6799,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         ]
         if _ms_hdg_override:
             parts += [_ms_hdg_override, '']
-        parts += [f'#align(center)[#text(size: 1.5em, weight: "bold")[{title}]]']
-        if date_str:
-            parts.append(f'#align(center)[#text(size: 1.1em, style: "italic")[{date_str}]]')
-        parts += ['#v(6pt)', '#line(length: 100%, stroke: 0.5pt)', '#v(8pt)', '']
 
         groups = [(sec, items) for sec, items in self._grouped_entries() if items]
         in_columns = False
