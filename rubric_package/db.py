@@ -134,7 +134,7 @@ def hymn_search(query: str, limit: int = 30) -> list[dict]:
             "ORDER BY key LIMIT ?",
             (q, q, limit),
         ).fetchall()
-        return [{"key": r["key"], "title": r["title"]} for r in rows]
+        return [{"key": r["key"], "title": _html.unescape(r["title"])} for r in rows]
     finally:
         con.close()
 

@@ -2306,6 +2306,8 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._theme_selected_btn = None
         self._hymn_search_pop = self._build_hymn_search_popover()
+        self._hymn_search_pop.connect("show", lambda _: self._on_hymn_search_changed(
+            self._hymn_search_entry.get_text().strip() if hasattr(self, "_hymn_search_entry") else ""))
         hymn_menu_btn = Gtk.MenuButton(label="Hymn",
                                        tooltip_text="Look up or search hymns",
                                        popover=self._hymn_search_pop)
@@ -2886,7 +2888,9 @@ class MainWindow(Adw.ApplicationWindow):
         if not result: self.hymn_status.set_label("Format: VU 16  MV 120  LUS 5"); return
         prefix, number = result; self.hymn_status.set_label("Looking up…")
         def on_result(title, error):
-            if error: self.hymn_status.set_label(error); return
+            if error:
+                self.hymn_status.set_label(f"{error} — search cached hymns in the By Title tab")
+                return
             # Short format: "VU 16 — O Come, O Come, Emmanuel"
             short_ref = f"{prefix.upper()} {number}"
             hymn_line = f"{short_ref} — {title}"
@@ -2974,7 +2978,7 @@ class MainWindow(Adw.ApplicationWindow):
         scroll.set_child(self._hymn_search_list)
         title_page.append(scroll)
 
-        hint = Gtk.Label(label="Only cached hymns appear. Pre-download in Preferences → Scripture.")
+        hint = Gtk.Label(label="Searches your local hymn cache. Use the Lookup tab to fetch and cache individual hymns by number.")
         hint.add_css_class("caption"); hint.add_css_class("dim-label")
         hint.set_wrap(True); hint.set_xalign(0)
         hint.set_margin_start(8); hint.set_margin_end(8); hint.set_margin_bottom(8)
@@ -3027,6 +3031,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         stack.add_titled(theme_page, "themes", "By Theme")
 
+        self._hymn_search_entry = se
         se.connect("search-changed", lambda e: self._on_hymn_search_changed(e.get_text().strip()))
         pop.set_child(outer)
         return pop
@@ -3034,12 +3039,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_hymn_search_changed(self, query: str):
         while self._hymn_search_list.get_first_child():
             self._hymn_search_list.remove(self._hymn_search_list.get_first_child())
-        if len(query) < 2:
-            return
-        results = search_hymns(query)
+        results = search_hymns(query) if len(query) >= 2 else search_hymns("")
         if not results:
             row = Gtk.ListBoxRow(); row.set_activatable(False)
-            lbl = Gtk.Label(label="No cached results — try a hymn number lookup first")
+            lbl = Gtk.Label(label="No hymns cached yet — use the Lookup tab to fetch by number")
             lbl.add_css_class("dim-label"); lbl.add_css_class("caption")
             lbl.set_margin_top(8); lbl.set_margin_bottom(8)
             row.set_child(lbl); self._hymn_search_list.append(row)
