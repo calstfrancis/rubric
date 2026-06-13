@@ -352,14 +352,14 @@ TYPST_SHARED = r"""
 
 // Section heading: centred large bold small-caps (= Section)
 #show heading.where(level: 1): it => {
-  v(10pt, weak: true)
+  v(16pt)
   align(center, text(size: 1.3em, weight: "bold", smallcaps(it.body)))
   v(6pt, weak: true)
 }
 
 // Element heading: bold small-caps with a thin rule below (== Item)
 #show heading.where(level: 2): it => {
-  v(6pt, weak: true)
+  v(10pt)
   text(weight: "bold", smallcaps(it.body))
   v(1pt, weak: true)
   line(length: 100%, stroke: 0.4pt + luma(160))
@@ -368,7 +368,7 @@ TYPST_SHARED = r"""
 
 // Sub-heading: medium bold (=== Subitem)
 #show heading.where(level: 3): it => {
-  v(4pt, weak: true)
+  v(7pt)
   text(size: 0.95em, weight: "bold", it.body)
   v(2pt, weak: true)
 }

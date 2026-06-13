@@ -4,6 +4,21 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev8 — Template panel sync, heading spacing, UX polish
+
+### Added
+
+- **Compact title page option** — Settings → Bulletin → "Title page style" lets you choose between a full cover page and a compact church-name/title/date header at the top of page 1 (no page break).
+- **Dismiss button for hymn suggestions** — an × button on the hymn suggestions strip lets you close it. The strip reappears automatically when you navigate to a new hymn element.
+
+### Fixed
+
+- **Template panel font/margin preview now works** — the Template sub-toggle (Manuscript / Bulletin) now syncs with the preview mode, so changes to manuscript settings are immediately reflected in the manuscript preview and vice versa.
+- **Preview pane no longer jumps** — the preview paned divider position is now set only once on first reveal and never touched again; users can drag it wherever they like without it being reset.
+- **Heading spacing** — section (`=`), element (`==`), and sub-heading (`===`) headings now have reliable non-collapsing space above them (16 pt / 10 pt / 7 pt) so headings are clearly separated from preceding content.
+
+---
+
 ## 0.17.5-dev7 — Template panel improvements, scroll preservation
 
 ### Added

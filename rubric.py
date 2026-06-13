@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev7"
+APP_VERSION = "0.17.5-dev8"
 
 
 config = Config()
@@ -278,6 +278,28 @@ class BulletinPrefsWindow(Adw.Window):
         digital_btn.connect("toggled", lambda b: on_mode(b, True))
         toggle_box.append(print_btn); toggle_box.append(digital_btn)
         fmt_row.add_suffix(toggle_box); fmt_grp.add(fmt_row)
+
+        cover_style_row = Adw.ActionRow(
+            title="Title page style",
+            subtitle="Full: dedicated cover page · Compact: short header at top of first page")
+        cs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        cs_box.add_css_class("linked"); cs_box.set_valign(Gtk.Align.CENTER)
+        cs_full_btn = Gtk.ToggleButton(label="Full page")
+        cs_compact_btn = Gtk.ToggleButton(label="Compact")
+        cs_compact_btn.set_group(cs_full_btn)
+        if config.bulletin.get("cover_style", "full") == "compact":
+            cs_compact_btn.set_active(True)
+        else:
+            cs_full_btn.set_active(True)
+        def on_cover_style(btn, style):
+            if btn.get_active():
+                config.bulletin["cover_style"] = style
+                config.save()
+                if self._main: self._main._schedule_preview_update()
+        cs_full_btn.connect("toggled",    lambda b: on_cover_style(b, "full"))
+        cs_compact_btn.connect("toggled", lambda b: on_cover_style(b, "compact"))
+        cs_box.append(cs_full_btn); cs_box.append(cs_compact_btn)
+        cover_style_row.add_suffix(cs_box); fmt_grp.add(cover_style_row)
 
         # ── Boilerplate text ──────────────────────────────────────────────
         text_grp = Adw.PreferencesGroup(title="Boilerplate text")
@@ -1769,6 +1791,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_visible = False
         self._preview_pending_id = None
         self._preview_mode = "bulletin"
+        self._preview_paned_positioned = False
         self._preview_lbl = Gtk.Label(label="Preview")
         self._preview_lbl.set_use_markup(True)
         self._preview_btn = Gtk.Button(tooltip_text="Toggle live preview")
@@ -2088,7 +2111,7 @@ class MainWindow(Adw.ApplicationWindow):
             body = "it.body"
         return (
             "#show heading.where(level: 2): it => {\n"
-            "  v(6pt, weak: true)\n"
+            "  v(10pt)\n"
             f"  {body}\n"
             "  v(4pt, weak: true)\n"
             "}"
@@ -2262,8 +2285,17 @@ class MainWindow(Adw.ApplicationWindow):
 
         def _on_type_toggled(btn):
             if btn.get_active():
-                self._preamble_form_stack.set_visible_child_name(
-                    "manuscript" if btn == self._preamble_ms_btn else "bulletin")
+                mode = "manuscript" if btn == self._preamble_ms_btn else "bulletin"
+                self._preamble_form_stack.set_visible_child_name(mode)
+                # Mirror in the preview so font/margin changes are immediately visible
+                self._preview_mode = mode
+                self._preview_scroll_y = 0
+                if hasattr(self, "_preview_manuscript_btn"):
+                    if mode == "manuscript":
+                        self._preview_manuscript_btn.set_active(True)
+                    else:
+                        self._preview_bulletin_btn.set_active(True)
+                self._do_preview_update()
 
         self._preamble_ms_btn.connect("toggled", _on_type_toggled)
         self._preamble_bul_btn.connect("toggled", _on_type_toggled)
@@ -2619,16 +2651,30 @@ class MainWindow(Adw.ApplicationWindow):
         self.sugg_revealer = Gtk.Revealer()
         self.sugg_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
         self.sugg_revealer.set_transition_duration(200)
+        self._sugg_dismissed = False
         sugg_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         sugg_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        sugg_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self._sugg_chips_box = Gtk.FlowBox()
         self._sugg_chips_box.set_selection_mode(Gtk.SelectionMode.NONE)
         self._sugg_chips_box.set_max_children_per_line(50)
         self._sugg_chips_box.set_min_children_per_line(1)
         self._sugg_chips_box.set_column_spacing(4); self._sugg_chips_box.set_row_spacing(4)
-        self._sugg_chips_box.set_margin_start(10); self._sugg_chips_box.set_margin_end(10)
+        self._sugg_chips_box.set_margin_start(10); self._sugg_chips_box.set_margin_end(6)
         self._sugg_chips_box.set_margin_bottom(6); self._sugg_chips_box.set_margin_top(6)
-        sugg_outer.append(self._sugg_chips_box)
+        self._sugg_chips_box.set_hexpand(True)
+        sugg_close_btn = Gtk.Button(icon_name="window-close-symbolic",
+                                    tooltip_text="Dismiss suggestions",
+                                    valign=Gtk.Align.CENTER)
+        sugg_close_btn.add_css_class("flat")
+        sugg_close_btn.set_margin_end(6)
+        def _dismiss_suggestions(_btn):
+            self._sugg_dismissed = True
+            self.sugg_revealer.set_reveal_child(False)
+        sugg_close_btn.connect("clicked", _dismiss_suggestions)
+        sugg_row.append(self._sugg_chips_box)
+        sugg_row.append(sugg_close_btn)
+        sugg_outer.append(sugg_row)
         self.sugg_revealer.set_child(sugg_outer)
         box.append(self.sugg_revealer)
 
@@ -2911,6 +2957,8 @@ class MainWindow(Adw.ApplicationWindow):
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             self._hymn_mode_btn.set_active(is_hymn)
             for w in self._hymn_toolbar_widgets: w.set_visible(is_hymn)
+            if is_hymn:
+                self._sugg_dismissed = False
             self.sugg_revealer.set_reveal_child(
                 is_hymn and getattr(self, "_hymn_suggestions_available", False))
             # Update focus mode banner
@@ -4121,12 +4169,14 @@ class MainWindow(Adw.ApplicationWindow):
                 self._preview_lbl.set_text("Preview")
         self._preview_panel.set_visible(visible)
         if visible:
-            def _set_pos():
-                total = self._preview_paned.get_allocated_width()
-                pos = max(280, int(total * 0.55)) if total > 300 else 380
-                self._preview_paned.set_position(pos)
-                return False
-            GLib.idle_add(_set_pos)
+            if not self._preview_paned_positioned:
+                self._preview_paned_positioned = True
+                def _set_pos():
+                    total = self._preview_paned.get_allocated_width()
+                    pos = max(280, int(total * 0.50)) if total > 300 else 380
+                    self._preview_paned.set_position(pos)
+                    return False
+                GLib.idle_add(_set_pos)
             self._do_preview_update()
         else:
             if getattr(self, "_preview_pending_id", None) is not None:
@@ -6331,50 +6381,64 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if _hdg_override:
             parts += [_hdg_override, '']
 
-        # ── Cover page ────────────────────────────────────────────────────────
+        # ── Cover page / compact header ───────────────────────────────────────
+        cover_style = b.get("cover_style", "full")
         cover_img = b.get("cover_image", "").strip()
-        parts.append('#v(1.5cm)')
-        parts.append('#align(center)[')
-        if cover_img and Path(cover_img).is_file():
-            safe = cover_img.replace("\\", "/")
-            parts.append(
-                f'  #image("{safe}", width: 70%, height: 5cm, fit: "contain")')
-            parts.append('  #v(0.6em)')
-        parts.append(f'  #text(size: 1.5em, weight: "bold")[#smallcaps[{church}]]')
-        parts.append('  #linebreak()')
-        if address:
-            parts.append(f'  #text(size: 0.85em)[{address}]')
+        if cover_style == "compact":
+            # Compact: small centred block at the top of page 1, no page break
+            parts.append('#align(center)[')
+            parts.append(f'  #text(size: 1.2em, weight: "bold")[#smallcaps[{church}]]')
+            if address or svc_time:
+                detail = " · ".join(filter(None, [address, svc_time]))
+                parts.append(f'  #linebreak()#text(size: 0.8em)[{detail}]')
+            parts.append(f'  #linebreak()#v(0.3em)#text(size: 1.1em, weight: "bold")[{title}]')
+            if date_str:
+                parts.append(f'  #linebreak()#text(size: 0.9em)[{date_str}]')
+            parts += [']', '#v(0.6em)', '#line(length: 100%, stroke: 0.5pt)', '#v(0.4em)', '']
+        else:
+            # Full title page
+            parts.append('#v(1.5cm)')
+            parts.append('#align(center)[')
+            if cover_img and Path(cover_img).is_file():
+                safe = cover_img.replace("\\", "/")
+                parts.append(
+                    f'  #image("{safe}", width: 70%, height: 5cm, fit: "contain")')
+                parts.append('  #v(0.6em)')
+            parts.append(f'  #text(size: 1.5em, weight: "bold")[#smallcaps[{church}]]')
             parts.append('  #linebreak()')
-        parts.append(f'  #text(size: 0.85em)[{svc_time}]')
-        parts.append('  #v(2cm)')
-        parts.append(f'  #text(size: 1.5em, weight: "bold")[{title}]')
-        parts.append('  #linebreak()')
-        if date_str:
-            parts.append(f'  #text(size: 1.2em)[{date_str}]')
+            if address:
+                parts.append(f'  #text(size: 0.85em)[{address}]')
+                parts.append('  #linebreak()')
+            parts.append(f'  #text(size: 0.85em)[{svc_time}]')
+            parts.append('  #v(2cm)')
+            parts.append(f'  #text(size: 1.5em, weight: "bold")[{title}]')
             parts.append('  #linebreak()')
-        if website or email or phone:
-            parts.append('  #v(1cm)')
-            parts.append('  #text(size: 0.85em)[')
-            if website:
-                w_esc = _typst_escape(website)
-                if digital:
-                    parts.append(
-                        f'    #link("https://{website}")[{w_esc}] #linebreak()')
-                else:
-                    parts.append(f'    {w_esc} #linebreak()')
-            if email:
-                e_esc = _typst_escape(email)
-                if digital:
-                    parts.append(
-                        f'    #link("mailto:{email}")[{e_esc}] #linebreak()')
-                else:
-                    parts.append(f'    {e_esc} #linebreak()')
-            if phone:
-                parts.append(f'    {phone} #linebreak()')
-            parts.append('  ]')
-        if welcome:
-            parts += ['  #v(1cm)', f'  #emph[{welcome}]']
-        parts += [']', '#pagebreak()', '']
+            if date_str:
+                parts.append(f'  #text(size: 1.2em)[{date_str}]')
+                parts.append('  #linebreak()')
+            if website or email or phone:
+                parts.append('  #v(1cm)')
+                parts.append('  #text(size: 0.85em)[')
+                if website:
+                    w_esc = _typst_escape(website)
+                    if digital:
+                        parts.append(
+                            f'    #link("https://{website}")[{w_esc}] #linebreak()')
+                    else:
+                        parts.append(f'    {w_esc} #linebreak()')
+                if email:
+                    e_esc = _typst_escape(email)
+                    if digital:
+                        parts.append(
+                            f'    #link("mailto:{email}")[{e_esc}] #linebreak()')
+                    else:
+                        parts.append(f'    {e_esc} #linebreak()')
+                if phone:
+                    parts.append(f'    {phone} #linebreak()')
+                parts.append('  ]')
+            if welcome:
+                parts += ['  #v(1cm)', f'  #emph[{welcome}]']
+            parts += [']', '#pagebreak()', '']
 
         # ── Service order ─────────────────────────────────────────────────────
         in_columns = False
@@ -6955,7 +7019,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         self._hymn_suggestions_available = True
         self.sugg_revealer.set_reveal_child(
-            getattr(self, "_hymn_mode_btn", None) is not None
+            not getattr(self, "_sugg_dismissed", False)
+            and getattr(self, "_hymn_mode_btn", None) is not None
             and self._hymn_mode_btn.get_active()
         )
 

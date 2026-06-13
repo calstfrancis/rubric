@@ -74,6 +74,7 @@ class Config:
             "include_scripture": True,
             "include_announcements": True,
             "cover_image": "",
+            "cover_style": "full",
         }
 
     def _load(self) -> None:
