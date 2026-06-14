@@ -44,6 +44,7 @@ class ServiceItem:
         rubric_note: str = "",
         icon: str = "",
         bulletin_heading_only: bool = False,
+        bulletin_summary: str = "",
     ) -> None:
         self.name = name
         self.section = section
@@ -63,6 +64,8 @@ class ServiceItem:
         self.icon = icon
         # Bulletin appears as heading only (no body text in bulletin)
         self.bulletin_heading_only = bulletin_heading_only
+        # Short line shown in the bulletin instead of full content_typst
+        self.bulletin_summary = bulletin_summary
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -86,6 +89,8 @@ class ServiceItem:
             d["icon"] = self.icon
         if self.bulletin_heading_only:
             d["bulletin_heading_only"] = True
+        if self.bulletin_summary:
+            d["bulletin_summary"] = self.bulletin_summary
         return d
 
     @classmethod
@@ -123,6 +128,7 @@ class ServiceItem:
             rubric_note=d.get("rubric_note", ""),
             icon=d.get("icon", ""),
             bulletin_heading_only=d.get("bulletin_heading_only", False),
+            bulletin_summary=d.get("bulletin_summary", ""),
         )
 
     def __repr__(self) -> str:

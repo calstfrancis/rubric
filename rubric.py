@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev16"
+APP_VERSION = "0.17.5-dev17"
 
 
 config = Config()
@@ -2649,6 +2649,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.bulletin_toggle.connect("clicked", self._on_bulletin_toggled)
         row1.append(self.bulletin_toggle)
 
+        self.bulletin_summary_entry = Gtk.Entry()
+        self.bulletin_summary_entry.set_placeholder_text("bulletin note…")
+        self.bulletin_summary_entry.set_width_chars(18)
+        self.bulletin_summary_entry.set_tooltip_text(
+            "Short line shown in the bulletin instead of the full content. "
+            "Leave empty to show full content.")
+        self.bulletin_summary_entry.connect("changed", self._on_bulletin_summary_changed)
+        row1.append(self.bulletin_summary_entry)
+
         icon_btn = Gtk.MenuButton(icon_name="preferences-desktop-wallpaper-symbolic",
                                   tooltip_text="Set icon for this element")
         icon_btn.add_css_class("flat")
@@ -3045,6 +3054,7 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._bulletin_heading_lbl.set_text("Bulletin")
             self.duration_spin.set_value(getattr(si, "duration", 0))
+            self.bulletin_summary_entry.set_text(getattr(si, "bulletin_summary", ""))
             # Set hymn toggle and sync visibility directly (handler blocked by _updating_note)
             is_hymn = _HYMN_OK and _is_hymn_element(si.name)
             self._hymn_mode_btn.set_active(is_hymn)
@@ -3062,6 +3072,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
             self.duration_spin.set_value(0)
+            self.bulletin_summary_entry.set_text("")
             self._hymn_mode_btn.set_active(False)
             for w in self._hymn_toolbar_widgets: w.set_visible(False)
             self.sugg_revealer.set_reveal_child(False)
@@ -6633,6 +6644,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             target += ['', f'== {_typst_escape(si.name)}', '']
             if getattr(si, "bulletin_heading_only", False):
                 return
+            _summary = getattr(si, "bulletin_summary", "")
+            if _summary:
+                target.append(linebreak_fix(_summary))
+                return
             _name_lower = si.name.lower()
             _is_hymn = any(k in _name_lower
                            for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
@@ -6664,7 +6679,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     base = 1.5
                     if getattr(si, "bulletin_heading_only", False):
                         return base
-                    if si.content_typst:
+                    _summ = getattr(si, "bulletin_summary", "")
+                    if _summ:
+                        base += len(_summ) / 100.0
+                    elif si.content_typst:
                         base += len(strip_leader_notes(si.content_typst)) / 100.0
                     return base
                 _weights = [_bul_weight(si) for si in _sec_items]
@@ -7102,6 +7120,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 row.set_opacity(0.7)
             else:
                 row.set_opacity(1.0)
+        self._mark_modified()
+
+    def _on_bulletin_summary_changed(self, entry):
+        if self._updating_note: return
+        idx = self._selected_index()
+        if not (0 <= idx < len(self.service_entries)): return
+        e = self.service_entries[idx]
+        if not isinstance(e, ServiceItem): return
+        e.bulletin_summary = entry.get_text()
         self._mark_modified()
 
     def _on_duration_changed(self, spin):

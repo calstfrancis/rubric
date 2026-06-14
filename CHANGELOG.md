@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev17 — Bulletin summary field for hymns and scripture
+
+### Added
+
+- **Bulletin summary field** — each service item now has a short "bulletin note" text entry in the toolbar (next to the Bulletin heading toggle). When set, that text appears in the bulletin instead of the full content. This lets you keep detailed manuscript notes in the content area while showing only a hymn reference (e.g. `VU 123 — O God Our Help`) or scripture reference (e.g. `John 3:16–21`) in the bulletin — without needing to wrap manuscript content in `#leader-note[...]`. Leave it empty to use existing behaviour (full content, or heading only if the toggle is active).
+
+---
+
 ## 0.17.5-dev16 — Fix export failure on old-format service files
 
 ### Fixed
