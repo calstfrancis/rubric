@@ -28,13 +28,13 @@ def typst_escape(text: str) -> str:
 
 
 def linebreak_fix(text: str) -> str:
-    """Replace trailing \\ on plain-text lines with #linebreak().
+    """Replace trailing \\ on every content line with #linebreak().
 
     In Typst markup, a lone backslash at the end of a line renders as a
-    literal backslash character, not a forced line break.  Users naturally
-    write liturgy content with '\\' as a line-break marker, so we convert
-    it here.  Lines that start with '#' (Typst directives/calls) are left
-    unchanged so hand-written Typst is not disturbed.
+    literal backslash character, not a forced line break.  Rubric users
+    naturally write liturgy content with '\\' as a line-break marker
+    (including lines that start with inline Typst calls such as #h(...)),
+    so we convert trailing \\ unconditionally here.
     """
     if not text:
         return text
@@ -42,9 +42,7 @@ def linebreak_fix(text: str) -> str:
     result = []
     for line in lines:
         rstripped = line.rstrip()
-        if rstripped.lstrip().startswith('#'):
-            result.append(line)
-        elif rstripped.endswith('\\'):
+        if rstripped.endswith('\\'):
             result.append(rstripped[:-1].rstrip() + '#linebreak()')
         else:
             result.append(line)

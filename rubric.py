@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev14"
+APP_VERSION = "0.17.5-dev15"
 
 
 config = Config()
@@ -6656,7 +6656,22 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             if not _sec_items:
                 continue
             if _bul_cols >= 2 and len(_sec_items) > 1:
+                def _bul_weight(si: "ServiceItem") -> float:
+                    base = 1.5
+                    if getattr(si, "bulletin_heading_only", False):
+                        return base
+                    if si.content_typst:
+                        base += len(strip_leader_notes(si.content_typst)) / 100.0
+                    return base
+                _weights = [_bul_weight(si) for si in _sec_items]
+                _total = sum(_weights)
+                _cum = 0.0
                 _mid = (len(_sec_items) + 1) // 2
+                for _i, _w in enumerate(_weights):
+                    _cum += _w
+                    if _cum >= _total / 2.0:
+                        _mid = _i + 1
+                        break
                 _left: list[str] = []
                 _right: list[str] = []
                 for _si in _sec_items[:_mid]:
@@ -6856,10 +6871,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
     def _build_manuscript_typst(self) -> str:
         """Build Typst source for the service order / leader manuscript."""
-        title    = _typst_escape(self.service_title_entry.get_text() or "Order of Service")
-        date_str = _typst_escape(
-            self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
-
         _ms_cols = config.preamble.get("manuscript", {}).get("columns", 2)
         _ms_hdg_override = self._preamble_heading_typst("manuscript")
         parts = [
@@ -6873,36 +6884,58 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             parts += [_ms_hdg_override, '']
 
         groups = [(sec, items) for sec, items in self._grouped_entries() if items]
-        in_columns = False
+
+        def _render_ms_item(si: "ServiceItem", target: list) -> None:
+            leader_str = (
+                f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
+                if si.leader else "")
+            target.append(f'== {_typst_escape(si.name)}{leader_str}')
+            rubric = getattr(si, "rubric_note", "")
+            if rubric:
+                target.append(f'#rubric-note[{_typst_escape(rubric)}]')
+            if si.content_typst:
+                target.append(linebreak_fix(si.content_typst))
+            target.append('')
+
+        def _ms_weight(si: "ServiceItem") -> float:
+            w = 2.0  # heading + spacing
+            if si.content_typst:
+                w += len(si.content_typst) / 80.0
+            return w
+
+        def _ms_split(items: list) -> int:
+            weights = [_ms_weight(si) for si in items]
+            total = sum(weights)
+            cumulative = 0.0
+            for i, w in enumerate(weights):
+                cumulative += w
+                if cumulative >= total / 2.0:
+                    return i + 1
+            return (len(items) + 1) // 2
 
         for sec, items in groups:
             if sec:
-                if in_columns:
-                    parts.append(']')
-                    in_columns = False
-                if _ms_cols >= 2:
-                    parts += [
-                        f'= {_typst_escape(sec)}',
-                        f'#columns({_ms_cols})[',
-                        '',
-                    ]
-                    in_columns = True
-                else:
-                    parts += [f'= {_typst_escape(sec)}', '']
+                parts += [f'= {_typst_escape(sec)}', '']
 
-            for si in items:
-                leader_str = (f' #text(size: 0.85em, style: "italic")[(_{_typst_escape(si.leader)}_)]'
-                              if si.leader else "")
-                parts.append(f'== {_typst_escape(si.name)}{leader_str}')
-                rubric = getattr(si, "rubric_note", "")
-                if rubric:
-                    parts.append(f'#rubric-note[{_typst_escape(rubric)}]')
-                if si.content_typst:
-                    parts.append(linebreak_fix(si.content_typst))
-                parts.append('')
-
-        if in_columns:
-            parts.append(']')
+            if _ms_cols >= 2 and len(items) > 1 and sec is not None:
+                mid = _ms_split(items)
+                _left: list[str] = []
+                _right: list[str] = []
+                for si in items[:mid]:
+                    _render_ms_item(si, _left)
+                for si in items[mid:]:
+                    _render_ms_item(si, _right)
+                parts += [
+                    '#grid(columns: (1fr, 1fr), gutter: 1em, align: top, [',
+                    '\n'.join(_left),
+                    '], [',
+                    '\n'.join(_right),
+                    '])',
+                    '',
+                ]
+            else:
+                for si in items:
+                    _render_ms_item(si, parts)
 
         return "\n".join(parts) + "\n"
 

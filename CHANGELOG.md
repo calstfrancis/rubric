@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev15 — Balanced columns for manuscript and bulletin
+
+### Changed
+
+- **Manuscript: grid-balanced columns** — the manuscript now uses `#grid(columns: (1fr, 1fr))` for section content instead of `#columns(2)`. Items are placed side-by-side rather than flowing text between columns, giving true balanced layout.
+- **Content-weighted column split** — both the manuscript and bulletin now split items between left and right columns based on estimated content height (item count × base height + content length), not raw item count. This keeps visually heavy items (long prayers, scripture) from overloading one column.
+- **`linebreak_fix` now applies to all lines** — the `#linebreak()` conversion for trailing `\\` now applies even to lines that start with inline Typst calls (e.g. `#h(1.5em)text \\`). Previously these lines were skipped, leaving literal backslashes in the output.
+
+---
+
 ## 0.17.5-dev14 — Fix backslash line breaks in bulletin and manuscript
 
 ### Fixed
