@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev13 — Manuscript formatting improvements
+
+### Added
+
+- **Page numbers on manuscript** — leader copy now shows page numbers in the footer.
+
+### Fixed
+
+- **Backslash line breaks** — trailing `\` on lines in liturgy content is now preserved as a Typst forced line break rather than being escaped to a literal backslash character.
+- **Space above first element after section heading** — section headings now have a larger non-weak bottom margin (12 pt vs. 6 pt weak) so the first element in each section has visible breathing room.
+- **Rule above section headings** — a thin horizontal rule now appears above each section heading (`GATHERING`, `WORD`, etc.), providing a clear visual break between major sections.
+- **More space before section headings** — top margin before section headings increased from 16 pt to 24 pt, giving more breathing room after title-page content and between sections.
+- **Reduced inter-paragraph spacing** — paragraph spacing in the manuscript set to 0.5 em (previously default ~0.65 em+), reducing the "full line gap" between stanzas.
+- **First-line indent removed** — `first-line-indent: 0pt` is now explicit in the manuscript preamble to prevent any Typst-version-dependent indentation on content paragraphs.
+
+---
+
 ## 0.17.5-dev12 — Balanced columns, undo fix, scroll fix, window fit
 
 ### Added

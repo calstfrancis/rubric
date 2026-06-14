@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev12"
+APP_VERSION = "0.17.5-dev13"
 
 
 config = Config()
@@ -4535,7 +4535,8 @@ class MainWindow(Adw.ApplicationWindow):
             if name == "manuscript":
                 parts.append(
                     f'#set page(paper: "us-letter", '
-                    f'margin: (top: {mt}in, bottom: {mb}in, left: {ml}in, right: {mr}in))')
+                    f'margin: (top: {mt}in, bottom: {mb}in, left: {ml}in, right: {mr}in), '
+                    f'numbering: "1")')
             elif name == "bulletin_print":
                 parts.append(
                     f'#set page(width: 5.5in, height: 8.5in, '
@@ -4549,6 +4550,8 @@ class MainWindow(Adw.ApplicationWindow):
                 text_args.append(f'font: "{font}"')
             parts.append(f'#set text({", ".join(text_args)})')
             parts.append('#set par(justify: false)')
+            if name == "manuscript":
+                parts.append('#set par(spacing: 0.5em, first-line-indent: 0pt)')
             if name == "bulletin_digital":
                 parts.append('#show link: it => text(fill: rgb("1e3a6e"), it)')
             return '\n'.join(parts)
@@ -4572,8 +4575,9 @@ class MainWindow(Adw.ApplicationWindow):
             ),
             "manuscript": (
                 '#set page(paper: "us-letter",'
-                ' margin: (top: 1in, bottom: 1in, left: 0.7in, right: 0.7in))\n'
-                '#set text(size: 11pt)\n#set par(justify: false)'
+                ' margin: (top: 1in, bottom: 1in, left: 0.7in, right: 0.7in), numbering: "1")\n'
+                '#set text(size: 11pt)\n'
+                '#set par(justify: false, spacing: 0.5em, first-line-indent: 0pt)'
             ),
         }
         return _fallbacks.get(name, "")

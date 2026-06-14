@@ -32,13 +32,22 @@ def note_for_typst(note: str) -> str:
 
     If the note already contains Typst function calls (lines starting with #
     followed by a letter), pass through as-is so hand-written Typst works.
-    Otherwise escape special characters.
+    Otherwise escape special characters, preserving trailing \\ on each line
+    as a Typst forced line break rather than escaping it to a literal backslash.
     """
     if not note:
         return ""
     if re.search(r"(?m)^#[a-zA-Z]", note):
         return note
-    return typst_escape(note)
+    lines = note.splitlines()
+    result = []
+    for line in lines:
+        rstripped = line.rstrip()
+        if rstripped.endswith('\\'):
+            result.append(typst_escape(rstripped[:-1]) + '\\')
+        else:
+            result.append(typst_escape(line))
+    return '\n'.join(result)
 
 
 def strip_leader_notes(text: str) -> str:
@@ -352,9 +361,11 @@ TYPST_SHARED = r"""
 
 // Section heading: centred large bold small-caps (= Section)
 #show heading.where(level: 1): it => {
-  v(16pt)
+  v(24pt)
+  line(length: 100%, stroke: 0.4pt + luma(200))
+  v(8pt)
   align(center, text(size: 1.3em, weight: "bold", smallcaps(it.body)))
-  v(6pt, weak: true)
+  v(12pt)
 }
 
 // Element heading: bold small-caps with a thin rule below (== Item)
