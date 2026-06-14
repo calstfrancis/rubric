@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev17"
+APP_VERSION = "0.17.5-dev18"
 
 
 config = Config()
@@ -5974,21 +5974,6 @@ class MainWindow(Adw.ApplicationWindow):
             self.export_html()
             return
 
-        html_supported = False
-        try:
-            ver_result = subprocess.run(
-                [typst, "--version"], capture_output=True, text=True, timeout=5,
-            )
-            m = re.search(r"(\d+)\.(\d+)", ver_result.stdout)
-            if m:
-                html_supported = (int(m.group(1)), int(m.group(2))) >= (0, 13)
-        except Exception:
-            pass
-
-        if not html_supported:
-            self._export_bulletin_html()
-            return
-
         import tempfile as _tf
         try:
             typ_src = self._build_bulletin_typst(digital=True)
@@ -5997,6 +5982,22 @@ class MainWindow(Adw.ApplicationWindow):
             return
 
         def run() -> None:
+            # Version check runs in the background thread so it never blocks the main loop.
+            html_supported = False
+            try:
+                ver_result = subprocess.run(
+                    [typst, "--version"], capture_output=True, text=True, timeout=5,
+                )
+                m = re.search(r"(\d+)\.(\d+)", ver_result.stdout)
+                if m:
+                    html_supported = (int(m.group(1)), int(m.group(2))) >= (0, 13)
+            except Exception:
+                pass
+
+            if not html_supported:
+                GLib.idle_add(self._export_bulletin_html)
+                return
+
             try:
                 with _tf.NamedTemporaryFile(
                     suffix=".typ", delete=False, mode="w", encoding="utf-8",
@@ -6334,9 +6335,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             return
 
         pdf_path = typ_path.with_suffix(".pdf")
-        self._compiling_toast = Adw.Toast.new("Compiling bulletin…")
-        self._compiling_toast.set_timeout(0)
-        self._toast_overlay.add_toast(self._compiling_toast)
+        # Capture toast locally — _compiling_toast is shared with the manuscript
+        # compile path, so if both run simultaneously the shared ref would be wrong.
+        _toast = Adw.Toast.new("Compiling bulletin…")
+        _toast.set_timeout(0)
+        self._toast_overlay.add_toast(_toast)
 
         def run():
             try:
@@ -6345,24 +6348,25 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
-                GLib.idle_add(self._on_bulletin_compiled, result, typ_path, pdf_path)
+                GLib.idle_add(self._on_bulletin_compiled, result, typ_path, pdf_path, _toast)
             except subprocess.TimeoutExpired:
-                def _on_timeout():
-                    try: self._compiling_toast.dismiss()
+                def _on_timeout(t=_toast):
+                    try: t.dismiss()
                     except Exception: pass
                     self._show_toast("Bulletin compile timed out.", 8)
                 GLib.idle_add(_on_timeout)
             except Exception as e:
-                def _on_error(msg=str(e)):
-                    try: self._compiling_toast.dismiss()
+                def _on_error(msg=str(e), t=_toast):
+                    try: t.dismiss()
                     except Exception: pass
                     self._show_toast(f"Bulletin compile error: {msg}", 8)
                 GLib.idle_add(_on_error)
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _on_bulletin_compiled(self, result, typ_path: Path, pdf_path: Path):
-        try: self._compiling_toast.dismiss()
+    def _on_bulletin_compiled(self, result, typ_path: Path, pdf_path: Path,
+                              _toast: "Adw.Toast | None" = None):
+        try: (_toast or self._compiling_toast).dismiss()
         except Exception: pass
 
         if result.returncode != 0:
@@ -6997,9 +7001,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._show_toast("typst not found — install typst or add it to PATH", timeout=8)
             return
 
-        self._compiling_toast = Adw.Toast.new("Compiling PDF…")
-        self._compiling_toast.set_timeout(0)
-        self._toast_overlay.add_toast(self._compiling_toast)
+        _ms_toast = Adw.Toast.new("Compiling PDF…")
+        _ms_toast.set_timeout(0)
+        self._toast_overlay.add_toast(_ms_toast)
+        self._compiling_toast = _ms_toast
         self.pdf_btn.set_sensitive(False)
 
         def run_typst():
@@ -7009,17 +7014,18 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
-                GLib.idle_add(self._on_compile_done, result, typ_path, pdf_path)
+                GLib.idle_add(self._on_compile_done, result, typ_path, pdf_path, _ms_toast)
             except subprocess.TimeoutExpired:
-                GLib.idle_add(self._on_compile_error, "typst timed out after 60 seconds.")
+                GLib.idle_add(self._on_compile_error, "typst timed out after 60 seconds.", _ms_toast)
             except Exception as e:
-                GLib.idle_add(self._on_compile_error, str(e))
+                GLib.idle_add(self._on_compile_error, str(e), _ms_toast)
 
         threading.Thread(target=run_typst, daemon=True).start()
 
-    def _on_compile_done(self, result, typ_path: Path, pdf_path: Path):
+    def _on_compile_done(self, result, typ_path: Path, pdf_path: Path,
+                         _toast: "Adw.Toast | None" = None):
         self.pdf_btn.set_sensitive(True)
-        try: self._compiling_toast.dismiss()
+        try: (_toast or self._compiling_toast).dismiss()
         except Exception: pass
 
         if result.returncode != 0:
@@ -7046,9 +7052,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         else:
             self._show_toast("Compiled but PDF not found.", timeout=6)
 
-    def _on_compile_error(self, message: str):
+    def _on_compile_error(self, message: str, _toast: "Adw.Toast | None" = None):
         self.pdf_btn.set_sensitive(True)
-        try: self._compiling_toast.dismiss()
+        try: (_toast or self._compiling_toast).dismiss()
         except Exception: pass
         self._show_toast(f"Compile error: {message[:80]}", timeout=10)
 

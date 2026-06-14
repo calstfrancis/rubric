@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev18 — Fix bulletin PDF export hang
+
+### Fixed
+
+- **"Compiling bulletin…" toast never dismisses** — each compile path now captures its toast in a closure at creation time instead of storing it in `self._compiling_toast`. Previously, if print and digital were both checked (or if a manuscript compile ran concurrently), the second assignment would overwrite the first; when the first compile finished it dismissed the wrong toast, leaving the original "Compiling bulletin…" visible forever.
+- **HTML export blocks main thread** — `_export_bulletin_html_typst` was calling `subprocess.run([typst, "--version"])` synchronously on the main thread before starting the background compile. This froze the UI (and the print file dialog) for up to 5 seconds whenever HTML was selected alongside other outputs. The version check now runs inside the background thread.
+
+---
+
 ## 0.17.5-dev17 — Bulletin summary field for hymns and scripture
 
 ### Added
