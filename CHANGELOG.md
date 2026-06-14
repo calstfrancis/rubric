@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev19 — Fix bulletin toast queue race (hang persists fix)
+
+### Fixed
+
+- **"Compiling…" toast still hung** — the root cause was a libadwaita toast queue race: "Bulletin saved" (3s timeout) was added first, then "Compiling bulletin…" was queued behind it. If typst finished before the 3-second toast cleared, `dismiss()` was called on a toast still in the queue. Libadwaita does not reliably remove a queued-but-not-yet-shown toast on `dismiss()`, so the toast appeared afterwards with its dismiss already consumed — hanging forever. Fix: removed the separate "Bulletin saved" toast so the compile toast goes directly to active. The "Compiling filename.typ…" toast text now serves as confirmation of the save, and the success "✓ filename.pdf" toast confirms the compile.
+
+---
+
 ## 0.17.5-dev18 — Fix bulletin PDF export hang
 
 ### Fixed

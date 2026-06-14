@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev18"
+APP_VERSION = "0.17.5-dev19"
 
 
 config = Config()
@@ -6323,7 +6323,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         except Exception as e:
             self._error("Could not save bulletin", str(e))
             return
-        self._show_toast(f"Bulletin saved: {Path(path).name}")
         self._compile_bulletin_typst(path)
 
     def _compile_bulletin_typst(self, typ_path_str: str):
@@ -6337,7 +6336,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         pdf_path = typ_path.with_suffix(".pdf")
         # Capture toast locally — _compiling_toast is shared with the manuscript
         # compile path, so if both run simultaneously the shared ref would be wrong.
-        _toast = Adw.Toast.new("Compiling bulletin…")
+        _toast = Adw.Toast.new(f"Compiling {typ_path.name}…")
         _toast.set_timeout(0)
         self._toast_overlay.add_toast(_toast)
 
