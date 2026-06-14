@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev15"
+APP_VERSION = "0.17.5-dev16"
 
 
 config = Config()
@@ -6301,7 +6301,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             return  # User cancelled
         path = f.get_path()
         config.last_dir = str(Path(path).parent)
-        typ_src = self._build_bulletin_typst(digital=digital)
+        try:
+            typ_src = self._build_bulletin_typst(digital=digital)
+        except Exception as e:
+            self._error("Could not generate bulletin", str(e))
+            return
         try:
             Path(path).write_text(typ_src, encoding="utf-8")
         except Exception as e:

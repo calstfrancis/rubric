@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev16 — Fix export failure on old-format service files
+
+### Fixed
+
+- **Export/compile failure on old service files** — service files created before the Typst migration (using the old `note` / LaTeX format) could produce invalid Typst output, causing compilation to fail with an "unclosed delimiter" error. The issue was that raw LaTeX commands (e.g. `\subsection*{Preamble}`, `\begin{scripture}`) were embedded verbatim in the Typst source; in Typst markup mode, `*` opens a bold span so `\subsection*{...}` causes a parse error. Old LaTeX content is now stripped to plain text during migration so it renders cleanly without breaking compilation.
+- **Silent bulletin generation errors** — if `_build_bulletin_typst()` raised an exception, it was silently swallowed by the GTK dialog callback and the user saw nothing. Errors during bulletin generation now show an error dialog.
+
+---
+
 ## 0.17.5-dev15 — Balanced columns for manuscript and bulletin
 
 ### Changed

@@ -98,7 +98,13 @@ class ServiceItem:
 
         # Migrate: build content_typst from old fields if the file pre-dates Phase 2
         if not content_typst:
+            import re as _re
             base = bulletin_note or note
+            # Old LaTeX content (\command{...}) must be stripped to plain text —
+            # embedding it verbatim in Typst markup breaks compilation.
+            if base and _re.search(r'\\[a-zA-Z]', base):
+                from rubric_package.utils.typst import strip_typst_plain
+                base = strip_typst_plain(base)
             if prep_note:
                 content_typst = (f"{base}\n" if base else "") + f"#leader-note[{prep_note}]"
             else:
