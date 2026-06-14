@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev14 — Fix backslash line breaks in bulletin and manuscript
+
+### Fixed
+
+- **Trailing `\` rendered as literal backslash** — in Typst markup, a lone `\` at end of a line is a literal backslash character, not a forced line break. Rubric now converts trailing `\` on plain-text content lines to `#linebreak()` when generating the Typst source, so responsive readings, prayers, and other line-broken liturgy text displays correctly in both the manuscript and bulletin.
+- **Spurious blank line before accessibility note** — the back page `#linebreak()` separator before the accessibility note is now only emitted when there is preceding content (mission statement, contact info) above it. Previously it created an empty leading line when the accessibility note was the only back-page content.
+
+---
+
 ## 0.17.5-dev13 — Manuscript formatting improvements
 
 ### Added

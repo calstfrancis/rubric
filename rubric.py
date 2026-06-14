@@ -23,7 +23,7 @@ try:
     from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, SECTIONS
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
     from rubric_package.utils.typst import (
-        typst_escape, note_for_typst, passage_to_typst,
+        typst_escape, note_for_typst, linebreak_fix, passage_to_typst,
         strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
         format_typst_error,
     )
@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev13"
+APP_VERSION = "0.17.5-dev14"
 
 
 config = Config()
@@ -6646,9 +6646,9 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     else:
                         target.append(f'*{_ref}*')
                 else:
-                    target.append(strip_leader_notes(_content))
+                    target.append(linebreak_fix(strip_leader_notes(_content)))
             elif _content:
-                target.append(strip_leader_notes(_content))
+                target.append(linebreak_fix(strip_leader_notes(_content)))
 
         for _sec_title, _sec_items in _bul_sections:
             if _sec_title is not None:
@@ -6746,7 +6746,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     parts.append(f'    {phone} #linebreak()')
                 parts.append('  ]')
             if access:
-                parts.append('  #linebreak()')
+                if mission or website or email or phone:
+                    parts.append('  #linebreak()')
                 parts.append(f'  #text(size: 0.9em)[{access}]')
             parts += [']', '#v(1fr)']
 
@@ -6897,7 +6898,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 if rubric:
                     parts.append(f'#rubric-note[{_typst_escape(rubric)}]')
                 if si.content_typst:
-                    parts.append(si.content_typst)
+                    parts.append(linebreak_fix(si.content_typst))
                 parts.append('')
 
         if in_columns:

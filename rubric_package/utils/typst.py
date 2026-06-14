@@ -27,13 +27,38 @@ def typst_escape(text: str) -> str:
     return text
 
 
+def linebreak_fix(text: str) -> str:
+    """Replace trailing \\ on plain-text lines with #linebreak().
+
+    In Typst markup, a lone backslash at the end of a line renders as a
+    literal backslash character, not a forced line break.  Users naturally
+    write liturgy content with '\\' as a line-break marker, so we convert
+    it here.  Lines that start with '#' (Typst directives/calls) are left
+    unchanged so hand-written Typst is not disturbed.
+    """
+    if not text:
+        return text
+    lines = text.splitlines()
+    result = []
+    for line in lines:
+        rstripped = line.rstrip()
+        if rstripped.lstrip().startswith('#'):
+            result.append(line)
+        elif rstripped.endswith('\\'):
+            result.append(rstripped[:-1].rstrip() + '#linebreak()')
+        else:
+            result.append(line)
+    return '\n'.join(result)
+
+
 def note_for_typst(note: str) -> str:
     """Prepare a note for Typst insertion.
 
     If the note already contains Typst function calls (lines starting with #
     followed by a letter), pass through as-is so hand-written Typst works.
-    Otherwise escape special characters, preserving trailing \\ on each line
-    as a Typst forced line break rather than escaping it to a literal backslash.
+    Otherwise escape special characters and convert trailing \\ on each line
+    to #linebreak() (a lone backslash in Typst markup is a literal character,
+    not a forced line break).
     """
     if not note:
         return ""
@@ -44,7 +69,7 @@ def note_for_typst(note: str) -> str:
     for line in lines:
         rstripped = line.rstrip()
         if rstripped.endswith('\\'):
-            result.append(typst_escape(rstripped[:-1]) + '\\')
+            result.append(typst_escape(rstripped[:-1]) + '#linebreak()')
         else:
             result.append(typst_escape(line))
     return '\n'.join(result)
