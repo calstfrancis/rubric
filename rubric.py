@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev19"
+APP_VERSION = "0.17.5-dev20"
 
 
 config = Config()
@@ -1667,7 +1667,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Palette sidebar toggle — all the way at the left
         self._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show",
                                              tooltip_text="Show/hide elements panel")
-        self._sidebar_btn.set_active(True)
+        self._sidebar_btn.set_active(False)
         self._sidebar_btn.add_css_class("flat")
         self._sidebar_btn.connect("toggled", self._toggle_palette_sidebar)
         hdr.pack_start(self._sidebar_btn)
@@ -1933,11 +1933,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.set_shrink_start_child(False); paned.set_shrink_end_child(False)
+        paned.set_shrink_start_child(True); paned.set_shrink_end_child(False)
         paned.set_start_child(self._build_palette_panel())
         self._palette_paned = paned
-        self._palette_visible = True
-        GLib.idle_add(lambda: paned.set_position(290))
+        self._palette_visible = False
+        GLib.idle_add(lambda: paned.set_position(0))
 
         # Main stack: order panel or preamble editor
         self._main_stack = Gtk.Stack()
@@ -2281,6 +2281,17 @@ class MainWindow(Adw.ApplicationWindow):
                          lambda r, _p: self._on_preamble_changed(key, "size", r.get_value()))
         typo_grp.add(size_row)
 
+        _spacing_def = 0.65
+        spacing_adj = Gtk.Adjustment(
+            value=p.get("par_spacing", _spacing_def),
+            lower=0.0, upper=3.0, step_increment=0.05)
+        spacing_row = Adw.SpinRow(adjustment=spacing_adj, digits=2,
+                                   title="Paragraph spacing (em)",
+                                   subtitle="Vertical space between paragraphs")
+        spacing_row.connect("notify::value",
+                            lambda r, _p: self._on_preamble_changed(key, "par_spacing", r.get_value()))
+        typo_grp.add(spacing_row)
+
         # ── Margins ───────────────────────────────────────────────────────────
         margin_grp = Adw.PreferencesGroup(title="Margins (inches)")
         page.add(margin_grp)
@@ -2310,6 +2321,17 @@ class MainWindow(Adw.ApplicationWindow):
                         lambda r, _p: self._on_preamble_changed(
                             key, "columns", 2 if r.get_active() else 1))
         layout_grp.add(col_row)
+
+        _gutter_def = 1.0 if key == "manuscript" else 0.5
+        gutter_adj = Gtk.Adjustment(
+            value=p.get("gutter", _gutter_def),
+            lower=0.0, upper=5.0, step_increment=0.1)
+        gutter_row = Adw.SpinRow(adjustment=gutter_adj, digits=1,
+                                  title="Column gutter (em)",
+                                  subtitle="Space between the two columns")
+        gutter_row.connect("notify::value",
+                           lambda r, _p: self._on_preamble_changed(key, "gutter", r.get_value()))
+        layout_grp.add(gutter_row)
 
         # ── Headings ──────────────────────────────────────────────────────────
         hdg_grp = Adw.PreferencesGroup(title="Headings")
@@ -4221,6 +4243,11 @@ class MainWindow(Adw.ApplicationWindow):
         if a:
             a.activate(None)
 
+    def _open_sidebar(self):
+        """Open the element palette sidebar if it isn't already open."""
+        if not self._palette_visible:
+            self._sidebar_btn.set_active(True)
+
     def _toggle_palette_sidebar(self, btn):
         if btn.get_active():
             self._palette_visible = True
@@ -4560,9 +4587,8 @@ class MainWindow(Adw.ApplicationWindow):
             if font:
                 text_args.append(f'font: "{font}"')
             parts.append(f'#set text({", ".join(text_args)})')
-            parts.append('#set par(justify: false)')
-            if name == "manuscript":
-                parts.append('#set par(spacing: 0.5em, first-line-indent: 0pt)')
+            _spc = p.get("par_spacing", 0.65)
+            parts.append(f'#set par(justify: false, spacing: {_spc:.2f}em, first-line-indent: 0pt)')
             if name == "bulletin_digital":
                 parts.append('#show link: it => text(fill: rgb("1e3a6e"), it)')
             return '\n'.join(parts)
@@ -5293,6 +5319,7 @@ class MainWindow(Adw.ApplicationWindow):
                     self._show_quickstart_banner()
                 else:
                     self._show_quickstart_banner()
+                GLib.idle_add(self._open_sidebar)
 
             def _on_row_activated(_lb, row):
                 if row is lect_row:  _finish("lect")
@@ -5662,6 +5689,7 @@ class MainWindow(Adw.ApplicationWindow):
                 else:
                     self._add_recurring_elements()
                     self._refresh_order_list()
+                GLib.idle_add(self._open_sidebar)
             else:
                 # Multiple templates — ask which one
                 dlg = Adw.MessageDialog(transient_for=self, heading="Choose a template")
@@ -5696,6 +5724,7 @@ class MainWindow(Adw.ApplicationWindow):
                             items = config.templates.get(name, [])
                             if items:
                                 self._apply_template(items)
+                        GLib.idle_add(self._open_sidebar)
 
                 dlg.connect("response", on_resp); dlg.present()
 
@@ -5965,6 +5994,7 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(btn_row)
 
         tv.set_content(box)
+        win.set_content(tv)
         win.present()
 
     def _export_bulletin_html_typst(self) -> None:
@@ -6703,12 +6733,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     _render_bul_item(_si, _left)
                 for _si in _sec_items[_mid:]:
                     _render_bul_item(_si, _right)
+                _bul_gutter = config.preamble.get("bulletin", {}).get("gutter", 0.5)
                 parts += [
-                    f'#grid(columns: (1fr, 1fr), gutter: 0.5em, align: top, [',
+                    f'#columns(2, gutter: {_bul_gutter}em)[',
                     '\n'.join(_left),
-                    '], [',
+                    '',
+                    '#colbreak()',
+                    '',
                     '\n'.join(_right),
-                    '])',
+                    ']',
                     '',
                 ]
             else:
@@ -6950,12 +6983,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     _render_ms_item(si, _left)
                 for si in items[mid:]:
                     _render_ms_item(si, _right)
+                _ms_gutter = config.preamble.get("manuscript", {}).get("gutter", 1.0)
                 parts += [
-                    '#grid(columns: (1fr, 1fr), gutter: 1em, align: top, [',
+                    f'#columns(2, gutter: {_ms_gutter}em)[',
                     '\n'.join(_left),
-                    '], [',
+                    '',
+                    '#colbreak()',
+                    '',
                     '\n'.join(_right),
-                    '])',
+                    ']',
                     '',
                 ]
             else:

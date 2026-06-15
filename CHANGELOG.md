@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev20 — Fix export dialog, column layout, spacing preferences, sidebar behaviour
+
+### Fixed
+
+- **Export dialog white box** — the `Adw.ToolbarView` was fully constructed but never attached to the `Adw.Window` (`set_content()` was never called). The window rendered as an empty white rectangle with no close button, requiring Rubric to be killed from the terminal. Fixed by calling `win.set_content(tv)` before `win.present()`.
+- **Column text carrying over across pages** — the manuscript and bulletin used `#grid(columns: (1fr, 1fr))` which creates fixed-height boxes that can overflow independently across page breaks. Switched to `#columns(2)[...#colbreak()...]` which keeps column content within each page section and respects page boundaries naturally.
+
+### Added
+
+- **Column gutter preference** — a new "Column gutter" spin row in the Layout pane of the preamble/preferences panel controls the space between columns (in em units, default 0.5 for bulletin, 1.0 for manuscript).
+- **Paragraph spacing preference** — a new "Paragraph spacing" spin row in the Typography pane controls the spacing between paragraphs (em units, default 0.65).
+
+### Changed
+
+- **Sidebar starts closed** — the element palette sidebar now starts closed by default. It opens automatically on first launch and when starting a new service plan, so new users are guided to it without it cluttering every session.
+
+---
+
 ## 0.17.5-dev19 — Fix bulletin toast queue race (hang persists fix)
 
 ### Fixed
