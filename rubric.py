@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev20"
+APP_VERSION = "0.17.5-dev21"
 
 
 config = Config()
@@ -7000,8 +7000,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         return "\n".join(parts) + "\n"
 
-    def _write_typst(self, path: str):
-        """Write manuscript Typst to path, record as linked file, save the .liturgy."""
+    def _write_typst(self, path: str) -> bool:
+        """Write manuscript Typst to path, record as linked file, save the .liturgy.
+
+        Returns True on success, False if generation or write failed.
+        """
         try:
             Path(path).write_text(self._build_manuscript_typst(), encoding="utf-8")
             self.typ_file = path
@@ -7011,8 +7014,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     json.dump(self._service_data(), f, indent=2, ensure_ascii=False)
             else:
                 self._show_toast("Typst exported — save your service (Ctrl+S) to persist the link.", timeout=5)
+            return True
         except Exception as e:
             self._error("Export error", str(e))
+            return False
 
     def quick_export_typst(self):
         """One-click export: write directly if linked, else ask for a file."""
@@ -7027,7 +7032,8 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._show_toast("Export to Typst first (Ctrl+E), then compile again.", timeout=5)
             return
 
-        self._write_typst(self.typ_file)
+        if not self._write_typst(self.typ_file):
+            return
         typ_path = Path(self.typ_file)
         pdf_path = typ_path.with_suffix(".pdf")
 
