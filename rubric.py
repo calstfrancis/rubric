@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev21"
+APP_VERSION = "0.17.5-dev22"
 
 
 config = Config()
@@ -7029,10 +7029,18 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
     def compile_typst_pdf(self):
         """Export to .typ then compile with typst, open the resulting PDF."""
         if not self.typ_file:
-            self._show_toast("Export to Typst first (Ctrl+E), then compile again.", timeout=5)
-            return
-
-        if not self._write_typst(self.typ_file):
+            # Auto-derive a .typ path alongside the current service file (or in the typ/ repo dir)
+            typ_dir = self._repo_subdir("typ")
+            if self.current_file:
+                stem = Path(self.current_file).stem
+                base = typ_dir or Path(self.current_file).parent
+            else:
+                stem = (self.service_title_entry.get_text() or "service").replace(" ", "_").lower()
+                base = Path(config.last_dir)
+            auto_path = str(base / f"{stem}_leader.typ")
+            if not self._write_typst(auto_path):
+                return
+        elif not self._write_typst(self.typ_file):
             return
         typ_path = Path(self.typ_file)
         pdf_path = typ_path.with_suffix(".pdf")

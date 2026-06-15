@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev22 — Compile PDF without requiring prior Typst export
+
+### Fixed
+
+- **"Compile PDF" button required a prior manual export** — if the service file had no linked `.typ` file (either a fresh service or one saved before the `typ_file` field was introduced), clicking "Compile PDF" showed a "Export to Typst first" toast and did nothing. Now `compile_typst_pdf` auto-derives a `.typ` path alongside the service file (or in the repo `typ/` directory) and writes it automatically, so the compile button always works in one click.
+
+---
+
 ## 0.17.5-dev21 — Fix compile aborting on stale Typst file
 
 ### Fixed
