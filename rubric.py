@@ -108,7 +108,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev22"
+APP_VERSION = "0.17.5-dev23"
 
 
 config = Config()
@@ -7026,22 +7026,43 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         else:
             self.export_typst()
 
+    def _choose_typst_then_compile(self):
+        """Open a file-chooser, link the chosen .typ path, then compile."""
+        typ_dir = self._repo_subdir("typ")
+        if self.current_file:
+            default = Path(self.current_file).stem + ".typ"
+            folder  = str(typ_dir or Path(self.current_file).parent)
+        else:
+            title   = self.service_title_entry.get_text() or "service"
+            default = title.replace(" ", "_").lower() + ".typ"
+            folder  = config.last_dir
+        dlg = Gtk.FileDialog(title="Choose file for leader's notes")
+        dlg.set_initial_name(default)
+        dlg.set_initial_folder(Gio.File.new_for_path(folder))
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        f = Gtk.FileFilter(); f.set_name("Typst files (*.typ)"); f.add_pattern("*.typ")
+        filters.append(f); dlg.set_filters(filters)
+        dlg.save(self, None, self._on_choose_typst_then_compile)
+
+    def _on_choose_typst_then_compile(self, dlg, result):
+        try: f = dlg.save_finish(result)
+        except GLib.Error: return
+        path = f.get_path()
+        if not path.endswith(".typ"): path += ".typ"
+        if self._write_typst(path):
+            self._run_typst_compile()
+
     def compile_typst_pdf(self):
         """Export to .typ then compile with typst, open the resulting PDF."""
         if not self.typ_file:
-            # Auto-derive a .typ path alongside the current service file (or in the typ/ repo dir)
-            typ_dir = self._repo_subdir("typ")
-            if self.current_file:
-                stem = Path(self.current_file).stem
-                base = typ_dir or Path(self.current_file).parent
-            else:
-                stem = (self.service_title_entry.get_text() or "service").replace(" ", "_").lower()
-                base = Path(config.last_dir)
-            auto_path = str(base / f"{stem}_leader.typ")
-            if not self._write_typst(auto_path):
-                return
-        elif not self._write_typst(self.typ_file):
+            self._choose_typst_then_compile()
             return
+        if not self._write_typst(self.typ_file):
+            return
+        self._run_typst_compile()
+
+    def _run_typst_compile(self):
+        """Compile self.typ_file to PDF and open the result. Caller must ensure typ_file is set."""
         typ_path = Path(self.typ_file)
         pdf_path = typ_path.with_suffix(".pdf")
 

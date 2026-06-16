@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev23 — Ask for file when compiling without a linked Typst file
+
+### Fixed
+
+- **Compile with no linked file could silently write to an unexpected path** — when no `.typ` file was linked to a service, the compile button auto-derived a path (`<stem>_leader.typ`) that differed from the default used by the export button (`<stem>.typ`), causing confusion about where the output went. Now, when no file is linked, the compile button opens the same file-chooser dialog as the export button, so the user explicitly picks the file before writing and compiling.
+
+---
+
 ## 0.17.5-dev22 — Compile PDF without requiring prior Typst export
 
 ### Fixed
