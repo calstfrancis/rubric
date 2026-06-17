@@ -1,4 +1,4 @@
-# Rubric v0.17.4
+# Rubric v0.17.5
 
 Install via Flatpak:
 
@@ -18,20 +18,14 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Accessibility and visual polish** — a significant update focused on making Rubric easier to use and nicer to look at.
+**Bug-fix release** — several long-standing Typst compile failures and a broken HTML export are resolved.
 
-- **Smart save** — a "● Unsaved" chip appears in the status bar when there are unsaved changes. When a file is open, changes auto-save 2 seconds after you stop typing. The chip pulses after 30 seconds to prompt a manual save.
-- **Live preview** — a "Live" toggle in the preview panel shows an instant HTML bulletin without waiting for Typst to compile. Good for fast feedback or when Typst isn't installed.
-- **Quick help overlay** — the `?` button in the header opens a popover describing each area of the screen in plain English.
-- **Church name wizard step** — the first-launch wizard now asks for your church name upfront so bulletin headers are filled in from the very first service.
-- **Section divider accent stripes** — each section divider shows a coloured left-border stripe in its liturgical colour (Gathering, Word, Response, Sending).
-- **Seasonal header tint** — the main header picks up a subtle gradient from the current liturgical season colour.
-- **Cover art thumbnail** — when a cover image is set in Settings, a small rounded thumbnail appears beside the service title.
-- **Richer row subtitles** — service rows now show both leader and note preview (e.g. "All · In the beginning…").
-- **Inline scripture preview** — if an element name is a Bible reference and the passage is cached, the first few words appear as a subtitle.
-- **Empty-state shortcut** — the empty service placeholder includes a "Start with lectionary" button.
-- **Friendly Typst errors** — compiler errors are translated into plain English.
-- **Bug fix** — the What's New changelog was not showing in installed flatpak builds (symlink not followed by pip). Fixed by resolving it at build time.
+- **Leader's order compile fixed** — the "Leader's order compile failed" toast appeared on any service element whose text ended with a line-break marker. The trailing `\` produced `\]` in the generated Typst, which is an escaped bracket rather than a block closer, leaving the content block unclosed. Fixed.
+- **Stray `]` in content no longer breaks compile** — a bare `]` in liturgy text (e.g. `[All:]` choral notation) could prematurely close the surrounding `#columns` block. Unmatched brackets are now escaped before insertion.
+- **HTML export works again** — "Could not show link, launch failed" appeared because the HTML was written to a sandboxed `/tmp` location the browser could not reach. The file now goes to the cache directory in the home folder.
+- **Compile button no longer requires a prior export** — if no `.typ` file was linked to the service, the compile button now writes it automatically.
+- **PDFs open automatically** — after a successful compile the PDF opens in the system viewer immediately.
+- **Compile errors logged** — full typst output is written to `~/.cache/rubric/compile-error.log` on failure.
 
 ---
 

@@ -4,36 +4,20 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.5-dev27 — Fix HTML export in flatpak sandbox
+## 0.17.5 — Fix leader's order compile; fix HTML export; auto-open PDFs
 
 ### Fixed
 
-- **"Could not show link, launch failed" on HTML export** — HTML export wrote to a sandboxed `/tmp` location inaccessible to the system browser. All three HTML export paths (`export_html`, the Typst-based bulletin export, and the plain `_export_bulletin_html` fallback) now write to `~/.var/app/.../cache/rubric/bulletin.html`, which is in the home directory and accessible to external processes.
-
----
-
-## 0.17.5-dev26 — Open PDF automatically after export
+- **"Leader's order compile failed" on every service with text content** — `_build_minister_typst` produced `\]` at the end of any content block whose text ended with a line-break marker (`\`). In Typst markup mode, `\]` is an escaped literal `]` (not a block closer), leaving the `#text` block unclosed and consuming the `]` meant to close `#columns(2)[...]`. Fixed by applying `linebreak_fix` (converts `\` → `#linebreak()`) and putting the closing `]` on its own line.
+- **Unmatched `]` in content could close the outer `#columns` block** — a bare `]` in liturgy text (e.g. choral notation like `[All:]`) could prematurely terminate the enclosing `#columns(2)[...]` block and cause a compile error. The manuscript builder now escapes any `]` that has no matching `[`.
+- **"Could not show link, launch failed" on HTML export** — all three HTML export paths wrote to a sandboxed `/tmp` location inaccessible to the system browser. They now write to `~/.var/app/.../cache/rubric/bulletin.html` (home directory, accessible to external processes).
+- **Compile button required a prior manual Typst export** — if no `.typ` file was linked, "Compile PDF" showed an error toast. It now auto-derives and writes the `.typ` file automatically.
+- **Compile proceeded with stale `.typ` file when write failed** — if writing the Typst source threw an exception, the old on-disk file was compiled unchanged. The compile step now aborts on write failure.
 
 ### Changed
 
-- **Leader's order PDF opens automatically after compile** — previously the success toast had an "Open" button the user had to click. Now the PDF opens in the system viewer immediately on success, matching the behaviour of "Compile leader's notes".
-
----
-
-## 0.17.5-dev25 — Fix leader's order compile failure
-
-### Fixed
-
-- **"Leader's order compile failed" on every service with text content** — `_build_minister_typst` wrapped each item's content in `#text(size: 0.9em)[{raw_content}]`. Because liturgy content uses `\` as a line-break marker, items whose text ended with `\` produced `\]` at the end of the block. In Typst markup mode, `\]` is an escaped literal `]` (not a block closer), so the `#text` block was never closed. The following `]` that was meant to close `#columns(2)[...]` closed the text block instead, leaving the columns block unclosed and causing an "unclosed delimiter" error. Fixed by applying `linebreak_fix` to the content (converting `\` → `#linebreak()`) and putting the closing `]` on its own line.
-
----
-
-## 0.17.5-dev24 — Escape stray brackets in content; log compile errors
-
-### Fixed
-
-- **Unmatched `]` in content_typst could close outer `#columns` block** — if liturgy content contained a bare `]` not balanced by a preceding `[` (e.g. choral-response notation like `[All:]`), it would prematurely terminate the surrounding `#columns(2)[...]` block and cause a typst compile error. The manuscript builder now escapes any `]` that has no matching `[` before insertion.
-- **Compile errors were too hard to diagnose** — the "Compilation failed" toast only showed the first 100 chars of a friendly error summary, making it impossible to see the raw typst error. The full typst command, exit code, stderr, and stdout are now written to `~/.cache/rubric/compile-error.log` on every failure, and also printed to stdout.
+- **Leader's order PDF and compiled PDFs open automatically** — after a successful compile the PDF opens in the system viewer immediately, without requiring an extra button click.
+- **Compile errors are logged** — the full typst command, exit code, stderr, and stdout are written to `~/.cache/rubric/compile-error.log` on every failure for easier diagnosis.
 
 ---
 

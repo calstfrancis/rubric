@@ -41,6 +41,19 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.5" date="2026-06-17">
+      <description>
+        <p>Bug-fix release: several long-standing Typst compile failures and a broken HTML export are resolved.</p>
+        <ul>
+          <li>Fixed: leader's order compile failed on any service element whose text ended with a line-break — the trailing backslash produced invalid Typst syntax that left the content block unclosed.</li>
+          <li>Fixed: unmatched ] in liturgy content could prematurely close the surrounding columns block and cause a compile error.</li>
+          <li>Fixed: "Could not show link" error when exporting to HTML — the file was written to a sandboxed location the browser could not access.</li>
+          <li>Fixed: compile button required a prior manual Typst export; it now writes the file automatically.</li>
+          <li>Compiled PDFs now open in the system viewer automatically after a successful build.</li>
+          <li>Compile errors are now logged to ~/.cache/rubric/compile-error.log for easier diagnosis.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.4" date="2026-06-12">
       <description>
         <p>Accessibility improvements, visual polish, smart save, and live preview.</p>
