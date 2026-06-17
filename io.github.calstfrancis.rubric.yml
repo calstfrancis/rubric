@@ -27,7 +27,7 @@ modules:
         sha256: a6044cbad2a954deb921167e257e120ac0a16b20339ec01121194ff9d394996d
         dest: typst-bin
     build-commands:
-      - cp -f CHANGELOG.md rubric_package/data/CHANGELOG.md
+      - rm -f rubric_package/data/CHANGELOG.md && cp CHANGELOG.md rubric_package/data/CHANGELOG.md
       - pip3 install --prefix=/app --no-build-isolation .
       - install -Dm755 typst-bin/typst /app/bin/typst
       - install -Dm644 io.github.calstfrancis.rubric.desktop /app/share/applications/io.github.calstfrancis.rubric.desktop
