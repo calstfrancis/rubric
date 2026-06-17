@@ -23,7 +23,8 @@ try:
     from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, SECTIONS
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
     from rubric_package.utils.typst import (
-        typst_escape, note_for_typst, linebreak_fix, passage_to_typst,
+        typst_escape, note_for_typst, linebreak_fix, escape_unmatched_brackets,
+        passage_to_typst,
         strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
         format_typst_error,
     )
@@ -41,6 +42,31 @@ _section_colour         = section_colour
 _hex_to_rgb             = hex_to_rgb
 _is_hymn_element        = is_hymn_element
 _entry_from_dict        = entry_from_dict
+
+def _log_compile_error(cmd: list, returncode: int, stderr: str, stdout: str) -> None:
+    """Write full typst compile error details to ~/.cache/rubric/compile-error.log."""
+    import datetime
+    log_dir = Path.home() / ".cache" / "rubric"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "compile-error.log"
+    ts = datetime.datetime.now().isoformat(timespec="seconds")
+    lines = [
+        f"=== {ts} ===",
+        f"cmd: {' '.join(cmd)}",
+        f"exit: {returncode}",
+        "stderr:",
+        stderr or "(empty)",
+        "stdout:",
+        stdout or "(empty)",
+        "",
+    ]
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write('\n'.join(lines) + '\n')
+    except OSError:
+        pass
+    print('\n'.join(lines), flush=True)
+
 
 def _item_type_icon(name: str) -> str | None:
     n = name.lower()
@@ -108,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev23"
+APP_VERSION = "0.17.5-dev24"
 
 
 config = Config()
@@ -6952,7 +6978,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             if rubric:
                 target.append(f'#rubric-note[{_typst_escape(rubric)}]')
             if si.content_typst:
-                target.append(linebreak_fix(si.content_typst))
+                target.append(linebreak_fix(escape_unmatched_brackets(si.content_typst)))
             target.append('')
 
         def _ms_weight(si: "ServiceItem") -> float:
@@ -7079,11 +7105,14 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         def run_typst():
             try:
+                cmd = self._typst_compile_cmd(typst, str(typ_path), str(pdf_path))
                 result = subprocess.run(
-                    self._typst_compile_cmd(typst, str(typ_path), str(pdf_path)),
+                    cmd,
                     capture_output=True, text=True, timeout=60,
                     encoding="utf-8", errors="replace",
                 )
+                if result.returncode != 0:
+                    _log_compile_error(cmd, result.returncode, result.stderr, result.stdout)
                 GLib.idle_add(self._on_compile_done, result, typ_path, pdf_path, _ms_toast)
             except subprocess.TimeoutExpired:
                 GLib.idle_add(self._on_compile_error, "typst timed out after 60 seconds.", _ms_toast)
@@ -7101,7 +7130,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if result.returncode != 0:
             err = (result.stderr or result.stdout or "").strip()
             msg = format_typst_error(err) if err else "typst error"
-            self._show_toast(f"Compilation failed: {msg[:100]}", timeout=10)
+            self._show_toast(
+                f"Compilation failed: {msg[:120]} — full log at ~/.cache/rubric/compile-error.log",
+                timeout=15,
+            )
             return
 
         pdf_dir = self._repo_subdir("pdf")

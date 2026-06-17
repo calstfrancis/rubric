@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev24 — Escape stray brackets in content; log compile errors
+
+### Fixed
+
+- **Unmatched `]` in content_typst could close outer `#columns` block** — if liturgy content contained a bare `]` not balanced by a preceding `[` (e.g. choral-response notation like `[All:]`), it would prematurely terminate the surrounding `#columns(2)[...]` block and cause a typst compile error. The manuscript builder now escapes any `]` that has no matching `[` before insertion.
+- **Compile errors were too hard to diagnose** — the "Compilation failed" toast only showed the first 100 chars of a friendly error summary, making it impossible to see the raw typst error. The full typst command, exit code, stderr, and stdout are now written to `~/.cache/rubric/compile-error.log` on every failure, and also printed to stdout.
+
+---
+
 ## 0.17.5-dev23 — Ask for file when compiling without a linked Typst file
 
 ### Fixed

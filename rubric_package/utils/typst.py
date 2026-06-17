@@ -27,6 +27,31 @@ def typst_escape(text: str) -> str:
     return text
 
 
+def escape_unmatched_brackets(text: str) -> str:
+    """Escape unmatched ] in Typst content so they don't prematurely close outer blocks.
+
+    In Typst, a bare ] that isn't closing a matched [ closes the nearest enclosing
+    content block (e.g. a #columns(2)[...] block), which causes a compile error or
+    silently discards the rest of the block.  This function escapes any ] that has
+    no matching [ by replacing it with \].
+    """
+    result: list[str] = []
+    depth = 0
+    for ch in text:
+        if ch == '[':
+            depth += 1
+            result.append(ch)
+        elif ch == ']':
+            if depth > 0:
+                depth -= 1
+                result.append(ch)
+            else:
+                result.append('\\]')
+        else:
+            result.append(ch)
+    return ''.join(result)
+
+
 def linebreak_fix(text: str) -> str:
     """Replace trailing \\ on every content line with #linebreak().
 
