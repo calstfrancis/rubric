@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev26"
+APP_VERSION = "0.17.5-dev27"
 
 
 config = Config()
@@ -6061,7 +6061,9 @@ class MainWindow(Adw.ApplicationWindow):
                 ) as f:
                     f.write(typ_src)
                     typ_path = Path(f.name)
-                html_path = typ_path.with_suffix(".html")
+                cache_dir = Path(GLib.get_user_cache_dir()) / "rubric"
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                html_path = cache_dir / "bulletin.html"
                 result = subprocess.run(
                     self._typst_compile_cmd(
                         typst, str(typ_path), str(html_path),
@@ -6322,13 +6324,12 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         if _WEBKIT_OK:
             self._print_bulletin_webkit()
         else:
-            import tempfile
             html = self._build_bulletin_html()
-            with tempfile.NamedTemporaryFile(
-                    mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-                f.write(html)
-                tmp = f.name
-            Gtk.show_uri(None, GLib.filename_to_uri(tmp, None), 0)
+            cache_dir = Path(GLib.get_user_cache_dir()) / "rubric"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            html_path = cache_dir / "bulletin.html"
+            html_path.write_text(html, encoding="utf-8")
+            Gtk.show_uri(None, html_path.as_uri(), 0)
             self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
     def _print_bulletin_webkit(self):
@@ -6856,7 +6857,6 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         title = self.service_title_entry.get_text() or "Order of Service"
         date_str = self.selected_date.strftime("%-d %B %Y") if self.selected_date else ""
 
-        import tempfile, re as _re
 
         css = """
     body { font-family: Georgia, 'Times New Roman', serif; max-width: 700px; margin: 0 auto; padding: 1.5em; color: #111; }
@@ -6911,11 +6911,12 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         lines += ["</body></html>"]
         html = "\n".join(lines)
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-            f.write(html)
-            tmp_path = f.name
+        cache_dir = Path(GLib.get_user_cache_dir()) / "rubric"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        html_path = cache_dir / "bulletin.html"
+        html_path.write_text(html, encoding="utf-8")
 
-        Gtk.show_uri(None, GLib.filename_to_uri(tmp_path, None), 0)
+        Gtk.show_uri(None, html_path.as_uri(), 0)
         self._show_toast("Opened in browser — use File → Print to save as PDF", timeout=6)
 
     def export_text(self):

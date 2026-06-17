@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev27 — Fix HTML export in flatpak sandbox
+
+### Fixed
+
+- **"Could not show link, launch failed" on HTML export** — HTML export wrote to a sandboxed `/tmp` location inaccessible to the system browser. All three HTML export paths (`export_html`, the Typst-based bulletin export, and the plain `_export_bulletin_html` fallback) now write to `~/.var/app/.../cache/rubric/bulletin.html`, which is in the home directory and accessible to external processes.
+
+---
+
 ## 0.17.5-dev26 — Open PDF automatically after export
 
 ### Changed
