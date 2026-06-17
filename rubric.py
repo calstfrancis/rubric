@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev24"
+APP_VERSION = "0.17.5-dev25"
 
 
 config = Config()
@@ -7636,7 +7636,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 parts.append(f'*{_typst_escape(entry.name)}*{leader_str}{dur_str}')
                 parts.append('')
                 if entry.content_typst:
-                    parts.append(f'#text(size: 0.9em)[{entry.content_typst}]')
+                    parts.append(f'#text(size: 0.9em)[\n{linebreak_fix(entry.content_typst)}\n]')
                     parts.append('')
                 parts.append('#v(4pt)')
                 parts.append('')

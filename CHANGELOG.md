@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev25 — Fix leader's order compile failure
+
+### Fixed
+
+- **"Leader's order compile failed" on every service with text content** — `_build_minister_typst` wrapped each item's content in `#text(size: 0.9em)[{raw_content}]`. Because liturgy content uses `\` as a line-break marker, items whose text ended with `\` produced `\]` at the end of the block. In Typst markup mode, `\]` is an escaped literal `]` (not a block closer), so the `#text` block was never closed. The following `]` that was meant to close `#columns(2)[...]` closed the text block instead, leaving the columns block unclosed and causing an "unclosed delimiter" error. Fixed by applying `linebreak_fix` to the content (converting `\` → `#linebreak()`) and putting the closing `]` on its own line.
+
+---
+
 ## 0.17.5-dev24 — Escape stray brackets in content; log compile errors
 
 ### Fixed
