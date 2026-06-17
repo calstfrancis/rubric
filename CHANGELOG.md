@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.5-dev26 — Open PDF automatically after export
+
+### Changed
+
+- **Leader's order PDF opens automatically after compile** — previously the success toast had an "Open" button the user had to click. Now the PDF opens in the system viewer immediately on success, matching the behaviour of "Compile leader's notes".
+
+---
+
 ## 0.17.5-dev25 — Fix leader's order compile failure
 
 ### Fixed

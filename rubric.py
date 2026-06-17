@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5-dev25"
+APP_VERSION = "0.17.5-dev26"
 
 
 config = Config()
@@ -7672,10 +7672,8 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 self._show_toast("Leader's order compile failed", 8); return
             done_toast = Adw.Toast.new(f"✓ {pdf.name}")
             done_toast.set_timeout(6)
-            done_toast.set_button_label("Open")
-            done_toast.connect("button-clicked",
-                lambda _: Gtk.show_uri(None, GLib.filename_to_uri(str(pdf), None), 0))
             self._toast_overlay.add_toast(done_toast)
+            Gtk.show_uri(None, GLib.filename_to_uri(str(pdf), None), 0)
 
         threading.Thread(target=run, daemon=True).start()
 
