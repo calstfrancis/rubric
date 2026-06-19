@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.5"
+APP_VERSION = "0.17.6-dev1"
 
 
 config = Config()
@@ -6735,39 +6735,13 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             if not _sec_items:
                 continue
             if _bul_cols >= 2 and len(_sec_items) > 1:
-                def _bul_weight(si: "ServiceItem") -> float:
-                    base = 1.5
-                    if getattr(si, "bulletin_heading_only", False):
-                        return base
-                    _summ = getattr(si, "bulletin_summary", "")
-                    if _summ:
-                        base += len(_summ) / 100.0
-                    elif si.content_typst:
-                        base += len(strip_leader_notes(si.content_typst)) / 100.0
-                    return base
-                _weights = [_bul_weight(si) for si in _sec_items]
-                _total = sum(_weights)
-                _cum = 0.0
-                _mid = (len(_sec_items) + 1) // 2
-                for _i, _w in enumerate(_weights):
-                    _cum += _w
-                    if _cum >= _total / 2.0:
-                        _mid = _i + 1
-                        break
-                _left: list[str] = []
-                _right: list[str] = []
-                for _si in _sec_items[:_mid]:
-                    _render_bul_item(_si, _left)
-                for _si in _sec_items[_mid:]:
-                    _render_bul_item(_si, _right)
                 _bul_gutter = config.preamble.get("bulletin", {}).get("gutter", 0.5)
+                _col_items: list[str] = []
+                for _si in _sec_items:
+                    _render_bul_item(_si, _col_items)
                 parts += [
                     f'#columns(2, gutter: {_bul_gutter}em)[',
-                    '\n'.join(_left),
-                    '',
-                    '#colbreak()',
-                    '',
-                    '\n'.join(_right),
+                    '\n'.join(_col_items),
                     ']',
                     '',
                 ]
@@ -6982,42 +6956,18 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 target.append(linebreak_fix(escape_unmatched_brackets(si.content_typst)))
             target.append('')
 
-        def _ms_weight(si: "ServiceItem") -> float:
-            w = 2.0  # heading + spacing
-            if si.content_typst:
-                w += len(si.content_typst) / 80.0
-            return w
-
-        def _ms_split(items: list) -> int:
-            weights = [_ms_weight(si) for si in items]
-            total = sum(weights)
-            cumulative = 0.0
-            for i, w in enumerate(weights):
-                cumulative += w
-                if cumulative >= total / 2.0:
-                    return i + 1
-            return (len(items) + 1) // 2
-
         for sec, items in groups:
             if sec:
                 parts += [f'= {_typst_escape(sec)}', '']
 
             if _ms_cols >= 2 and len(items) > 1 and sec is not None:
-                mid = _ms_split(items)
-                _left: list[str] = []
-                _right: list[str] = []
-                for si in items[:mid]:
-                    _render_ms_item(si, _left)
-                for si in items[mid:]:
-                    _render_ms_item(si, _right)
                 _ms_gutter = config.preamble.get("manuscript", {}).get("gutter", 1.0)
+                _col_items: list[str] = []
+                for si in items:
+                    _render_ms_item(si, _col_items)
                 parts += [
                     f'#columns(2, gutter: {_ms_gutter}em)[',
-                    '\n'.join(_left),
-                    '',
-                    '#colbreak()',
-                    '',
-                    '\n'.join(_right),
+                    '\n'.join(_col_items),
                     ']',
                     '',
                 ]
