@@ -4,11 +4,11 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.6-dev1 — Remove manual column balancing in Typst export
+## 0.17.6 — Use regular multicolumn in Typst export
 
 ### Changed
 
-- **Two-column bulletin and manuscript exports no longer manually balance columns** — the previous implementation split items into left/right halves using a character-weight heuristic and inserted an explicit `#colbreak()`. This is removed; Typst now flows all content naturally through `#columns(2)`, which is the correct regular multicolumn behaviour.
+- **Two-column bulletin and manuscript exports now use regular multicolumn flow** — the previous implementation split items into left/right halves using a character-weight heuristic and inserted an explicit `#colbreak()`. This is removed; Typst now flows all content naturally through `#columns(2)`.
 
 ---
 

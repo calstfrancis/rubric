@@ -41,6 +41,14 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.6" date="2026-06-20">
+      <description>
+        <p>Two-column bulletin and manuscript exports now use regular multicolumn flow instead of a manual character-weight split.</p>
+        <ul>
+          <li>Removed the heuristic that split items into left/right halves with an explicit column break; Typst now flows content naturally through #columns(2).</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.5" date="2026-06-17">
       <description>
         <p>Bug-fix release: several long-standing Typst compile failures and a broken HTML export are resolved.</p>
