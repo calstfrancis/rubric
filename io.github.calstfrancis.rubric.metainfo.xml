@@ -43,7 +43,7 @@
   <releases>
     <release version="0.17.6" date="2026-06-20">
       <description>
-        <p>Two-column bulletin and manuscript exports now use regular multicolumn flow instead of a manual character-weight split.</p>
+        <p>0.17.6 "Open Flow" — Two-column bulletin and manuscript exports now use regular multicolumn flow instead of a manual character-weight split.</p>
         <ul>
           <li>Removed the heuristic that split items into left/right halves with an explicit column break; Typst now flows content naturally through #columns(2).</li>
         </ul>

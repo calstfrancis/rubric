@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.6 — Use regular multicolumn in Typst export
+## 0.17.6 "Open Flow" — Use regular multicolumn in Typst export
 
 ### Changed
 

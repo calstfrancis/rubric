@@ -1,4 +1,4 @@
-# Rubric v0.17.6
+# Rubric v0.17.6 "Open Flow"
 
 Install via Flatpak:
 
