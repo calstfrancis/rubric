@@ -4,12 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev2 — Dates editor window; bar order fix
+
+### Added
+
+- **Observances & Custom Dates window** — a calendar-view window (opened from the calendar icon in the justice bar) shows all built-in observances month by month alongside user custom dates. Custom dates have a delete button inline; an "Add custom date" form at the top covers month, day, name, and category (Justice / Religious). Built-in dates are read-only.
+
+### Changed
+
+- **Bar order** — the justice/custom dates bar now sits above the main status bar so the main status bar remains at the very bottom of the window, consistent with standard toolbar placement.
+
+---
+
 ## 0.17.7-dev1 — Justice/custom dates bar; save button; preview jitter fixes
 
 ### Added
 
-- **Justice/custom dates second status bar row** — a new bar below the main status bar surfaces upcoming and recent social justice, indigenous, ecological, and pride observances from the built-in calendar, as well as any user-defined custom dates. Both past and future events are shown with coloured type chips.
-- **Custom dates in Preferences → Dates** — two editable tables (Social Justice & Canadian Observances, and Religious & Liturgical Dates) let you add and remove dates that appear in the justice bar. Built-in dates (National Indigenous Peoples Day, World Refugee Day, etc.) are shown automatically and are not listed here.
+- **Justice/custom dates second status bar row** — a new bar above the main status bar surfaces upcoming and recent social justice, indigenous, ecological, and pride observances from the built-in calendar, as well as any user-defined custom dates. Both past and future events are shown with coloured type chips.
+- **Custom dates in Preferences → Dates** — two editable tables (Social Justice & Canadian Observances, and Religious & Liturgical Dates) let you add and remove dates that appear in the justice bar.
 
 ### Fixed
 

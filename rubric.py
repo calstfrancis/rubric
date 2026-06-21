@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.7-dev1"
+APP_VERSION = "0.17.7-dev2"
 
 
 config = Config()
@@ -1585,6 +1585,241 @@ class PreferencesWindow(Adw.PreferencesWindow):
         threading.Thread(target=run, daemon=True).start()
 
 
+# ── Dates editor window ───────────────────────────────────────────────────────
+
+class DatesEditorWindow(Adw.Window):
+    """Full-year view of all observances with custom date editing."""
+
+    _MONTH_NAMES = ["January","February","March","April","May","June",
+                    "July","August","September","October","November","December"]
+    _MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun",
+                    "Jul","Aug","Sep","Oct","Nov","Dec"]
+
+    def __init__(self, main_win=None, **kw):
+        super().__init__(**kw)
+        self._main = main_win
+        self.set_title("Observances & Custom Dates")
+        self.set_default_size(600, 700)
+        self._content_box = None
+        self._build()
+
+    def _build(self):
+        tv = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv.add_top_bar(hdr)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+
+        self._content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._content_box.set_margin_start(16); self._content_box.set_margin_end(16)
+        self._content_box.set_margin_top(8); self._content_box.set_margin_bottom(16)
+        scroll.set_child(self._content_box)
+        tv.set_content(scroll)
+        self.set_content(tv)
+        self._refresh()
+
+    def _notify_main(self):
+        if self._main and hasattr(self._main, "_refresh_justice_row"):
+            d = getattr(self._main, "selected_date", None)
+            if d:
+                self._main._refresh_justice_row(d)
+
+    def _refresh(self):
+        box = self._content_box
+        while box.get_first_child():
+            box.remove(box.get_first_child())
+
+        try:
+            from observances import FIXED, RANGES, _computed_observances, TYPES
+        except ImportError:
+            FIXED = {}; RANGES = []; _computed_observances = lambda x: []; TYPES = {}
+
+        from datetime import date as _date
+        year = _date.today().year
+
+        custom_dates = getattr(config, "custom_dates", [])
+
+        _CUSTOM_TYPES = {
+            "justice":   {"label": "Justice",   "colour": "#B91C1C"},
+            "religious": {"label": "Religious",  "colour": "#A16207"},
+        }
+
+        # ── Add custom date form ──────────────────────────────────────────────
+        add_hdr = Gtk.Label(label="Add custom date")
+        add_hdr.add_css_class("heading"); add_hdr.set_xalign(0)
+        add_hdr.set_margin_top(8); add_hdr.set_margin_bottom(6)
+        box.append(add_hdr)
+
+        add_lb = Gtk.ListBox()
+        add_lb.add_css_class("boxed-list")
+        add_lb.set_selection_mode(Gtk.SelectionMode.NONE)
+        box.append(add_lb)
+
+        # Month row
+        month_row = Adw.ActionRow(title="Month")
+        month_spin = Gtk.SpinButton.new_with_range(1, 12, 1)
+        month_spin.set_valign(Gtk.Align.CENTER)
+        month_row.add_suffix(month_spin)
+        add_lb.append(month_row)
+
+        # Day row
+        day_row = Adw.ActionRow(title="Day")
+        day_spin = Gtk.SpinButton.new_with_range(1, 31, 1)
+        day_spin.set_valign(Gtk.Align.CENTER)
+        day_row.add_suffix(day_spin)
+        add_lb.append(day_row)
+
+        # Name row
+        try:
+            name_row = Adw.EntryRow(title="Name")
+            add_lb.append(name_row)
+            _get_name = lambda: name_row.get_text().strip()
+            _clear_name = lambda: name_row.set_text("")
+        except AttributeError:
+            name_action = Adw.ActionRow(title="Name")
+            name_field = Gtk.Entry(valign=Gtk.Align.CENTER, hexpand=True)
+            name_action.add_suffix(name_field)
+            add_lb.append(name_action)
+            _get_name = lambda f=name_field: f.get_text().strip()
+            _clear_name = lambda f=name_field: f.set_text("")
+
+        # Category row
+        cat_row = Adw.ActionRow(title="Category")
+        cat_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        cat_box.set_valign(Gtk.Align.CENTER)
+        _CAT_KEYS = ["justice", "religious"]
+        _CAT_LBLS = ["Justice", "Religious"]
+        cat_combo = Gtk.DropDown.new_from_strings(_CAT_LBLS)
+        cat_combo.set_valign(Gtk.Align.CENTER)
+        cat_box.append(cat_combo)
+        cat_row.add_suffix(cat_box)
+        add_lb.append(cat_row)
+
+        add_btn_row = Adw.ActionRow(title="")
+        add_btn = Gtk.Button(label="Add date", valign=Gtk.Align.CENTER)
+        add_btn.add_css_class("suggested-action")
+        add_btn_row.add_suffix(add_btn)
+        add_lb.append(add_btn_row)
+
+        def _on_add(_b):
+            name = _get_name()
+            if not name:
+                return
+            month = int(month_spin.get_value())
+            day = int(day_spin.get_value())
+            cat_idx = cat_combo.get_selected()
+            cat = _CAT_KEYS[cat_idx] if cat_idx < len(_CAT_KEYS) else "justice"
+            config.custom_dates.append({"month": month, "day": day,
+                                        "name": name, "category": cat})
+            config.save()
+            _clear_name()
+            month_spin.set_value(1); day_spin.set_value(1); cat_combo.set_selected(0)
+            self._refresh()
+            self._notify_main()
+
+        add_btn.connect("clicked", _on_add)
+
+        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        sep.set_margin_top(16); sep.set_margin_bottom(4)
+        box.append(sep)
+
+        # ── Month-by-month observances ────────────────────────────────────────
+        all_lbl = Gtk.Label(label="All observances by month")
+        all_lbl.add_css_class("heading"); all_lbl.set_xalign(0)
+        all_lbl.set_margin_top(8); all_lbl.set_margin_bottom(4)
+        box.append(all_lbl)
+
+        note_lbl = Gtk.Label(
+            label="Built-in dates are read-only. Custom dates (marked ✎) can be deleted.")
+        note_lbl.add_css_class("caption"); note_lbl.add_css_class("dim-label")
+        note_lbl.set_xalign(0); note_lbl.set_wrap(True)
+        note_lbl.set_margin_bottom(8)
+        box.append(note_lbl)
+
+        for m_idx in range(12):
+            month = m_idx + 1
+            entries = []
+
+            # Built-in fixed dates
+            for (mm, dd), obs_list in sorted(FIXED.items()):
+                if mm != month:
+                    continue
+                for obs in obs_list:
+                    entries.append({"day": dd, "name": obs["name"],
+                                    "type": obs.get("type", ""), "source": "builtin"})
+
+            # Range start dates this month
+            for r in RANGES:
+                if r["start"][0] == month:
+                    entries.append({"day": r["start"][1],
+                                    "name": f"{r['name']} (begins)",
+                                    "type": r["type"], "source": "builtin"})
+
+            # Custom dates this month (track original index for deletion)
+            for i, cd in enumerate(config.custom_dates):
+                if cd.get("month") == month:
+                    cat = cd.get("category", "justice")
+                    entries.append({"day": cd.get("day", 1), "name": cd.get("name", ""),
+                                    "type": cat, "source": "custom", "cfg_idx": i})
+
+            entries.sort(key=lambda x: (x["day"], x["source"]))
+
+            if not entries:
+                continue
+
+            m_lbl = Gtk.Label(label=self._MONTH_NAMES[m_idx])
+            m_lbl.add_css_class("title-4"); m_lbl.set_xalign(0)
+            m_lbl.set_margin_top(14); m_lbl.set_margin_bottom(4)
+            box.append(m_lbl)
+
+            lb = Gtk.ListBox()
+            lb.add_css_class("boxed-list")
+            lb.set_selection_mode(Gtk.SelectionMode.NONE)
+            box.append(lb)
+
+            for entry in entries:
+                row = Adw.ActionRow()
+                row.set_title(GLib.markup_escape_text(entry["name"]))
+
+                day_lbl = Gtk.Label(label=f"{entry['day']:2d}")
+                day_lbl.add_css_class("monospace"); day_lbl.add_css_class("dim-label")
+                day_lbl.set_valign(Gtk.Align.CENTER)
+                day_lbl.set_margin_end(4)
+                row.add_prefix(day_lbl)
+
+                t = entry["type"]
+                if entry["source"] == "custom":
+                    ti = _CUSTOM_TYPES.get(t, {"label": t.title(), "colour": "#6B7280"})
+                else:
+                    ti = TYPES.get(t, {"label": t.title(), "colour": "#6B7280"})
+                colour = ti.get("colour", "#6B7280")
+                tlabel = ti.get("label", "")
+                if tlabel:
+                    type_lbl = Gtk.Label()
+                    type_lbl.set_markup(
+                        f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span>')
+                    type_lbl.add_css_class("caption")
+                    type_lbl.set_valign(Gtk.Align.CENTER)
+                    row.add_suffix(type_lbl)
+
+                if entry["source"] == "custom":
+                    del_btn = Gtk.Button(icon_name="user-trash-symbolic",
+                                         valign=Gtk.Align.CENTER,
+                                         tooltip_text="Remove this custom date")
+                    del_btn.add_css_class("flat")
+                    def _on_del(_b, idx=entry["cfg_idx"]):
+                        config.custom_dates.pop(idx)
+                        config.save()
+                        self._refresh()
+                        self._notify_main()
+                    del_btn.connect("clicked", _on_del)
+                    row.add_suffix(del_btn)
+
+                lb.append(row)
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(Adw.ApplicationWindow):
@@ -2094,9 +2329,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         status_bar.append(_right_box)
 
-        tv.add_bottom_bar(status_bar)
-
-        # ── Justice / custom dates bar (second bottom bar) ────────────────────
+        # ── Justice / custom dates bar ────────────────────────────────────────
+        # Added first so it sits above the main status bar (ToolbarView stacks
+        # bottom bars from content outward — first added = closest to content).
         jbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         jbar.add_css_class("toolbar")
         jbar.set_visible(False)
@@ -2124,15 +2359,16 @@ class MainWindow(Adw.ApplicationWindow):
         _jright_spacer = Gtk.Box(); _jright_spacer.set_hexpand(True)
         jbar.append(_jright_spacer)
 
-        _jedit_btn = Gtk.Button(icon_name="document-edit-symbolic",
-                                tooltip_text="Edit custom dates in Preferences → Dates")
+        _jedit_btn = Gtk.Button(icon_name="x-office-calendar-symbolic",
+                                tooltip_text="View and edit all observances")
         _jedit_btn.add_css_class("flat"); _jedit_btn.add_css_class("caption")
         _jedit_btn.set_margin_end(4)
-        _jedit_btn.connect("clicked", lambda _: self.open_preferences(page="dates"))
+        _jedit_btn.connect("clicked", lambda _: self._open_dates_window())
         jbar.append(_jedit_btn)
 
         self._justice_bar = jbar
         tv.add_bottom_bar(jbar)
+        tv.add_bottom_bar(status_bar)
 
         # GOST CSS provider (priority above application so it overrides theme fonts)
         self._gost_css = Gtk.CssProvider()
@@ -8610,6 +8846,10 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             if self.selected_date:
                 self._refresh_justice_row(self.selected_date)
         prefs.connect("destroy", on_destroy); prefs.present()
+
+    def _open_dates_window(self):
+        win = DatesEditorWindow(main_win=self, transient_for=self)
+        win.present()
 
     def _error(self, heading, body):
         dlg = Adw.MessageDialog(transient_for=self, heading=heading, body=body)
