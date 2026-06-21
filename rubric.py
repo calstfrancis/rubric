@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.6"
+APP_VERSION = "0.17.7-dev1"
 
 
 config = Config()
@@ -608,6 +608,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         if _SNIP_OK and not config.simple_mode:
             self._build_snippets()
         self._build_github(); self._build_scripture()
+        self._build_dates_page()
         # self._build_typst_files()  # hidden — use Template panel instead
         self.connect("close-request", self._on_close)
 
@@ -1055,6 +1056,152 @@ class PreferencesWindow(Adw.PreferencesWindow):
             return False
 
         prefetch_hymnal(book, on_progress=on_progress, on_done=on_done)
+
+    def _build_dates_page(self):
+        """Preferences page: manage custom justice and religious dates."""
+        _MONTH_NAMES = ["January","February","March","April","May","June",
+                        "July","August","September","October","November","December"]
+
+        page = Adw.PreferencesPage(title="Dates", icon_name="x-office-calendar-symbolic")
+        self.add(page)
+        self._dates_page = page
+        self._dates_groups: list = []
+
+        intro_grp = Adw.PreferencesGroup(
+            title="Custom observances",
+            description="Dates you add here appear in the justice/custom dates bar "
+                        "below the main status bar, alongside the built-in Canadian "
+                        "and social justice calendar. Built-in dates (e.g. National "
+                        "Indigenous Peoples Day, World Refugee Day) are not editable "
+                        "here — they live in observances.py."
+        )
+        page.add(intro_grp)
+        self._dates_groups.append(intro_grp)
+
+        self._refresh_dates_page()
+
+    def _refresh_dates_page(self):
+        """Rebuild the custom-dates list in the Dates page."""
+        page = getattr(self, "_dates_page", None)
+        if page is None:
+            return
+
+        _MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun",
+                        "Jul","Aug","Sep","Oct","Nov","Dec"]
+        _MONTH_FULL  = ["January","February","March","April","May","June",
+                        "July","August","September","October","November","December"]
+
+        # Remove all rebuilable groups (keep intro group at index 0)
+        for grp in getattr(self, "_dates_groups", [])[1:]:
+            try: page.remove(grp)
+            except Exception: pass
+        self._dates_groups = self._dates_groups[:1]
+
+        for category, cat_title, cat_desc in [
+            ("justice",
+             "Social Justice & Canadian Observances",
+             "Shown in the justice dates bar. Use this to add dates not in the "
+             "built-in calendar — local events, diocesan days, etc."),
+            ("religious",
+             "Religious & Liturgical Dates",
+             "Custom feast days, saints' days, or observances specific to your "
+             "tradition. These also appear in the justice/custom dates bar."),
+        ]:
+            custom = [cd for cd in config.custom_dates if cd.get("category") == category]
+            grp = Adw.PreferencesGroup(title=cat_title, description=cat_desc)
+            page.add(grp); self._dates_groups.append(grp)
+
+            if not custom:
+                empty_row = Adw.ActionRow(title="No custom dates yet")
+                empty_row.add_css_class("dim-label")
+                grp.add(empty_row)
+
+            for i, cd in enumerate(config.custom_dates):
+                if cd.get("category") != category:
+                    continue
+                month = cd.get("month", 1); day = cd.get("day", 1)
+                name = cd.get("name", "")
+                try:
+                    month_name = _MONTH_NAMES[month - 1]
+                except (IndexError, TypeError):
+                    month_name = str(month)
+                row = Adw.ActionRow(title=name, subtitle=f"{month_name} {day}")
+                del_btn = Gtk.Button(icon_name="user-trash-symbolic",
+                                     valign=Gtk.Align.CENTER,
+                                     tooltip_text="Remove this date")
+                del_btn.add_css_class("flat")
+
+                def _on_delete(_b, idx=i):
+                    config.custom_dates.pop(idx)
+                    config.save()
+                    self._refresh_dates_page()
+                    win = self.get_transient_for()
+                    if win and hasattr(win, "_refresh_justice_row") and getattr(win, "selected_date", None):
+                        win._refresh_justice_row(win.selected_date)
+
+                del_btn.connect("clicked", _on_delete)
+                row.add_suffix(del_btn)
+                grp.add(row)
+
+            # Add-date row for this category
+            add_grp = Adw.PreferencesGroup(title=f'Add to “{cat_title}”')
+            page.add(add_grp); self._dates_groups.append(add_grp)
+
+            # Month row
+            month_row = Adw.ActionRow(title="Month")
+            month_spin = Gtk.SpinButton.new_with_range(1, 12, 1)
+            month_spin.set_valign(Gtk.Align.CENTER)
+            month_spin.set_tooltip_text("Month (1–12)")
+            month_row.add_suffix(month_spin)
+            add_grp.add(month_row)
+
+            # Day row
+            day_row = Adw.ActionRow(title="Day")
+            day_spin = Gtk.SpinButton.new_with_range(1, 31, 1)
+            day_spin.set_valign(Gtk.Align.CENTER)
+            day_spin.set_tooltip_text("Day of month (1–31)")
+            day_row.add_suffix(day_spin)
+            add_grp.add(day_row)
+
+            # Name row
+            try:
+                name_entry = Adw.EntryRow(title="Name")
+                add_grp.add(name_entry)
+                _get_name = lambda e=name_entry: e.get_text().strip()
+                _clear_name = lambda e=name_entry: e.set_text("")
+            except AttributeError:
+                name_action = Adw.ActionRow(title="Name")
+                name_field = Gtk.Entry(valign=Gtk.Align.CENTER)
+                name_field.set_hexpand(True)
+                name_action.add_suffix(name_field)
+                add_grp.add(name_action)
+                _get_name = lambda f=name_field: f.get_text().strip()
+                _clear_name = lambda f=name_field: f.set_text("")
+
+            add_btn_row = Adw.ActionRow(title="Add date")
+            add_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
+            add_btn.add_css_class("suggested-action")
+            add_btn_row.add_suffix(add_btn)
+            add_grp.add(add_btn_row)
+
+            def _on_add(_b, cat=category, ms=month_spin, ds=day_spin,
+                        get_n=_get_name, clr_n=_clear_name):
+                name = get_n()
+                if not name:
+                    return
+                month = int(ms.get_value())
+                day = int(ds.get_value())
+                config.custom_dates.append({"month": month, "day": day,
+                                            "name": name, "category": cat})
+                config.save()
+                clr_n()
+                ms.set_value(1); ds.set_value(1)
+                self._refresh_dates_page()
+                win = self.get_transient_for()
+                if win and hasattr(win, "_refresh_justice_row") and getattr(win, "selected_date", None):
+                    win._refresh_justice_row(win.selected_date)
+
+            add_btn.connect("clicked", _on_add)
 
     def _build_typst_files(self):
         """Preferences page: view and edit the bundled Typst template files."""
@@ -1783,7 +1930,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_cover_thumb()
 
         sb = Gtk.Button(icon_name="document-save", tooltip_text="Save (Ctrl+S)")
-        sb.add_css_class("suggested-action"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
+        sb.add_css_class("flat"); sb.connect("clicked", lambda _: self.save_file()); hdr.pack_end(sb)
 
         # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
         # but not packed into the header. Use keyboard shortcuts or the hamburger menu.
@@ -1948,6 +2095,44 @@ class MainWindow(Adw.ApplicationWindow):
         status_bar.append(_right_box)
 
         tv.add_bottom_bar(status_bar)
+
+        # ── Justice / custom dates bar (second bottom bar) ────────────────────
+        jbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        jbar.add_css_class("toolbar")
+        jbar.set_visible(False)
+
+        _jleft_spacer = Gtk.Box(); _jleft_spacer.set_hexpand(True)
+        jbar.append(_jleft_spacer)
+
+        _jcenter = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        _jcenter.set_halign(Gtk.Align.CENTER)
+
+        self._justice_prev_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        _jcenter.append(self._justice_prev_box)
+
+        self._justice_dot = Gtk.Label(label="●")
+        self._justice_dot.add_css_class("caption"); self._justice_dot.add_css_class("dim-label")
+        self._justice_dot.set_margin_start(36); self._justice_dot.set_margin_end(36)
+        self._justice_dot.set_visible(False)
+        _jcenter.append(self._justice_dot)
+
+        self._justice_next_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        _jcenter.append(self._justice_next_box)
+
+        jbar.append(_jcenter)
+
+        _jright_spacer = Gtk.Box(); _jright_spacer.set_hexpand(True)
+        jbar.append(_jright_spacer)
+
+        _jedit_btn = Gtk.Button(icon_name="document-edit-symbolic",
+                                tooltip_text="Edit custom dates in Preferences → Dates")
+        _jedit_btn.add_css_class("flat"); _jedit_btn.add_css_class("caption")
+        _jedit_btn.set_margin_end(4)
+        _jedit_btn.connect("clicked", lambda _: self.open_preferences(page="dates"))
+        jbar.append(_jedit_btn)
+
+        self._justice_bar = jbar
+        tv.add_bottom_bar(jbar)
 
         # GOST CSS provider (priority above application so it overrides theme fonts)
         self._gost_css = Gtk.CssProvider()
@@ -4039,6 +4224,105 @@ class MainWindow(Adw.ApplicationWindow):
             if prev_obs:
                 _make_obs_chip(prev_obs, "←", prev_box)
 
+        self._refresh_justice_row(d)
+
+    def _refresh_justice_row(self, d) -> None:
+        """Rebuild the justice/custom-dates second status bar row."""
+        bar = getattr(self, "_justice_bar", None)
+        if bar is None:
+            return
+        prev_box = getattr(self, "_justice_prev_box", None)
+        next_box = getattr(self, "_justice_next_box", None)
+        dot = getattr(self, "_justice_dot", None)
+        for box in (prev_box, next_box):
+            if box:
+                while box.get_first_child():
+                    box.remove(box.get_first_child())
+        if dot:
+            dot.set_visible(False)
+
+        from datetime import timedelta
+        try:
+            from observances import FIXED, _computed_observances, TYPES
+        except ImportError:
+            FIXED = {}
+            _computed_observances = lambda x: []
+            TYPES = {}
+
+        custom_dates = getattr(config, "custom_dates", [])
+        _JUSTICE_TYPES = {"social_justice", "indigenous", "ecological", "pride"}
+        _CUSTOM_COLOURS = {
+            "justice":   "#B91C1C",
+            "religious": "#A16207",
+        }
+        _CUSTOM_LABELS = {
+            "justice":   "Justice",
+            "religious": "Feast",
+        }
+
+        def _justice_on(wd):
+            items = []
+            for obs in FIXED.get((wd.month, wd.day), []):
+                if obs.get("type") in _JUSTICE_TYPES:
+                    items.append(obs)
+            for obs in _computed_observances(wd):
+                if obs.get("type") in _JUSTICE_TYPES:
+                    items.append(obs)
+            for cd in custom_dates:
+                if cd.get("month") == wd.month and cd.get("day") == wd.day:
+                    cat = cd.get("category", "justice")
+                    items.append({"name": cd["name"], "type": cat,
+                                  "_custom_colour": _CUSTOM_COLOURS.get(cat, "#6B7280"),
+                                  "_custom_label":  _CUSTOM_LABELS.get(cat, "")})
+            return items
+
+        past_obs = past_dt = None
+        for days in range(1, 60):
+            wd = d - timedelta(days=days)
+            items = _justice_on(wd)
+            if items:
+                past_obs, past_dt = items[0], wd
+                break
+
+        future_obs = future_dt = None
+        for days in range(0, 60):
+            wd = d + timedelta(days=days)
+            items = _justice_on(wd)
+            if items:
+                future_obs, future_dt = items[0], wd
+                break
+
+        if not past_obs and not future_obs:
+            bar.set_visible(False)
+            return
+        bar.set_visible(True)
+
+        def _make_chip(obs, dt, arrow, box):
+            colour = obs.get("_custom_colour") or TYPES.get(obs.get("type", ""), {}).get("colour", "#6B7280")
+            tlabel = obs.get("_custom_label") or TYPES.get(obs.get("type", ""), {}).get("label", "")
+            prox = dt.strftime("%-d %b")
+            markup = ""
+            if arrow == "←":
+                markup = '<span alpha="60%">← </span>'
+            if tlabel:
+                markup += f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
+            markup += GLib.markup_escape_text(obs["name"])
+            markup += f' <span alpha="60%">{GLib.markup_escape_text(prox)}</span>'
+            if arrow == "→":
+                markup += ' <span alpha="60%">→</span>'
+            chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
+            chip_lbl.add_css_class("caption")
+            chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
+            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill")
+            box.append(chip_btn)
+
+        if past_obs and prev_box:
+            _make_chip(past_obs, past_dt, "←", prev_box)
+        if future_obs and next_box:
+            _make_chip(future_obs, future_dt, "→", next_box)
+        if past_obs and future_obs and dot:
+            dot.set_visible(True)
+
     def _step_sunday(self, direction: int):
         """Move the readings display to the prev (-1) or next (+1) Sunday."""
         from datetime import timedelta
@@ -4649,13 +4933,10 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_pdf_loaded = pdf_path
         self._preview_compile_done()
         if self._preview_webview:
-            uri = f"file://{pdf_path}"
-            current = (self._preview_webview.get_uri() or "").split("?")[0].split("#")[0]
+            self._preview_reload_n = getattr(self, "_preview_reload_n", 0) + 1
+            uri = f"file://{pdf_path}?_r={self._preview_reload_n}"
             self._preview_save_scroll()
-            if current == uri:
-                self._preview_webview.reload()
-            else:
-                self._preview_webview.load_uri(uri)
+            self._preview_webview.load_uri(uri)
         return False
 
     def _on_preview_load_changed(self, wv, event):
@@ -4672,7 +4953,7 @@ class MainWindow(Adw.ApplicationWindow):
                         except Exception:
                             pass
                     return False
-                GLib.timeout_add(120, _restore)
+                GLib.timeout_add(30, _restore)
 
     def _start_scroll_poll(self):
         """Slow fallback poll (2 s) — the compile-start snapshot handles the real capture."""
@@ -8320,10 +8601,14 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         dlg.connect("response", on_resp)
         dlg.present()
 
-    def open_preferences(self):
+    def open_preferences(self, page: str | None = None):
         prefs = PreferencesWindow(transient_for=self, modal=True)
+        if page == "dates" and hasattr(prefs, "_dates_page"):
+            prefs.set_visible_page(prefs._dates_page)
         def on_destroy(_):
             self._fill_palette_inner(); self._apply_tab_mode()
+            if self.selected_date:
+                self._refresh_justice_row(self.selected_date)
         prefs.connect("destroy", on_destroy); prefs.present()
 
     def _error(self, heading, body):

@@ -4,6 +4,20 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev1 — Justice/custom dates bar; save button; preview jitter fixes
+
+### Added
+
+- **Justice/custom dates second status bar row** — a new bar below the main status bar surfaces upcoming and recent social justice, indigenous, ecological, and pride observances from the built-in calendar, as well as any user-defined custom dates. Both past and future events are shown with coloured type chips.
+- **Custom dates in Preferences → Dates** — two editable tables (Social Justice & Canadian Observances, and Religious & Liturgical Dates) let you add and remove dates that appear in the justice bar. Built-in dates (National Indigenous Peoples Day, World Refugee Day, etc.) are shown automatically and are not listed here.
+
+### Fixed
+
+- **Save icon blue accent removed** — the toolbar Save button no longer uses the `suggested-action` (blue) style; it now blends with the other flat toolbar buttons.
+- **Preview flicker / scroll jitter reduced** — the scroll-position restore after an HTML preview reload now fires after 30 ms instead of 120 ms, cutting the visible position jump. PDF preview updates now always use `load_uri` with a cache-buster instead of `reload()`, avoiding the blank-flash on each compile.
+
+---
+
 ## 0.17.6 "Open Flow" — Use regular multicolumn in Typst export
 
 ### Changed
