@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev3 — Spreadsheet dates editor
+
+### Changed
+
+- **Important Dates window is now a proper spreadsheet** — the "Your custom dates" section shows inline-editable rows: Month spinner, Day spinner, Name text field, Category dropdown (Justice / Religious), and a delete button per row. Changes auto-save immediately. An always-visible blank row at the bottom adds new dates. Below a separator, all built-in observances are listed month by month as a read-only reference.
+
+---
+
 ## 0.17.7-dev2 — Dates editor window; bar order fix
 
 ### Added
