@@ -134,10 +134,39 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.7-dev3"
+APP_VERSION = "0.17.7-dev4"
 
 
 config = Config()
+
+
+def _seed_all_dates() -> None:
+    """Populate config.all_dates from observances.py on first launch.
+    Also migrates any legacy custom_dates entries."""
+    if config.all_dates:
+        return
+    try:
+        from observances import FIXED, RANGES
+    except ImportError:
+        return
+    entries: list[dict] = []
+    for (mm, dd), obs_list in sorted(FIXED.items()):
+        for obs in obs_list:
+            entries.append({"month": mm, "day": dd,
+                            "name": obs["name"],
+                            "type": obs.get("type", "civil")})
+    for r in RANGES:
+        entries.append({"month": r["start"][0], "day": r["start"][1],
+                        "name": r["name"], "type": r["type"]})
+    # Migrate legacy custom_dates
+    _cat_map = {"justice": "social_justice", "religious": "feast"}
+    for cd in config.custom_dates:
+        t = _cat_map.get(cd.get("category", "justice"), "social_justice")
+        entries.append({"month": cd.get("month", 1), "day": cd.get("day", 1),
+                        "name": cd.get("name", ""), "type": t})
+    config.all_dates = entries
+    config.save()
+
 
 # Default UCC Sunday service template — injected on first use if no templates exist
 _UCC_DEFAULT_TEMPLATE: list[dict] = [
@@ -1588,10 +1617,13 @@ class PreferencesWindow(Adw.PreferencesWindow):
 # ── Dates editor window ───────────────────────────────────────────────────────
 
 class DatesEditorWindow(Adw.Window):
-    """Spreadsheet editor for custom observances + read-only built-in reference."""
+    """Single editable spreadsheet over config.all_dates."""
 
-    _CAT_KEYS  = ["justice", "religious"]
-    _CAT_LBLS  = ["Justice", "Religious"]
+    # All observance types — order matters (matches dropdown index)
+    _TYPE_KEYS = ["social_justice", "indigenous", "ecological", "pride",
+                  "feast", "saint", "ecumenical", "remembrance", "civil", "ucc"]
+    _TYPE_LBLS = ["Justice / Social", "Indigenous", "Ecological", "Pride",
+                  "Feast Day", "Saint", "Ecumenical", "Remembrance", "Civil", "UCC"]
     _MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun",
                    "Jul","Aug","Sep","Oct","Nov","Dec"]
 
@@ -1599,22 +1631,18 @@ class DatesEditorWindow(Adw.Window):
         super().__init__(**kw)
         self._main = main_win
         self.set_title("Important Dates")
-        self.set_default_size(660, 620)
-        self._sheet_box = None   # container for spreadsheet rows
+        self.set_default_size(700, 640)
+        self._sheet_box = None
         self._build()
 
-    # ── CSS for spreadsheet cells ─────────────────────────────────────────────
-
     _SHEET_CSS = b"""
-.dates-sheet-header { font-weight: bold; font-size: 0.8em; color: alpha(currentColor, 0.6); }
+.dates-sheet-header { font-weight: bold; font-size: 0.8em; color: alpha(currentColor, 0.55); }
 .dates-sheet-row { border-bottom: 1px solid alpha(currentColor, 0.08); }
 .dates-sheet-row:last-child { border-bottom: none; }
 .dates-cell-day   { min-width: 44px;  max-width: 44px; }
 .dates-cell-month { min-width: 60px;  max-width: 60px; }
-.dates-cell-cat   { min-width: 104px; max-width: 104px; }
+.dates-cell-type  { min-width: 150px; max-width: 150px; }
 .dates-cell-del   { min-width: 36px;  max-width: 36px; }
-.dates-builtin-name { color: alpha(currentColor, 0.55); font-size: 0.9em; }
-.dates-builtin-badge { color: alpha(currentColor, 0.4); font-size: 0.75em; }
 """
 
     def _build(self):
@@ -1625,56 +1653,29 @@ class DatesEditorWindow(Adw.Window):
 
         tv = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
+
+        reset_btn = Gtk.Button(label="Reset to defaults")
+        reset_btn.add_css_class("flat")
+        reset_btn.set_tooltip_text(
+            "Restore all built-in observances — adds any missing defaults back. "
+            "Your edits are replaced by the original values.")
+        reset_btn.connect("clicked", self._on_reset)
+        hdr.pack_end(reset_btn)
+
         tv.add_top_bar(hdr)
 
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        outer.set_vexpand(True)
-
-        # ── Custom dates spreadsheet (top, fixed size with its own scroll) ────
-        sheet_scroll = Gtk.ScrolledWindow()
-        sheet_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        sheet_scroll.set_vexpand(True)
-        sheet_scroll.set_min_content_height(200)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
 
         self._sheet_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self._sheet_box.set_margin_start(12); self._sheet_box.set_margin_end(12)
-        self._sheet_box.set_margin_top(4); self._sheet_box.set_margin_bottom(8)
-        sheet_scroll.set_child(self._sheet_box)
+        self._sheet_box.set_margin_start(10); self._sheet_box.set_margin_end(10)
+        self._sheet_box.set_margin_top(6); self._sheet_box.set_margin_bottom(10)
+        scroll.set_child(self._sheet_box)
 
-        # Section label
-        custom_lbl = Gtk.Label(label="Your custom dates")
-        custom_lbl.add_css_class("heading"); custom_lbl.set_xalign(0)
-        custom_lbl.set_margin_start(12); custom_lbl.set_margin_top(10)
-        custom_lbl.set_margin_bottom(4)
-        outer.append(custom_lbl)
-        outer.append(sheet_scroll)
-
-        self._rebuild_sheet()
-
-        # ── Built-in observances reference (bottom, separate scroll) ──────────
-        outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        ref_lbl = Gtk.Label(label="Built-in observances (read-only)")
-        ref_lbl.add_css_class("heading"); ref_lbl.set_xalign(0)
-        ref_lbl.set_margin_start(12); ref_lbl.set_margin_top(10)
-        ref_lbl.set_margin_bottom(4)
-        outer.append(ref_lbl)
-
-        ref_scroll = Gtk.ScrolledWindow()
-        ref_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        ref_scroll.set_vexpand(True)
-        ref_scroll.set_min_content_height(180)
-
-        ref_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        ref_box.set_margin_start(12); ref_box.set_margin_end(12)
-        ref_box.set_margin_top(2); ref_box.set_margin_bottom(8)
-        ref_scroll.set_child(ref_box)
-        outer.append(ref_scroll)
-
-        self._build_ref_section(ref_box)
-
-        tv.set_content(outer)
+        tv.set_content(scroll)
         self.set_content(tv)
+        self._rebuild_sheet()
 
     def _notify_main(self):
         if self._main and hasattr(self._main, "_refresh_justice_row"):
@@ -1682,17 +1683,15 @@ class DatesEditorWindow(Adw.Window):
             if d:
                 self._main._refresh_justice_row(d)
 
-    # ── Spreadsheet helpers ───────────────────────────────────────────────────
-
     def _col_header_row(self) -> Gtk.Box:
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        row.set_margin_start(4); row.set_margin_end(4)
-        row.set_margin_top(2); row.set_margin_bottom(2)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.set_margin_start(6); row.set_margin_end(6)
+        row.set_margin_top(4); row.set_margin_bottom(4)
         for text, css_class, expand in [
             ("Mo",    "dates-cell-month", False),
             ("Day",   "dates-cell-day",   False),
             ("Name",  None,               True),
-            ("Cat.",  "dates-cell-cat",   False),
+            ("Type",  "dates-cell-type",  False),
             ("",      "dates-cell-del",   False),
         ]:
             lbl = Gtk.Label(label=text)
@@ -1706,73 +1705,66 @@ class DatesEditorWindow(Adw.Window):
         return row
 
     def _data_row(self, idx: int) -> Gtk.Box:
-        """Build one editable spreadsheet row for config.custom_dates[idx]."""
-        cd = config.custom_dates[idx]
+        """One editable spreadsheet row for config.all_dates[idx]."""
+        entry = config.all_dates[idx]
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         row.add_css_class("dates-sheet-row")
-        row.set_margin_start(4); row.set_margin_end(4)
+        row.set_margin_start(6); row.set_margin_end(6)
         row.set_margin_top(1); row.set_margin_bottom(1)
 
         def _save():
             config.save()
             self._notify_main()
 
-        # Month spinner
         month_spin = Gtk.SpinButton.new_with_range(1, 12, 1)
-        month_spin.set_value(cd.get("month", 1))
+        month_spin.set_value(entry.get("month", 1))
         month_spin.set_width_chars(2)
         month_spin.add_css_class("dates-cell-month")
         month_spin.set_valign(Gtk.Align.CENTER)
         month_spin.connect("value-changed",
-            lambda w, i=idx: (config.custom_dates[i].__setitem__("month", int(w.get_value())), _save()))
+            lambda w, i=idx: (config.all_dates[i].__setitem__("month", int(w.get_value())), _save()))
         row.append(month_spin)
 
-        # Day spinner
         day_spin = Gtk.SpinButton.new_with_range(1, 31, 1)
-        day_spin.set_value(cd.get("day", 1))
+        day_spin.set_value(entry.get("day", 1))
         day_spin.set_width_chars(2)
         day_spin.add_css_class("dates-cell-day")
         day_spin.set_valign(Gtk.Align.CENTER)
         day_spin.connect("value-changed",
-            lambda w, i=idx: (config.custom_dates[i].__setitem__("day", int(w.get_value())), _save()))
+            lambda w, i=idx: (config.all_dates[i].__setitem__("day", int(w.get_value())), _save()))
         row.append(day_spin)
 
-        # Name entry
         name_entry = Gtk.Entry()
-        name_entry.set_text(cd.get("name", ""))
+        name_entry.set_text(entry.get("name", ""))
         name_entry.set_hexpand(True)
         name_entry.set_valign(Gtk.Align.CENTER)
-        name_entry.set_placeholder_text("Observance name…")
-        def _on_name_changed(w, i=idx):
-            config.custom_dates[i]["name"] = w.get_text()
+        def _on_name(w, i=idx):
+            config.all_dates[i]["name"] = w.get_text()
             _save()
-        name_entry.connect("changed", _on_name_changed)
+        name_entry.connect("changed", _on_name)
         row.append(name_entry)
 
-        # Category dropdown
-        cat_dd = Gtk.DropDown.new_from_strings(self._CAT_LBLS)
-        cat_dd.add_css_class("dates-cell-cat")
-        cat_dd.set_valign(Gtk.Align.CENTER)
-        cur_cat = cd.get("category", "justice")
-        if cur_cat in self._CAT_KEYS:
-            cat_dd.set_selected(self._CAT_KEYS.index(cur_cat))
-        def _on_cat(w, _prop, i=idx):
+        type_dd = Gtk.DropDown.new_from_strings(self._TYPE_LBLS)
+        type_dd.add_css_class("dates-cell-type")
+        type_dd.set_valign(Gtk.Align.CENTER)
+        cur_type = entry.get("type", "social_justice")
+        if cur_type in self._TYPE_KEYS:
+            type_dd.set_selected(self._TYPE_KEYS.index(cur_type))
+        def _on_type(w, _prop, i=idx):
             sel = w.get_selected()
-            config.custom_dates[i]["category"] = (
-                self._CAT_KEYS[sel] if sel < len(self._CAT_KEYS) else "justice")
+            config.all_dates[i]["type"] = (
+                self._TYPE_KEYS[sel] if sel < len(self._TYPE_KEYS) else "social_justice")
             _save()
-        cat_dd.connect("notify::selected", _on_cat)
-        row.append(cat_dd)
+        type_dd.connect("notify::selected", _on_type)
+        row.append(type_dd)
 
-        # Delete button
-        del_btn = Gtk.Button(icon_name="user-trash-symbolic",
-                             tooltip_text="Delete this date")
+        del_btn = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Delete row")
         del_btn.add_css_class("flat")
         del_btn.add_css_class("dates-cell-del")
         del_btn.set_valign(Gtk.Align.CENTER)
         def _on_del(_b, i=idx):
-            config.custom_dates.pop(i)
+            config.all_dates.pop(i)
             config.save()
             self._notify_main()
             self._rebuild_sheet()
@@ -1782,9 +1774,9 @@ class DatesEditorWindow(Adw.Window):
         return row
 
     def _add_row_widget(self) -> Gtk.Box:
-        """The empty bottom row for adding a new date."""
+        """Blank bottom row for appending a new entry."""
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        row.set_margin_start(4); row.set_margin_end(4)
+        row.set_margin_start(6); row.set_margin_end(6)
         row.set_margin_top(4); row.set_margin_bottom(4)
 
         month_spin = Gtk.SpinButton.new_with_range(1, 12, 1)
@@ -1805,13 +1797,12 @@ class DatesEditorWindow(Adw.Window):
         name_entry.set_placeholder_text("New observance name…")
         row.append(name_entry)
 
-        cat_dd = Gtk.DropDown.new_from_strings(self._CAT_LBLS)
-        cat_dd.add_css_class("dates-cell-cat")
-        cat_dd.set_valign(Gtk.Align.CENTER)
-        row.append(cat_dd)
+        type_dd = Gtk.DropDown.new_from_strings(self._TYPE_LBLS)
+        type_dd.add_css_class("dates-cell-type")
+        type_dd.set_valign(Gtk.Align.CENTER)
+        row.append(type_dd)
 
-        add_btn = Gtk.Button(icon_name="list-add-symbolic",
-                             tooltip_text="Add this date")
+        add_btn = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Add row")
         add_btn.add_css_class("flat")
         add_btn.add_css_class("dates-cell-del")
         add_btn.set_valign(Gtk.Align.CENTER)
@@ -1820,13 +1811,13 @@ class DatesEditorWindow(Adw.Window):
             name = name_entry.get_text().strip()
             if not name:
                 return
-            sel = cat_dd.get_selected()
-            cat = self._CAT_KEYS[sel] if sel < len(self._CAT_KEYS) else "justice"
-            config.custom_dates.append({
+            sel = type_dd.get_selected()
+            t = self._TYPE_KEYS[sel] if sel < len(self._TYPE_KEYS) else "social_justice"
+            config.all_dates.append({
                 "month": int(month_spin.get_value()),
                 "day":   int(day_spin.get_value()),
                 "name":  name,
-                "category": cat,
+                "type":  t,
             })
             config.save()
             self._notify_main()
@@ -1835,98 +1826,41 @@ class DatesEditorWindow(Adw.Window):
         add_btn.connect("clicked", _on_add)
         name_entry.connect("activate", _on_add)
         row.append(add_btn)
-
         return row
 
     def _rebuild_sheet(self):
-        """Rebuild only the editable spreadsheet section."""
         box = self._sheet_box
         while box.get_first_child():
             box.remove(box.get_first_child())
 
-        # Column headers
         box.append(self._col_header_row())
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        # One row per custom date
-        for i in range(len(config.custom_dates)):
+        for i in range(len(config.all_dates)):
             box.append(self._data_row(i))
 
-        # Always-visible add row
         sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep.set_margin_top(4)
         box.append(sep)
         box.append(self._add_row_widget())
 
-    # ── Built-in reference ────────────────────────────────────────────────────
-
-    def _build_ref_section(self, box: Gtk.Box):
-        """Populate the read-only built-in observances list."""
-        try:
-            from observances import FIXED, RANGES, TYPES
-        except ImportError:
-            return
-
-        _MONTH_FULL = ["January","February","March","April","May","June",
-                       "July","August","September","October","November","December"]
-
-        # Collect all entries
-        all_entries: list[dict] = []
-        for (mm, dd), obs_list in sorted(FIXED.items()):
-            for obs in obs_list:
-                all_entries.append({"month": mm, "day": dd,
-                                    "name": obs["name"],
-                                    "type": obs.get("type", "")})
-        for r in RANGES:
-            all_entries.append({"month": r["start"][0], "day": r["start"][1],
-                                 "name": f"{r['name']} (range, {self._MONTH_ABBR[r['start'][0]-1]} {r['start'][1]}–{self._MONTH_ABBR[r['end'][0]-1]} {r['end'][1]})",
-                                 "type": r["type"]})
-        all_entries.sort(key=lambda x: (x["month"], x["day"]))
-
-        cur_month = None
-        lb = None
-        for entry in all_entries:
-            if entry["month"] != cur_month:
-                cur_month = entry["month"]
-                m_lbl = Gtk.Label(label=_MONTH_FULL[cur_month - 1])
-                m_lbl.add_css_class("caption")
-                m_lbl.add_css_class("dim-label")
-                m_lbl.set_xalign(0)
-                m_lbl.set_margin_top(10 if lb else 2)
-                m_lbl.set_margin_bottom(2)
-                box.append(m_lbl)
-                lb = Gtk.ListBox()
-                lb.add_css_class("boxed-list")
-                lb.set_selection_mode(Gtk.SelectionMode.NONE)
-                box.append(lb)
-
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            row.set_margin_start(8); row.set_margin_end(8)
-            row.set_margin_top(3); row.set_margin_bottom(3)
-
-            day_lbl = Gtk.Label(label=f"{entry['day']:2d}")
-            day_lbl.add_css_class("monospace"); day_lbl.add_css_class("dim-label")
-            day_lbl.set_valign(Gtk.Align.CENTER)
-            row.append(day_lbl)
-
-            name_lbl = Gtk.Label(label=entry["name"])
-            name_lbl.add_css_class("dates-builtin-name")
-            name_lbl.set_xalign(0); name_lbl.set_hexpand(True)
-            name_lbl.set_valign(Gtk.Align.CENTER)
-            name_lbl.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
-            row.append(name_lbl)
-
-            ti = TYPES.get(entry["type"], {})
-            if ti.get("label"):
-                badge = Gtk.Label(label=ti["label"])
-                badge.add_css_class("dates-builtin-badge")
-                badge.set_valign(Gtk.Align.CENTER)
-                row.append(badge)
-
-            list_row = Gtk.ListBoxRow()
-            list_row.set_child(row)
-            list_row.set_activatable(False)
-            lb.append(list_row)
+    def _on_reset(self, _btn):
+        dlg = Adw.MessageDialog(
+            transient_for=self,
+            heading="Reset to defaults?",
+            body="This will replace all dates with the built-in observances from observances.py. "
+                 "Any edits you've made (including deleted or renamed dates) will be lost.")
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("reset",  "Reset")
+        dlg.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+        def _on_response(_d, resp):
+            if resp == "reset":
+                config.all_dates.clear()
+                _seed_all_dates()
+                self._rebuild_sheet()
+                self._notify_main()
+        dlg.connect("response", _on_response)
+        dlg.present()
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
@@ -1947,6 +1881,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._colour_bar_rgb = (0.12,0.62,0.46)
         self._compiling_toast: Adw.Toast | None = None
 
+        _seed_all_dates()
         self._setup_actions(); self._build_ui(); self._apply_density(); self._update_title(); self._update_tex_btn()
         # Seed from default template on first launch
         items = config.templates.get(config.default_template,
@@ -4572,7 +4507,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_justice_row(d)
 
     def _refresh_justice_row(self, d) -> None:
-        """Rebuild the justice/custom-dates second status bar row."""
+        """Rebuild the justice/custom-dates second status bar row from config.all_dates."""
         bar = getattr(self, "_justice_bar", None)
         if bar is None:
             return
@@ -4588,38 +4523,16 @@ class MainWindow(Adw.ApplicationWindow):
 
         from datetime import timedelta
         try:
-            from observances import FIXED, _computed_observances, TYPES
+            from observances import TYPES
         except ImportError:
-            FIXED = {}
-            _computed_observances = lambda x: []
             TYPES = {}
 
-        custom_dates = getattr(config, "custom_dates", [])
         _JUSTICE_TYPES = {"social_justice", "indigenous", "ecological", "pride"}
-        _CUSTOM_COLOURS = {
-            "justice":   "#B91C1C",
-            "religious": "#A16207",
-        }
-        _CUSTOM_LABELS = {
-            "justice":   "Justice",
-            "religious": "Feast",
-        }
 
         def _justice_on(wd):
-            items = []
-            for obs in FIXED.get((wd.month, wd.day), []):
-                if obs.get("type") in _JUSTICE_TYPES:
-                    items.append(obs)
-            for obs in _computed_observances(wd):
-                if obs.get("type") in _JUSTICE_TYPES:
-                    items.append(obs)
-            for cd in custom_dates:
-                if cd.get("month") == wd.month and cd.get("day") == wd.day:
-                    cat = cd.get("category", "justice")
-                    items.append({"name": cd["name"], "type": cat,
-                                  "_custom_colour": _CUSTOM_COLOURS.get(cat, "#6B7280"),
-                                  "_custom_label":  _CUSTOM_LABELS.get(cat, "")})
-            return items
+            return [e for e in config.all_dates
+                    if e.get("month") == wd.month and e.get("day") == wd.day
+                    and e.get("type") in _JUSTICE_TYPES]
 
         past_obs = past_dt = None
         for days in range(1, 60):
@@ -4643,8 +4556,9 @@ class MainWindow(Adw.ApplicationWindow):
         bar.set_visible(True)
 
         def _make_chip(obs, dt, arrow, box):
-            colour = obs.get("_custom_colour") or TYPES.get(obs.get("type", ""), {}).get("colour", "#6B7280")
-            tlabel = obs.get("_custom_label") or TYPES.get(obs.get("type", ""), {}).get("label", "")
+            t = obs.get("type", "")
+            colour = TYPES.get(t, {}).get("colour", "#6B7280")
+            tlabel = TYPES.get(t, {}).get("label", "")
             prox = dt.strftime("%-d %b")
             markup = ""
             if arrow == "←":

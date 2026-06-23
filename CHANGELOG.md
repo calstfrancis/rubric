@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev4 — Unified editable dates spreadsheet
+
+### Changed
+
+- **All dates are now editable in one spreadsheet** — built-in observances (formerly read-only) are merged with custom dates into a single unified list (`config.all_dates`). Every row in the Important Dates window is editable: Month, Day, Name, and Type (all 10 observance types). Rows can be deleted individually or reset to the shipped defaults via "Reset to defaults" in the header bar.
+- On first launch, `config.all_dates` is seeded from the built-in `observances.py` data (fixed-date feasts, saints, ecumenical, indigenous, ecological, pride, social justice, remembrance, civil, and range entries). Any legacy custom dates are migrated automatically.
+
+---
+
 ## 0.17.7-dev3 — Spreadsheet dates editor
 
 ### Changed
