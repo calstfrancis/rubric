@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev6 — Fix file-open crash
+
+### Fixed
+
+- **Files failed to open** after dev5 — `handler_block_by_func` (PyGObject) returns an integer, not a context manager; using it with `with` raised `TypeError` on every file load and state reset. Replaced with a simple `_loading_notes` flag guard.
+
+---
+
 ## 0.17.7-dev5 — Service planning notes
 
 ### Added

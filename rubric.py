@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.7-dev5"
+APP_VERSION = "0.17.7-dev6"
 
 
 config = Config()
@@ -3386,6 +3386,8 @@ class MainWindow(Adw.ApplicationWindow):
         return outer
 
     def _on_planning_notes_changed(self, buf: Gtk.TextBuffer):
+        if getattr(self, "_loading_notes", False):
+            return
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         self.service_planning_notes = text
         self._mark_modified()
@@ -6321,9 +6323,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_debrief = ""
         self.service_planning_notes = ""
         if hasattr(self, "_planning_notes_buffer"):
-            with self._planning_notes_buffer.handler_block_by_func(
-                    self._on_planning_notes_changed):
-                self._planning_notes_buffer.set_text("")
+            self._loading_notes = True
+            self._planning_notes_buffer.set_text("")
+            self._loading_notes = False
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             self._bulletin_edit_btn.set_active(False)
         if getattr(self, "_preview_webview", None):
@@ -6446,9 +6448,9 @@ class MainWindow(Adw.ApplicationWindow):
             self.service_debrief    = data.get("debrief", "")
             self.service_planning_notes = data.get("planning_notes", "")
             if hasattr(self, "_planning_notes_buffer"):
-                with self._planning_notes_buffer.handler_block_by_func(
-                        self._on_planning_notes_changed):
-                    self._planning_notes_buffer.set_text(self.service_planning_notes)
+                self._loading_notes = True
+                self._planning_notes_buffer.set_text(self.service_planning_notes)
+                self._loading_notes = False
             if mark_unsaved: self.current_file=None; self.modified=True
             else:
                 self.current_file=path; self.modified=False
