@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.7-dev4"
+APP_VERSION = "0.17.7-dev5"
 
 
 config = Config()
@@ -1863,6 +1863,31 @@ class DatesEditorWindow(Adw.Window):
         dlg.present()
 
 
+# ── Service planning notes pop-out window ─────────────────────────────────────
+
+class ServicePlanningNotesWindow(Adw.Window):
+    def __init__(self, buffer: Gtk.TextBuffer, **kw):
+        super().__init__(title="Service Notes", default_width=520, default_height=400, **kw)
+        self.set_hide_on_close(True)
+
+        tv_view = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        tv_view.add_top_bar(hdr)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+
+        tv = Gtk.TextView(buffer=buffer)
+        tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        tv.set_accepts_tab(False)
+        tv.set_left_margin(18); tv.set_right_margin(18)
+        tv.set_top_margin(12); tv.set_bottom_margin(12)
+        scroll.set_child(tv)
+        tv_view.set_content(scroll)
+        self.set_content(tv_view)
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(Adw.ApplicationWindow):
@@ -1880,6 +1905,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._tab_ctx_div: SectionDivider | None = None
         self._colour_bar_rgb = (0.12,0.62,0.46)
         self._compiling_toast: Adw.Toast | None = None
+        self.service_planning_notes: str = ""
 
         _seed_all_dates()
         self._setup_actions(); self._build_ui(); self._apply_density(); self._update_title(); self._update_tex_btn()
@@ -3003,6 +3029,9 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Quick-start banner (hidden until first launch wizard activates it) ─
         box.append(self._build_quickstart_banner())
 
+        # ── Planning notes (theology / metaphors / movement) ──────────────────
+        box.append(self._build_planning_notes_area())
+
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self._order_hpaned.set_shrink_start_child(False); self._order_hpaned.set_shrink_end_child(True)
@@ -3293,6 +3322,78 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(self.sugg_revealer)
 
         return box
+
+    # ── Planning notes ────────────────────────────────────────────────────────
+
+    def _build_planning_notes_area(self) -> Gtk.Box:
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Header bar: label + expand toggle + pop-out button
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        hdr.set_margin_start(12); hdr.set_margin_end(6)
+        hdr.set_margin_top(2); hdr.set_margin_bottom(2)
+
+        lbl = Gtk.Label(label="Service Notes")
+        lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
+        lbl.set_xalign(0); lbl.set_hexpand(True)
+        hdr.append(lbl)
+
+        popout_btn = Gtk.Button(icon_name="window-new-symbolic",
+                                tooltip_text="Open in pop-out window")
+        popout_btn.add_css_class("flat"); popout_btn.add_css_class("circular")
+        hdr.append(popout_btn)
+
+        toggle_btn = Gtk.ToggleButton(icon_name="pan-down-symbolic",
+                                      tooltip_text="Show / hide service notes")
+        toggle_btn.add_css_class("flat"); toggle_btn.add_css_class("circular")
+        hdr.append(toggle_btn)
+        outer.append(hdr)
+
+        # Revealer containing the text area
+        rev = Gtk.Revealer()
+        rev.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        rev.set_transition_duration(150)
+        rev.set_reveal_child(False)
+        self._planning_notes_revealer = rev
+
+        tv_scroll = Gtk.ScrolledWindow()
+        tv_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        tv_scroll.set_min_content_height(96)
+        tv_scroll.set_max_content_height(240)
+
+        self._planning_notes_buffer = Gtk.TextBuffer()
+        self._planning_notes_buffer.connect("changed", self._on_planning_notes_changed)
+
+        tv = Gtk.TextView(buffer=self._planning_notes_buffer)
+        tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        tv.set_accepts_tab(False)
+        tv.set_left_margin(12); tv.set_right_margin(12)
+        tv.set_top_margin(6); tv.set_bottom_margin(6)
+        tv.add_css_class("monospace")
+        tv_scroll.set_child(tv)
+        rev.set_child(tv_scroll)
+        outer.append(rev)
+        outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        def _toggle(_btn):
+            revealed = not rev.get_reveal_child()
+            rev.set_reveal_child(revealed)
+            toggle_btn.set_icon_name("pan-up-symbolic" if revealed else "pan-down-symbolic")
+
+        toggle_btn.connect("clicked", _toggle)
+        popout_btn.connect("clicked", lambda _: self._open_planning_notes_window())
+
+        return outer
+
+    def _on_planning_notes_changed(self, buf: Gtk.TextBuffer):
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.service_planning_notes = text
+        self._mark_modified()
+
+    def _open_planning_notes_window(self):
+        win = ServicePlanningNotesWindow(
+            buffer=self._planning_notes_buffer, transient_for=self)
+        win.present()
 
     # ── Colour bar ────────────────────────────────────────────────────────────
 
@@ -5362,6 +5463,8 @@ class MainWindow(Adw.ApplicationWindow):
             d["attendance"] = self.service_attendance
         if getattr(self, "service_debrief", ""):
             d["debrief"] = self.service_debrief
+        if getattr(self, "service_planning_notes", ""):
+            d["planning_notes"] = self.service_planning_notes
         return d
 
     def _confirm_discard(self, proceed):
@@ -6216,6 +6319,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_bulletin_text = ""
         self.service_attendance = 0
         self.service_debrief = ""
+        self.service_planning_notes = ""
+        if hasattr(self, "_planning_notes_buffer"):
+            with self._planning_notes_buffer.handler_block_by_func(
+                    self._on_planning_notes_changed):
+                self._planning_notes_buffer.set_text("")
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             self._bulletin_edit_btn.set_active(False)
         if getattr(self, "_preview_webview", None):
@@ -6336,6 +6444,11 @@ class MainWindow(Adw.ApplicationWindow):
             self.service_bulletin_text = data.get("bulletin_text", "")
             self.service_attendance = data.get("attendance", 0)
             self.service_debrief    = data.get("debrief", "")
+            self.service_planning_notes = data.get("planning_notes", "")
+            if hasattr(self, "_planning_notes_buffer"):
+                with self._planning_notes_buffer.handler_block_by_func(
+                        self._on_planning_notes_changed):
+                    self._planning_notes_buffer.set_text(self.service_planning_notes)
             if mark_unsaved: self.current_file=None; self.modified=True
             else:
                 self.current_file=path; self.modified=False

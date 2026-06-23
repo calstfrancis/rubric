@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.7-dev5 — Service planning notes
+
+### Added
+
+- **Service Notes area** — a collapsible text area above the service order (click the chevron in the "Service Notes" header bar to expand). Use it for theology, metaphors, movement notes, or any pre-service reflection. Not included in the bulletin or manuscript. Saved with the `.liturgy` file.
+- **Pop-out window** — a button in the Service Notes header opens the same notes in a floating window (shares the same text buffer, so edits stay in sync). Keep it visible on a second monitor or alongside the order panel while building the service.
+
+---
+
 ## 0.17.7-dev4 — Unified editable dates spreadsheet
 
 ### Changed
