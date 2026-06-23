@@ -4,63 +4,22 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.7-dev6 — Fix file-open crash
+## [0.17.7] "Tended Ground" — Service notes, justice bar, unified dates editor
+
+### Added
+
+- **Service Notes** — a collapsible text area above the service order for theology, metaphors, movement notes, or any pre-service reflection. Not included in the bulletin or manuscript. A pop-out button opens the same notes in a floating window that shares the same text buffer, so edits stay in sync — useful on a second monitor or alongside the order panel.
+- **Justice / observances second status bar row** — a bar above the main status bar surfaces upcoming and recent social justice, indigenous, ecological, and pride observances. Past and future events appear as coloured chips. A calendar icon opens the dates editor.
+
+### Changed
+
+- **All dates are now editable in one spreadsheet** — built-in observances (formerly read-only) are merged with custom dates into a single unified list. Every row is editable: Month, Day, Name, and Type (all 10 observance types). Rows can be deleted individually or reset to defaults. On first launch the list is seeded from the built-in calendar; any legacy custom dates are migrated automatically.
+- **Bar order** — the justice bar sits above the main status bar, keeping the main status bar at the very bottom.
 
 ### Fixed
 
-- **Files failed to open** after dev5 — `handler_block_by_func` (PyGObject) returns an integer, not a context manager; using it with `with` raised `TypeError` on every file load and state reset. Replaced with a simple `_loading_notes` flag guard.
-
----
-
-## 0.17.7-dev5 — Service planning notes
-
-### Added
-
-- **Service Notes area** — a collapsible text area above the service order (click the chevron in the "Service Notes" header bar to expand). Use it for theology, metaphors, movement notes, or any pre-service reflection. Not included in the bulletin or manuscript. Saved with the `.liturgy` file.
-- **Pop-out window** — a button in the Service Notes header opens the same notes in a floating window (shares the same text buffer, so edits stay in sync). Keep it visible on a second monitor or alongside the order panel while building the service.
-
----
-
-## 0.17.7-dev4 — Unified editable dates spreadsheet
-
-### Changed
-
-- **All dates are now editable in one spreadsheet** — built-in observances (formerly read-only) are merged with custom dates into a single unified list (`config.all_dates`). Every row in the Important Dates window is editable: Month, Day, Name, and Type (all 10 observance types). Rows can be deleted individually or reset to the shipped defaults via "Reset to defaults" in the header bar.
-- On first launch, `config.all_dates` is seeded from the built-in `observances.py` data (fixed-date feasts, saints, ecumenical, indigenous, ecological, pride, social justice, remembrance, civil, and range entries). Any legacy custom dates are migrated automatically.
-
----
-
-## 0.17.7-dev3 — Spreadsheet dates editor
-
-### Changed
-
-- **Important Dates window is now a proper spreadsheet** — the "Your custom dates" section shows inline-editable rows: Month spinner, Day spinner, Name text field, Category dropdown (Justice / Religious), and a delete button per row. Changes auto-save immediately. An always-visible blank row at the bottom adds new dates. Below a separator, all built-in observances are listed month by month as a read-only reference.
-
----
-
-## 0.17.7-dev2 — Dates editor window; bar order fix
-
-### Added
-
-- **Observances & Custom Dates window** — a calendar-view window (opened from the calendar icon in the justice bar) shows all built-in observances month by month alongside user custom dates. Custom dates have a delete button inline; an "Add custom date" form at the top covers month, day, name, and category (Justice / Religious). Built-in dates are read-only.
-
-### Changed
-
-- **Bar order** — the justice/custom dates bar now sits above the main status bar so the main status bar remains at the very bottom of the window, consistent with standard toolbar placement.
-
----
-
-## 0.17.7-dev1 — Justice/custom dates bar; save button; preview jitter fixes
-
-### Added
-
-- **Justice/custom dates second status bar row** — a new bar above the main status bar surfaces upcoming and recent social justice, indigenous, ecological, and pride observances from the built-in calendar, as well as any user-defined custom dates. Both past and future events are shown with coloured type chips.
-- **Custom dates in Preferences → Dates** — two editable tables (Social Justice & Canadian Observances, and Religious & Liturgical Dates) let you add and remove dates that appear in the justice bar.
-
-### Fixed
-
-- **Save icon blue accent removed** — the toolbar Save button no longer uses the `suggested-action` (blue) style; it now blends with the other flat toolbar buttons.
-- **Preview flicker / scroll jitter reduced** — the scroll-position restore after an HTML preview reload now fires after 30 ms instead of 120 ms, cutting the visible position jump. PDF preview updates now always use `load_uri` with a cache-buster instead of `reload()`, avoiding the blank-flash on each compile.
+- **Save icon blue accent removed** — the toolbar Save button no longer uses the suggested-action (blue) style.
+- **Preview flicker / scroll jitter reduced** — scroll-position restore fires after 30 ms instead of 120 ms; PDF preview updates use `load_uri` with a cache-buster instead of `reload()`.
 
 ---
 

@@ -41,6 +41,17 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.7" date="2026-06-23">
+      <description>
+        <p>0.17.7 "Tended Ground" — Service notes, justice bar, and unified dates editor.</p>
+        <ul>
+          <li>Service Notes area: a collapsible text field above the service order for theology, metaphors, and movement notes. Not included in the bulletin. Pop-out button opens a floating window sharing the same buffer.</li>
+          <li>Justice / observances bar: a second status bar row shows upcoming and recent social justice, indigenous, ecological, and pride observances as coloured chips.</li>
+          <li>All dates — built-in observances and custom dates — are now editable in one unified spreadsheet. Reset to defaults at any time.</li>
+          <li>Fixed: save button blue accent removed; PDF preview flicker reduced.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.6" date="2026-06-20">
       <description>
         <p>0.17.6 "Open Flow" — Two-column bulletin and manuscript exports now use regular multicolumn flow instead of a manual character-weight split.</p>
