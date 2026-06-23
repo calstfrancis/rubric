@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev1 — PDF toolbar fix; planning notes no longer trigger preview
+
+### Fixed
+
+- **PDF viewer toolbar overflow** — WebKit's built-in PDF toolbar now stays compact in the narrow preview pane via injected CSS: `height: auto`, `flex-wrap: nowrap`, and unified `font-size: 13px` across the page-number input and "of N" label so they match.
+- **Service Notes no longer trigger a preview redraw** — typing in the planning notes area previously called `_mark_modified()`, which scheduled a Typst recompile and caused the preview to flash on every keystroke. Notes changes now only update the modified flag and schedule autosave.
+
+---
+
 ## [0.17.7] "Tended Ground" — Service notes, justice bar, unified dates editor
 
 ### Added

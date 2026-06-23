@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.7"
+APP_VERSION = "0.17.8-dev1"
 
 
 config = Config()
@@ -3390,7 +3390,14 @@ class MainWindow(Adw.ApplicationWindow):
             return
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         self.service_planning_notes = text
-        self._mark_modified()
+        # Planning notes are not in the bulletin — don't trigger a preview redraw.
+        self.modified = True
+        self._update_title()
+        self._update_save_state_chip()
+        if self.current_file:
+            if getattr(self, "_deferred_save_id", None):
+                GLib.source_remove(self._deferred_save_id)
+            self._deferred_save_id = GLib.timeout_add(2000, self._deferred_save)
 
     def _open_planning_notes_window(self):
         win = ServicePlanningNotesWindow(
@@ -4792,7 +4799,39 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_stack.set_transition_duration(120)
 
         if _WEBKIT_OK:
-            self._preview_webview = _WebKit.WebView()
+            _ucm = _WebKit.UserContentManager()
+            _pdf_toolbar_css = _WebKit.UserStyleSheet.new(
+                # Compact WebKit's built-in PDF viewer toolbar so it fits the narrow
+                # preview pane and doesn't overflow below its row. Also normalises
+                # the font size so the page-number input matches the "of N" label.
+                """
+                #toolbar, .toolbar {
+                    height: auto !important;
+                    min-height: 0 !important;
+                    padding: 2px 6px !important;
+                    flex-wrap: nowrap !important;
+                    box-sizing: border-box !important;
+                    font-size: 13px !important;
+                }
+                .page-indicator, #page-indicator,
+                input[type="number"], input[type="text"] {
+                    font-size: 13px !important;
+                    height: 22px !important;
+                    padding: 1px 4px !important;
+                    width: 3.2em !important;
+                    box-sizing: border-box !important;
+                }
+                .page-count, #page-count {
+                    font-size: 13px !important;
+                    line-height: 22px !important;
+                }
+                """,
+                _WebKit.UserContentInjectedFrames.ALL_FRAMES,
+                _WebKit.UserStyleLevel.USER,
+                None, None,
+            )
+            _ucm.add_style_sheet(_pdf_toolbar_css)
+            self._preview_webview = _WebKit.WebView(user_content_manager=_ucm)
             self._preview_webview.set_vexpand(True)
             self._preview_webview.set_hexpand(True)
             self._preview_scroll_y = 0
