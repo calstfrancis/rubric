@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev14"
+APP_VERSION = "0.17.8-dev15"
 
 
 config = Config()
@@ -7113,9 +7113,10 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
     def _print_bulletin_webkit(self):
-        """Print the bulletin HTML directly using WebKit's print dialog."""
+        """Print whatever the preview is currently showing (bulletin or manuscript)."""
         try:
-            html = self._build_bulletin_html()
+            mode = getattr(self, "_preview_mode", "bulletin")
+            html = self._build_manuscript_html() if mode == "manuscript" else self._build_bulletin_html()
         except Exception:
             return
         wv = _WebKit.WebView()
@@ -8380,6 +8381,10 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     if dur else "")
                 parts.append(f'*{_typst_escape(entry.name)}*{leader_str}{dur_str}')
                 parts.append('')
+                rubric = getattr(entry, "rubric_note", "")
+                if rubric:
+                    parts.append(f'#rubric-note[{_typst_escape(rubric)}]')
+                    parts.append('')
                 if entry.content_typst:
                     parts.append(f'#text(size: 0.9em)[\n{linebreak_fix(entry.content_typst)}\n]')
                     parts.append('')

@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev15 — Fix print and leader's order export ignoring manuscript mode
+
+### Fixed
+
+- **Print button now prints the active preview mode** — clicking the print button (🖨) while the manuscript preview is showing now prints the manuscript HTML, not the bulletin. Previously it always printed the bulletin regardless of which tab was active.
+- **Leader's order PDF now includes rubric notes** — the "Leader's order PDF" export (`Export as… → Leader's order PDF`) was silently omitting rubric/leader instruction blocks. They now appear in red italic in the compiled PDF, matching how they look in the manuscript preview.
+
+---
+
 ## 0.17.8-dev14 — Deferred autosave interval increased to 15 s
 
 ### Changed
