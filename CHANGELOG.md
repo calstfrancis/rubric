@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev16 — Sticky element headings; print from compiled PDF
+
+### Fixed
+
+- **Element headings no longer orphan at the bottom of a page** — level-2 headings (individual service elements) are now wrapped in `block(sticky: true)`, so Typst will bump the heading to the next page/column rather than leave it stranded with its content starting elsewhere. Same fix applied to level-3 headings in `_shared.typ`.
+- **Print button now prints the Typst-compiled PDF** — when the preview is open and a PDF has been compiled, clicking the print icon (🖨) sends that PDF directly to the print dialog, preserving columns, fonts, and layout. Previously it regenerated an HTML version which had no column layout and ignored preamble fonts.
+
+---
+
 ## 0.17.8-dev15 — Fix print and leader's order export ignoring manuscript mode
 
 ### Fixed

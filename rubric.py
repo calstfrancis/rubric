@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev15"
+APP_VERSION = "0.17.8-dev16"
 
 
 config = Config()
@@ -7114,6 +7114,15 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
     def _print_bulletin_webkit(self):
         """Print whatever the preview is currently showing (bulletin or manuscript)."""
+        # If a Typst-compiled PDF is already loaded in the preview, print it directly
+        # so columns, fonts and layout are preserved.
+        if (self._preview_webview is not None
+                and getattr(self, "_preview_pdf_loaded", None)
+                and getattr(self, "_preview_visible", False)):
+            op = _WebKit.PrintOperation.new(self._preview_webview)
+            op.run_dialog(self)
+            return
+        # Fall back to HTML (no compiled preview available)
         try:
             mode = getattr(self, "_preview_mode", "bulletin")
             html = self._build_manuscript_html() if mode == "manuscript" else self._build_bulletin_html()

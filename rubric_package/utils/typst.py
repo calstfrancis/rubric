@@ -417,10 +417,12 @@ TYPST_SHARED = r"""
 // Element heading: bold small-caps with a thin rule below (== Item)
 #show heading.where(level: 2): it => {
   v(10pt)
-  text(weight: "bold", smallcaps(it.body))
-  v(1pt, weak: true)
-  line(length: 100%, stroke: 0.4pt + luma(160))
-  v(4pt, weak: true)
+  block(sticky: true, {
+    text(weight: "bold", smallcaps(it.body))
+    v(1pt, weak: true)
+    line(length: 100%, stroke: 0.4pt + luma(160))
+    v(4pt, weak: true)
+  })
 }
 
 // Sub-heading: medium bold (=== Subitem)
