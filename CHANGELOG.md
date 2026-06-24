@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.8-dev11 — Manuscript compact title header
+## 0.17.8-dev12 — Manuscript compact title header
 
 ### Added
 
