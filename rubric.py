@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev1"
+APP_VERSION = "0.17.8-dev2"
 
 
 config = Config()
@@ -2717,8 +2717,33 @@ class MainWindow(Adw.ApplicationWindow):
         self._preamble_form_stack.add_named(new_form, key)
         self._preamble_form_stack.set_visible_child_name(key)
 
-    @staticmethod
-    def _get_system_fonts() -> list[str]:
+    def _get_system_fonts(self) -> list[str]:
+        # Ask Typst directly — it knows exactly which font families it can load.
+        # Pango/fontconfig exposes variable-font axis values as separate family
+        # names (e.g. "Crimson Pro ExtraBold") that Typst can't find by name,
+        # so using the Pango list fills the picker with fonts that silently fall
+        # back to the default when compiled.
+        try:
+            typst_bin = self._find_typst()
+            if typst_bin:
+                cmd = [typst_bin, "fonts"]
+                for _fp in [
+                    "/run/host/fonts",
+                    "/run/host/usr/share/fonts",
+                    "/usr/share/fonts",
+                    "/usr/local/share/fonts",
+                    str(Path.home() / ".fonts"),
+                    str(Path.home() / ".local/share/fonts"),
+                ]:
+                    if Path(_fp).is_dir():
+                        cmd += ["--font-path", _fp]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    names = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+                    return sorted(set(names))
+        except Exception:
+            pass
+        # Fallback: Pango (some fonts will silently not render)
         try:
             from gi.repository import PangoCairo
             fm = PangoCairo.font_map_get_default()

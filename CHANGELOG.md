@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev2 — Font picker driven by Typst
+
+### Fixed
+
+- **Font picker now shows only fonts Typst can actually use** — previously the picker was populated from Pango/fontconfig, which exposes variable-font axis values as separate family names (e.g. "Crimson Pro ExtraBold", "EB Garamond Medium", "Junicode Light"). Selecting those names caused Typst to silently fall back to its default font. The picker now runs `typst fonts` with the same `--font-path` arguments used at compile time, so every listed font renders correctly in the preview and exported PDF.
+
+---
+
 ## 0.17.8-dev1 — PDF toolbar fix; planning notes no longer trigger preview
 
 ### Fixed
