@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev11 — Manuscript compact title header
+
+### Added
+
+- **Compact title header for manuscript** — the manuscript can now show a centred header at the top with the church name (bold small-caps), service title (bold), and date, followed by a thin rule. Controlled by a new "Compact title header" toggle in the manuscript Layout settings (on by default). Toggling it off produces the previous headerless output.
+
+---
+
 ## 0.17.8-dev10 — Preview compile mode selector and compile button
 
 ### Added

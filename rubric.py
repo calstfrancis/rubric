@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev10"
+APP_VERSION = "0.17.8-dev11"
 
 
 config = Config()
@@ -2873,6 +2873,15 @@ class MainWindow(Adw.ApplicationWindow):
                         lambda r, _p: self._on_preamble_changed(
                             key, "columns", 2 if r.get_active() else 1))
         layout_grp.add(col_row)
+
+        if key == "manuscript":
+            hdr_row = Adw.SwitchRow(title="Compact title header",
+                                    subtitle="Show church name, service title, and date at the top")
+            hdr_row.set_active(p.get("show_header", True))
+            hdr_row.connect("notify::active",
+                            lambda r, _p: self._on_preamble_changed(
+                                "manuscript", "show_header", r.get_active()))
+            layout_grp.add(hdr_row)
 
         _gutter_def = 1.0 if key == "manuscript" else 0.5
         gutter_adj = Gtk.Adjustment(
@@ -7703,6 +7712,21 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         ]
         if _ms_hdg_override:
             parts += [_ms_hdg_override, '']
+
+        _ms_show_header = config.preamble.get("manuscript", {}).get("show_header", True)
+        if _ms_show_header:
+            _ms_church = _typst_escape(config.bulletin.get("church_name", "").strip())
+            _ms_title  = _typst_escape(self.service_title_entry.get_text().strip() or "Order of Service")
+            _ms_date   = _typst_escape(
+                self.selected_date.strftime("%-d %B %Y") if self.selected_date else "")
+            parts.append('#align(center)[')
+            if _ms_church:
+                parts.append(f'  #text(weight: "bold")[#smallcaps[{_ms_church}]]')
+                parts.append('  #linebreak()')
+            parts.append(f'  #text(size: 1.2em, weight: "bold")[{_ms_title}]')
+            if _ms_date:
+                parts.append(f'  #linebreak()#text(size: 0.9em)[{_ms_date}]')
+            parts += [']', '#v(0.3em)', '#line(length: 100%, stroke: 0.4pt + luma(160))', '#v(0.5em)', '']
 
         groups = [(sec, items) for sec, items in self._grouped_entries() if items]
 
