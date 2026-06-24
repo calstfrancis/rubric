@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev4"
+APP_VERSION = "0.17.8-dev5"
 
 
 config = Config()
@@ -7455,25 +7455,25 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             elif _content:
                 target.append(linebreak_fix(strip_leader_notes(_content)))
 
+        # Collect all service-order content into one list so that section
+        # headings flow inside the columns block rather than breaking out of it.
+        _bul_gutter = config.preamble.get("bulletin", {}).get("gutter", 0.5)
+        _all_bul_items: list[str] = []
         for _sec_title, _sec_items in _bul_sections:
             if _sec_title is not None:
-                parts += [f'= {_typst_escape(_sec_title)}', '']
-            if not _sec_items:
-                continue
-            if _bul_cols >= 2 and len(_sec_items) > 1:
-                _bul_gutter = config.preamble.get("bulletin", {}).get("gutter", 0.5)
-                _col_items: list[str] = []
-                for _si in _sec_items:
-                    _render_bul_item(_si, _col_items)
-                parts += [
-                    f'#columns(2, gutter: {_bul_gutter}em)[',
-                    '\n'.join(_col_items),
-                    ']',
-                    '',
-                ]
-            else:
-                for _si in _sec_items:
-                    _render_bul_item(_si, parts)
+                _all_bul_items += [f'= {_typst_escape(_sec_title)}', '']
+            for _si in _sec_items:
+                _render_bul_item(_si, _all_bul_items)
+
+        if _bul_cols >= 2:
+            parts += [
+                f'#columns(2, gutter: {_bul_gutter}em)[',
+                '\n'.join(_all_bul_items),
+                ']',
+                '',
+            ]
+        else:
+            parts += _all_bul_items + ['']
 
         # ── Acknowledgements block ────────────────────────────────────────────
         staff = b.get("staff", [])

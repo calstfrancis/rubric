@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev5 — Bulletin section headings inside columns
+
+### Fixed
+
+- **Section headings now flow inside the two-column block** — previously each section (Gathering, Word, Response, Sending) placed its heading outside `#columns()`, creating an implicit break between sections. All service-order content now lives in a single `#columns()` block so headings flow within the columns like everything else, with no page or column breaks forced by section titles.
+
+---
+
 ## 0.17.8-dev4 — Multiple windows; heading spacing
 
 ### Added
