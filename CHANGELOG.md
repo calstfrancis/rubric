@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev17 — Fix sticky headings and print output
+
+### Fixed
+
+- **Orphaned element headings** — the leading space before each element heading was placed *outside* the sticky block, which meant Typst could place that space at the bottom of a column and then start a fresh block for the heading text. Moving the `v(10pt)` inside `block(sticky: true)` ensures the entire heading unit (space + text + rule) either fits in the column or is bumped to the next one together. Same fix applied to level-2 and level-3 headings in `_shared.typ`.
+- **Print button producing black rectangles** — printing via `PrintOperation.new(self._preview_webview)` rasterised WebKit's built-in PDF viewer plugin as solid black boxes. Reverted to HTML printing, with the bulletin service order now wrapped in a CSS `column-count` div that matches the preamble column setting, so the printed HTML layout matches the Typst output.
+
+---
+
 ## 0.17.8-dev16 — Sticky element headings; print from compiled PDF
 
 ### Fixed

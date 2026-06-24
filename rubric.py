@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev16"
+APP_VERSION = "0.17.8-dev17"
 
 
 config = Config()
@@ -6917,30 +6917,34 @@ class MainWindow(Adw.ApplicationWindow):
 
         strip_latex = strip_typst_for_html
 
-        css = """
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Georgia, 'Times New Roman', serif; font-size: 11pt;
-       color: #111; max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }
-.church-name { font-size: 18pt; font-variant: small-caps; letter-spacing: 0.05em;
-               text-align: center; margin-bottom: 4px; }
-.church-sub  { font-size: 9.5pt; text-align: center; color: #444; line-height: 1.6; }
-.title       { font-size: 15pt; font-weight: bold; text-align: center;
-               margin: 18px 0 2px; }
-.date        { font-size: 11pt; font-style: italic; text-align: center;
-               color: #555; margin-bottom: 16px; }
-hr           { border: none; border-top: 1px solid #bbb; margin: 12px 0; }
-h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08em;
-               text-align: center; margin: 16px 0 6px; }
-.el          { margin-bottom: 8px; }
-.el-name     { font-weight: bold; font-size: 10.5pt; }
-.leader      { font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }
-.note        { font-size: 10pt; margin: 2px 0 0 12px; line-height: 1.55; }
-.ann-head    { font-weight: bold; font-variant: small-caps; margin: 4px 0; }
-.ann-item    { font-size: 10pt; margin-bottom: 5px; padding-left: 10px; }
-.back        { margin-top: 20px; font-size: 9.5pt; color: #444; line-height: 1.6; }
-.staff-item  { margin-bottom: 1px; }
-.mission     { font-style: italic; margin-top: 8px; }
-@media print { body { padding: 0; } @page { margin: 0.75in; } }
+        _bul_cols = config.preamble.get("bulletin", {}).get("columns", 2)
+
+        css = f"""
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: Georgia, 'Times New Roman', serif; font-size: 11pt;
+       color: #111; max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }}
+.church-name {{ font-size: 18pt; font-variant: small-caps; letter-spacing: 0.05em;
+               text-align: center; margin-bottom: 4px; }}
+.church-sub  {{ font-size: 9.5pt; text-align: center; color: #444; line-height: 1.6; }}
+.title       {{ font-size: 15pt; font-weight: bold; text-align: center;
+               margin: 18px 0 2px; }}
+.date        {{ font-size: 11pt; font-style: italic; text-align: center;
+               color: #555; margin-bottom: 16px; }}
+hr           {{ border: none; border-top: 1px solid #bbb; margin: 12px 0; }}
+.service-cols {{ column-count: {_bul_cols if _bul_cols >= 2 else 1};
+                column-gap: 1.5em; column-rule: 1px solid #ddd; }}
+h2           {{ font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08em;
+               text-align: center; margin: 16px 0 6px; }}
+.el          {{ margin-bottom: 8px; break-inside: avoid; }}
+.el-name     {{ font-weight: bold; font-size: 10.5pt; }}
+.leader      {{ font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }}
+.note        {{ font-size: 10pt; margin: 2px 0 0 12px; line-height: 1.55; }}
+.ann-head    {{ font-weight: bold; font-variant: small-caps; margin: 4px 0; }}
+.ann-item    {{ font-size: 10pt; margin-bottom: 5px; padding-left: 10px; }}
+.back        {{ margin-top: 20px; font-size: 9.5pt; color: #444; line-height: 1.6; }}
+.staff-item  {{ margin-bottom: 1px; }}
+.mission     {{ font-style: italic; margin-top: 8px; }}
+@media print {{ body {{ padding: 0; }} @page {{ margin: 0.75in; }} }}
 """
 
         def esc(s):
@@ -6989,6 +6993,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
         if date_str:
             lines.append(f"<div class='date'>{esc(date_str)}</div>")
         lines.append("<hr>")
+        lines.append("<div class='service-cols'>")
 
         for sec, items in self._grouped_entries():
             visible = [si for si in items
@@ -7007,6 +7012,8 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                     lines.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
                 lines.append("</div>")
+
+        lines.append("</div>")  # .service-cols
 
         if announcements:
             lines.append("<hr><div class='ann-head'>Announcements</div>")
@@ -7113,16 +7120,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
     def _print_bulletin_webkit(self):
-        """Print whatever the preview is currently showing (bulletin or manuscript)."""
-        # If a Typst-compiled PDF is already loaded in the preview, print it directly
-        # so columns, fonts and layout are preserved.
-        if (self._preview_webview is not None
-                and getattr(self, "_preview_pdf_loaded", None)
-                and getattr(self, "_preview_visible", False)):
-            op = _WebKit.PrintOperation.new(self._preview_webview)
-            op.run_dialog(self)
-            return
-        # Fall back to HTML (no compiled preview available)
+        """Print bulletin or manuscript as HTML (with CSS columns matching preamble settings)."""
         try:
             mode = getattr(self, "_preview_mode", "bulletin")
             html = self._build_manuscript_html() if mode == "manuscript" else self._build_bulletin_html()
