@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev3"
+APP_VERSION = "0.17.8-dev4"
 
 
 config = Config()
@@ -2159,6 +2159,13 @@ class MainWindow(Adw.ApplicationWindow):
             b.connect("clicked", lambda _, f=cb: f())
             doc_box.append(b)
         hdr.pack_start(doc_box)
+
+        # New Window button
+        nw_btn = Gtk.Button(icon_name="window-new-symbolic",
+                            tooltip_text="New window (Ctrl+Shift+N)")
+        nw_btn.add_css_class("flat")
+        nw_btn.set_action_name("app.new-window")
+        hdr.pack_start(nw_btn)
 
         # Undo + Redo as a linked pill
         edit_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -10932,17 +10939,23 @@ class LiturgyPlannerApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="io.github.calstfrancis.rubric", flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.connect("activate", self._on_activate)
+        self._first_activate = True
+
+    def _new_window(self, *_):
+        MainWindow(application=self).present()
 
     def _on_activate(self, app):
-        try:
-            from rubric_package.db import init_db, migrate_from_json
-            init_db()
-            migrate_from_json()
-        except Exception:
-            pass
-        _ensure_gost_font()
-        css = Gtk.CssProvider()
-        css.load_from_data(b"""
+        if self._first_activate:
+            self._first_activate = False
+            try:
+                from rubric_package.db import init_db, migrate_from_json
+                init_db()
+                migrate_from_json()
+            except Exception:
+                pass
+            _ensure_gost_font()
+            css = Gtk.CssProvider()
+            css.load_from_data(b"""
 /* Default (non-compact): give rows comfortable breathing room */
 row.activatable { min-height: 52px; }
 row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
@@ -11002,9 +11015,14 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
 /* Cover art thumbnail: rounded corners */
 .cover-thumb { border-radius: 4px; }
 """)
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), css,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), css,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            # Register app-level "New Window" action
+            nw_action = Gio.SimpleAction.new("new-window", None)
+            nw_action.connect("activate", self._new_window)
+            self.add_action(nw_action)
+            self.set_accels_for_action("app.new-window", ["<Ctrl><Shift>n"])
         MainWindow(application=app).present()
 
 def _ensure_gost_font():

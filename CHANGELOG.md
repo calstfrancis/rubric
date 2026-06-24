@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev4 — Multiple windows; heading spacing
+
+### Added
+
+- **New Window** — a new-window button (⧉) in the header bar and `Ctrl+Shift+N` open a second independent Rubric window in the same process. Useful for comparing liturgies side-by-side and moving elements between services. Launching a second instance from the terminal or app launcher also opens a new window rather than raising the existing one.
+
+### Fixed
+
+- **Heading spacing in manuscript** — the gap below element headings (bold small-caps + rule) and movement headings increased from 4 pt to 6 pt, ensuring at least as much clearance as a normal paragraph gap. The gap between the heading text and its rule also increased from 1 pt to 2 pt.
+
+---
+
 ## 0.17.8-dev3 — Heading spacing in manuscript
 
 ### Fixed
