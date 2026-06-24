@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev21 — Leader's order export uses full manuscript preamble
+
+### Fixed
+
+- **Leader's order export now uses all manuscript preamble settings** — page margins, font, size, paragraph spacing, and heading style override are all sourced from the manuscript preamble, exactly matching what the manuscript preview uses. Previously all of those were hardcoded or ignored.
+
+---
+
 ## 0.17.8-dev20 — Pane persistence, rubric resize, sticky headings, export fonts
 
 ### Added
