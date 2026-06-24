@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev7"
+APP_VERSION = "0.17.8-dev8"
 
 
 config = Config()
@@ -2276,6 +2276,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_visible = False
         self._preview_scroll_poll_id = None
         self._preview_pending_id = None
+        self._preview_compile_dirty = False  # new compile needed after current finishes
+        self._preview_window_id = id(self)   # unique per-window for PDF path
         self._preview_mode = "bulletin"
         self._preview_paned_positioned = False
         self._preview_lbl = Gtk.Label(label="Preview")
@@ -5069,6 +5071,7 @@ class MainWindow(Adw.ApplicationWindow):
             if getattr(self, "_preview_pending_id", None) is not None:
                 GLib.source_remove(self._preview_pending_id)
                 self._preview_pending_id = None
+            self._preview_compile_dirty = False
 
     def _on_bulletin_edit_toggled(self, btn):
         if btn.get_active():
@@ -5150,6 +5153,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _schedule_preview_update(self):
         if not getattr(self, "_preview_visible", False):
             return
+        if getattr(self, "_preview_compiling", False):
+            # A compile is already running — mark dirty so it re-runs when done
+            self._preview_compile_dirty = True
+            return
         existing = getattr(self, "_preview_pending_id", None)
         if existing is not None:
             GLib.source_remove(existing)
@@ -5173,8 +5180,8 @@ class MainWindow(Adw.ApplicationWindow):
         live_mode = getattr(self, "_preview_live_mode", False)
         if typst and not live_mode:
             if getattr(self, "_preview_compiling", False):
-                # Compile in progress — reschedule so we pick up latest settings
-                self._preview_pending_id = GLib.timeout_add(500, self._do_preview_update)
+                # Already compiling (direct call path) — mark dirty, don't poll
+                self._preview_compile_dirty = True
                 return False
             # Capture Typst source in main thread (GTK widget access required)
             try:
@@ -5224,11 +5231,12 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def _preview_pdf_path(self) -> Path:
-        """Return the stable path used for the live preview PDF."""
+        """Return the stable path used for the live preview PDF (unique per window)."""
         mode = getattr(self, "_preview_mode", "bulletin")
+        win_id = getattr(self, "_preview_window_id", id(self))
         cache = Path(GLib.get_user_cache_dir()) / "rubric"
         cache.mkdir(parents=True, exist_ok=True)
-        return cache / f"preview_{mode}.pdf"
+        return cache / f"preview_{mode}_{win_id}.pdf"
 
     def _run_preview_compile(self, typ_src: str, typst_bin: str) -> None:
         """Background thread: compile bulletin Typst to PDF for live preview."""
@@ -5429,6 +5437,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_spinner.stop()
         self._preview_spinner.set_visible(False)
         self._preview_compiling_lbl.set_visible(False)
+        if getattr(self, "_preview_compile_dirty", False) and getattr(self, "_preview_visible", False):
+            self._preview_compile_dirty = False
+            self._preview_pending_id = GLib.timeout_add(200, self._do_preview_update)
         return False
 
     def _popout_preview(self):

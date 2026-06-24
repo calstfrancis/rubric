@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev8 — Preview compile throttling; unique PDF path per window
+
+### Fixed
+
+- **Preview no longer busy-polls during compilation** — previously, if a change arrived while Typst was compiling, the app would poll every 500 ms waiting for the compile to finish, then immediately start another. Now a "dirty" flag is set instead; the next compile is scheduled 200 ms after the current one finishes. This eliminates the repeated `_do_preview_update` wakeups during a compile.
+- **Multiple windows no longer share a preview PDF file** — each window now writes to its own `preview_<mode>_<window-id>.pdf`, so two open windows can compile their previews concurrently without clobbering each other.
+
+---
+
 ## 0.17.8-dev7 — Manuscript section headings: single columns block (no breaks)
 
 ### Fixed
