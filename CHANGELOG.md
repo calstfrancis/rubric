@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev3 — Heading spacing in manuscript
+
+### Fixed
+
+- **Headings no longer touch the following text** — the space below element headings (bold small-caps + rule) and movement headings increased from 4 pt to 6 pt, giving at least as much clearance as the normal paragraph gap. The gap between the heading text and its rule also bumped from 1 pt to 2 pt.
+
+---
+
 ## 0.17.8-dev2 — Font picker driven by Typst
 
 ### Fixed
