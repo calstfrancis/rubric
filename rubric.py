@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev12"
+APP_VERSION = "0.17.8-dev13"
 
 
 config = Config()
@@ -2439,6 +2439,28 @@ class MainWindow(Adw.ApplicationWindow):
         _jright_spacer = Gtk.Box(); _jright_spacer.set_hexpand(True)
         jbar.append(_jright_spacer)
 
+        self._preview_mode_btn = Gtk.Button(label="Auto")
+        self._preview_mode_btn.add_css_class("flat")
+        self._preview_mode_btn.add_css_class("caption")
+        _pmlbl = self._preview_mode_btn.get_child()
+        if _pmlbl:
+            _pmlbl.set_margin_top(1); _pmlbl.set_margin_bottom(1)
+        self._preview_mode_btn.set_margin_start(1); self._preview_mode_btn.set_margin_end(1)
+        self._preview_mode_btn.set_tooltip_text(
+            "Preview compile mode: Auto (on every change) · Save (on file save) · Manual (compile button only)")
+        self._preview_mode_btn.set_visible(False)
+
+        def _on_preview_mode_cycle(_btn):
+            _modes = ["auto", "on_save", "manual"]
+            _labels = {"auto": "Auto", "on_save": "Save", "manual": "Manual"}
+            cur = getattr(self, "_preview_update_mode", "auto")
+            nxt = _modes[(_modes.index(cur) + 1) % len(_modes)]
+            self._preview_update_mode = nxt
+            self._preview_mode_btn.set_label(_labels[nxt])
+
+        self._preview_mode_btn.connect("clicked", _on_preview_mode_cycle)
+        jbar.append(self._preview_mode_btn)
+
         _jedit_btn = Gtk.Button(icon_name="x-office-calendar-symbolic",
                                 tooltip_text="View and edit all observances")
         _jedit_btn.add_css_class("flat"); _jedit_btn.add_css_class("caption")
@@ -4704,8 +4726,10 @@ class MainWindow(Adw.ApplicationWindow):
                 future_obs, future_dt = items[0], wd
                 break
 
+        _mode_btn_visible = getattr(self, "_preview_mode_btn", None) and self._preview_mode_btn.get_visible()
         if not past_obs and not future_obs:
-            bar.set_visible(False)
+            if not _mode_btn_visible:
+                bar.set_visible(False)
             return
         bar.set_visible(True)
 
@@ -4782,31 +4806,6 @@ class MainWindow(Adw.ApplicationWindow):
         mode_box.append(self._preview_bulletin_btn)
         mode_box.append(self._preview_manuscript_btn)
         hdr.append(mode_box)
-
-        # Compile-trigger mode: Auto / On Save / Manual
-        trigger_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        trigger_box.add_css_class("linked")
-        self._preview_auto_btn  = Gtk.ToggleButton(label="Auto")
-        self._preview_save_btn  = Gtk.ToggleButton(label="Save")
-        self._preview_manual_btn = Gtk.ToggleButton(label="Manual")
-        self._preview_save_btn.set_group(self._preview_auto_btn)
-        self._preview_manual_btn.set_group(self._preview_auto_btn)
-        self._preview_auto_btn.set_active(True)
-        self._preview_auto_btn.set_tooltip_text("Auto — recompile preview whenever the service changes")
-        self._preview_save_btn.set_tooltip_text("On Save — recompile preview when the file is saved")
-        self._preview_manual_btn.set_tooltip_text("Manual — only recompile when you click the compile button")
-
-        def _on_trigger_mode(btn, mode):
-            if btn.get_active():
-                self._preview_update_mode = mode
-
-        self._preview_auto_btn.connect("toggled",   _on_trigger_mode, "auto")
-        self._preview_save_btn.connect("toggled",   _on_trigger_mode, "on_save")
-        self._preview_manual_btn.connect("toggled", _on_trigger_mode, "manual")
-        trigger_box.append(self._preview_auto_btn)
-        trigger_box.append(self._preview_save_btn)
-        trigger_box.append(self._preview_manual_btn)
-        hdr.append(trigger_box)
 
         # Compile button — always visible; essential in Save/Manual modes
         self._preview_compile_btn = Gtk.Button(icon_name="view-refresh-symbolic",
@@ -5083,6 +5082,16 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._preview_lbl.set_text("Preview")
         self._preview_panel.set_visible(visible)
+        if hasattr(self, "_preview_mode_btn"):
+            self._preview_mode_btn.set_visible(visible)
+            if visible:
+                self._justice_bar.set_visible(True)
+            else:
+                # Let _refresh_justice_row decide if the bar should stay visible
+                if self.selected_date:
+                    self._refresh_justice_row(self.selected_date)
+                else:
+                    self._justice_bar.set_visible(False)
         if visible:
             if not self._preview_paned_positioned:
                 self._preview_paned_positioned = True

@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev13 — Preview compile mode button in justice bar
+
+### Changed
+
+- **Preview compile mode moved to the justice bar** — the Auto/Save/Manual selector is now a single cycle button on the right side of the justice dates bar. Clicking it steps through Auto → Save → Manual → Auto. The button appears when the preview panel is open and keeps the justice bar visible while the preview is showing.
+- Removed the linked Auto/Save/Manual button group from the preview panel header; the ⟳ compile button remains there.
+
+---
+
 ## 0.17.8-dev12 — Manuscript compact title header
 
 ### Added
