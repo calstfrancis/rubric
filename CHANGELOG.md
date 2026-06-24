@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev9 — Preview compile mode selector and compile button
+
+### Added
+
+- **Compile mode selector** — the preview panel header now shows three linked buttons: **Auto** (recompile whenever the service changes, 700 ms debounce), **Save** (recompile each time the file is saved), and **Manual** (only recompile when you click the button). Default is Auto.
+- **Compile button** — a refresh button (⟳) in the preview header triggers an immediate compile in any mode.
+- Removed the old "Live" HTML-preview toggle; the HTML fallback still activates automatically when Typst is unavailable.
+
+---
+
 ## 0.17.8-dev8 — Preview compile throttling; unique PDF path per window
 
 ### Fixed

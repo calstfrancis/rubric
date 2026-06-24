@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev8"
+APP_VERSION = "0.17.8-dev9"
 
 
 config = Config()
@@ -2279,6 +2279,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._preview_compile_dirty = False  # new compile needed after current finishes
         self._preview_window_id = id(self)   # unique per-window for PDF path
         self._preview_mode = "bulletin"
+        self._preview_update_mode = "auto"   # "auto" | "on_save" | "manual"
         self._preview_paned_positioned = False
         self._preview_lbl = Gtk.Label(label="Preview")
         self._preview_lbl.set_use_markup(True)
@@ -4773,19 +4774,37 @@ class MainWindow(Adw.ApplicationWindow):
         mode_box.append(self._preview_manuscript_btn)
         hdr.append(mode_box)
 
-        # Live toggle — forces instant HTML preview (no Typst compile)
-        self._preview_live_btn = Gtk.ToggleButton(label="Live")
-        self._preview_live_btn.set_tooltip_text(
-            "Live mode — instant HTML preview that updates as you type, without waiting for Typst to compile")
-        self._preview_live_btn.add_css_class("flat")
-        self._preview_live_mode = False
+        # Compile-trigger mode: Auto / On Save / Manual
+        trigger_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        trigger_box.add_css_class("linked")
+        self._preview_auto_btn  = Gtk.ToggleButton(label="Auto")
+        self._preview_save_btn  = Gtk.ToggleButton(label="Save")
+        self._preview_manual_btn = Gtk.ToggleButton(label="Manual")
+        self._preview_save_btn.set_group(self._preview_auto_btn)
+        self._preview_manual_btn.set_group(self._preview_auto_btn)
+        self._preview_auto_btn.set_active(True)
+        self._preview_auto_btn.set_tooltip_text("Auto — recompile preview whenever the service changes")
+        self._preview_save_btn.set_tooltip_text("On Save — recompile preview when the file is saved")
+        self._preview_manual_btn.set_tooltip_text("Manual — only recompile when you click the compile button")
 
-        def _on_live_toggled(btn):
-            self._preview_live_mode = btn.get_active()
-            self._do_preview_update()
+        def _on_trigger_mode(btn, mode):
+            if btn.get_active():
+                self._preview_update_mode = mode
 
-        self._preview_live_btn.connect("toggled", _on_live_toggled)
-        hdr.append(self._preview_live_btn)
+        self._preview_auto_btn.connect("toggled",   _on_trigger_mode, "auto")
+        self._preview_save_btn.connect("toggled",   _on_trigger_mode, "on_save")
+        self._preview_manual_btn.connect("toggled", _on_trigger_mode, "manual")
+        trigger_box.append(self._preview_auto_btn)
+        trigger_box.append(self._preview_save_btn)
+        trigger_box.append(self._preview_manual_btn)
+        hdr.append(trigger_box)
+
+        # Compile button — always visible; essential in Save/Manual modes
+        self._preview_compile_btn = Gtk.Button(icon_name="view-refresh-symbolic",
+                                               tooltip_text="Compile preview now")
+        self._preview_compile_btn.add_css_class("flat")
+        self._preview_compile_btn.connect("clicked", lambda _: self._do_preview_update())
+        hdr.append(self._preview_compile_btn)
 
         self._bulletin_edit_btn = Gtk.ToggleButton(icon_name="document-edit-symbolic",
                                                    tooltip_text="Edit bulletin text for this service")
@@ -5150,8 +5169,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.get_clipboard().set(text)
         self._show_toast("Service copied as plain text")
 
-    def _schedule_preview_update(self):
+    def _schedule_preview_update(self, from_save: bool = False):
         if not getattr(self, "_preview_visible", False):
+            return
+        mode = getattr(self, "_preview_update_mode", "auto")
+        if mode == "manual":
+            return
+        if mode == "on_save" and not from_save:
             return
         if getattr(self, "_preview_compiling", False):
             # A compile is already running — mark dirty so it re-runs when done
@@ -5160,7 +5184,8 @@ class MainWindow(Adw.ApplicationWindow):
         existing = getattr(self, "_preview_pending_id", None)
         if existing is not None:
             GLib.source_remove(existing)
-        self._preview_pending_id = GLib.timeout_add(700, self._do_preview_update)
+        delay = 200 if from_save else 700
+        self._preview_pending_id = GLib.timeout_add(delay, self._do_preview_update)
 
     def _do_preview_update(self):
         self._preview_pending_id = None
@@ -5177,8 +5202,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._bulletin_edit_btn.set_visible(mode == "bulletin")
 
         typst = self._find_typst()
-        live_mode = getattr(self, "_preview_live_mode", False)
-        if typst and not live_mode:
+        if typst:
             if getattr(self, "_preview_compiling", False):
                 # Already compiling (direct call path) — mark dirty, don't poll
                 self._preview_compile_dirty = True
@@ -6590,6 +6614,7 @@ class MainWindow(Adw.ApplicationWindow):
                 GLib.source_remove(self._deferred_save_id); self._deferred_save_id = None
             config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
             self._index_service(path, data)
+            self._schedule_preview_update(from_save=True)
             if getattr(self, "_close_after_save", False):
                 self._close_after_save = False
                 self.destroy()
