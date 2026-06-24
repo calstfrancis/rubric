@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev18 — Fix print columns using table layout
+
+### Fixed
+
+- **Print columns now actually appear** — CSS `column-count` is unreliable in WebKitGTK when printing (the engine collapses multi-column content to a single column). Replaced the CSS column approach with an HTML `<table>` layout: bulletin groups are split in half and placed in left/right `<td>` cells, which WebKit renders correctly in the print dialog.
+
+---
+
 ## 0.17.8-dev17 — Fix sticky headings and print output
 
 ### Fixed

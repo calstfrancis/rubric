@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev17"
+APP_VERSION = "0.17.8-dev18"
 
 
 config = Config()
@@ -6919,32 +6919,34 @@ class MainWindow(Adw.ApplicationWindow):
 
         _bul_cols = config.preamble.get("bulletin", {}).get("columns", 2)
 
-        css = f"""
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: Georgia, 'Times New Roman', serif; font-size: 11pt;
-       color: #111; max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }}
-.church-name {{ font-size: 18pt; font-variant: small-caps; letter-spacing: 0.05em;
-               text-align: center; margin-bottom: 4px; }}
-.church-sub  {{ font-size: 9.5pt; text-align: center; color: #444; line-height: 1.6; }}
-.title       {{ font-size: 15pt; font-weight: bold; text-align: center;
-               margin: 18px 0 2px; }}
-.date        {{ font-size: 11pt; font-style: italic; text-align: center;
-               color: #555; margin-bottom: 16px; }}
-hr           {{ border: none; border-top: 1px solid #bbb; margin: 12px 0; }}
-.service-cols {{ column-count: {_bul_cols if _bul_cols >= 2 else 1};
-                column-gap: 1.5em; column-rule: 1px solid #ddd; }}
-h2           {{ font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08em;
-               text-align: center; margin: 16px 0 6px; }}
-.el          {{ margin-bottom: 8px; break-inside: avoid; }}
-.el-name     {{ font-weight: bold; font-size: 10.5pt; }}
-.leader      {{ font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }}
-.note        {{ font-size: 10pt; margin: 2px 0 0 12px; line-height: 1.55; }}
-.ann-head    {{ font-weight: bold; font-variant: small-caps; margin: 4px 0; }}
-.ann-item    {{ font-size: 10pt; margin-bottom: 5px; padding-left: 10px; }}
-.back        {{ margin-top: 20px; font-size: 9.5pt; color: #444; line-height: 1.6; }}
-.staff-item  {{ margin-bottom: 1px; }}
-.mission     {{ font-style: italic; margin-top: 8px; }}
-@media print {{ body {{ padding: 0; }} @page {{ margin: 0.75in; }} }}
+        css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, 'Times New Roman', serif; font-size: 11pt;
+       color: #111; max-width: 7in; margin: 0 auto; padding: 0.6in 0.5in; }
+.church-name { font-size: 18pt; font-variant: small-caps; letter-spacing: 0.05em;
+               text-align: center; margin-bottom: 4px; }
+.church-sub  { font-size: 9.5pt; text-align: center; color: #444; line-height: 1.6; }
+.title       { font-size: 15pt; font-weight: bold; text-align: center;
+               margin: 18px 0 2px; }
+.date        { font-size: 11pt; font-style: italic; text-align: center;
+               color: #555; margin-bottom: 16px; }
+hr           { border: none; border-top: 1px solid #bbb; margin: 12px 0; }
+.cols-table  { width: 100%; border-collapse: collapse; }
+.col-l       { width: 50%; vertical-align: top; padding-right: 12px; }
+.col-r       { width: 50%; vertical-align: top; padding-left: 12px;
+               border-left: 1px solid #ddd; }
+h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08em;
+               text-align: center; margin: 16px 0 6px; }
+.el          { margin-bottom: 8px; }
+.el-name     { font-weight: bold; font-size: 10.5pt; }
+.leader      { font-style: italic; color: #555; font-size: 9.5pt; margin-left: 5px; }
+.note        { font-size: 10pt; margin: 2px 0 0 12px; line-height: 1.55; }
+.ann-head    { font-weight: bold; font-variant: small-caps; margin: 4px 0; }
+.ann-item    { font-size: 10pt; margin-bottom: 5px; padding-left: 10px; }
+.back        { margin-top: 20px; font-size: 9.5pt; color: #444; line-height: 1.6; }
+.staff-item  { margin-bottom: 1px; }
+.mission     { font-style: italic; margin-top: 8px; }
+@media print { body { padding: 0; } @page { margin: 0.75in; } }
 """
 
         def esc(s):
@@ -6993,27 +6995,43 @@ h2           {{ font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.0
         if date_str:
             lines.append(f"<div class='date'>{esc(date_str)}</div>")
         lines.append("<hr>")
-        lines.append("<div class='service-cols'>")
 
-        for sec, items in self._grouped_entries():
+        # Build all service-order groups as HTML fragments, then lay out in columns.
+        def _group_html(sec, items):
+            parts = []
             visible = [si for si in items
                        if isinstance(si, ServiceItem) and si.show_in_bulletin]
             if not visible and sec is None:
-                continue
+                return ""
             if sec:
-                lines.append(f"<h2>{esc(sec)}</h2>")
+                parts.append(f"<h2>{esc(sec)}</h2>")
             for si in visible:
                 leader_html = (f"<span class='leader'>({esc(si.leader)})</span>"
                                if si.leader else "")
-                lines.append(f"<div class='el'>"
+                parts.append(f"<div class='el'>"
                              f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
                 if si.content_typst:
                     clean = strip_latex(si.content_typst)
-                    lines.append(f"<div class='note'>"
+                    parts.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
-                lines.append("</div>")
+                parts.append("</div>")
+            return "".join(parts)
 
-        lines.append("</div>")  # .service-cols
+        groups = [_group_html(sec, items) for sec, items in self._grouped_entries()]
+        groups = [g for g in groups if g]
+
+        if _bul_cols >= 2 and groups:
+            mid = (len(groups) + 1) // 2
+            left_html  = "".join(groups[:mid])
+            right_html = "".join(groups[mid:])
+            lines.append(
+                f"<table class='cols-table'><tr>"
+                f"<td class='col-l'>{left_html}</td>"
+                f"<td class='col-r'>{right_html}</td>"
+                f"</tr></table>"
+            )
+        else:
+            lines.append("".join(groups))
 
         if announcements:
             lines.append("<hr><div class='ann-head'>Announcements</div>")
