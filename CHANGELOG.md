@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev22 — Fix leader's order heading sizes and column breaks
+
+### Fixed
+
+- **Section headings in leader's order are large again** — `===` (level 3) is used for section headings (Gathering, Word, etc.) in the minister format. TYPST_SHARED styles level 3 as 0.95em (a sub-heading), which was making section headings smaller than body text. An explicit override after TYPST_SHARED now styles minister level-3 headings at 1.1em bold — larger than body text, as expected.
+- **Spurious column breaks removed** — hardcoded `#colbreak()` calls before "Word", "Response", and "Sending" sections have been removed. Typst now flows the two-column content naturally without forced breaks.
+- **Preamble heading style no longer applied to leader's order** — the heading style choice in the manuscript preamble is for the manuscript/bulletin layout, not the compact minister format. The minister format now always uses its own appropriate heading rules.
+
+---
+
 ## 0.17.8-dev21 — Leader's order export uses full manuscript preamble
 
 ### Fixed
