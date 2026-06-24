@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev7 — Manuscript section headings: single columns block (no breaks)
+
+### Fixed
+
+- **Manuscript section headings no longer cause column/section breaks** — the manuscript now uses a single `#columns()` block for all content (same structure as the bulletin since dev5), so section headings (Gathering, Word, Response, Sending) flow continuously within the columns without any implicit break between sections.
+
+---
+
 ## 0.17.8-dev6 — Section headings: no rule, flow in column (bulletin + manuscript)
 
 ### Fixed
