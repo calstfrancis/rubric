@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev14 — Deferred autosave interval increased to 15 s
+
+### Changed
+
+- **Deferred autosave now fires after 15 seconds** of inactivity (was 2 s). The 2 s save was causing the preview to recompile constantly in "Save" mode since every edit triggered a save almost immediately. 15 s still saves your work promptly when you pause, but gives a clear distinction between "typing" and "done for now". Ctrl+S still saves and compiles instantly.
+
+---
+
 ## 0.17.8-dev13 — Preview compile mode button in justice bar
 
 ### Changed

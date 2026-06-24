@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev13"
+APP_VERSION = "0.17.8-dev14"
 
 
 config = Config()
@@ -3463,7 +3463,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self.current_file:
             if getattr(self, "_deferred_save_id", None):
                 GLib.source_remove(self._deferred_save_id)
-            self._deferred_save_id = GLib.timeout_add(2000, self._deferred_save)
+            self._deferred_save_id = GLib.timeout_add(15000, self._deferred_save)
 
     def _open_planning_notes_window(self):
         win = ServicePlanningNotesWindow(
@@ -5521,7 +5521,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self.current_file:
             if getattr(self, "_deferred_save_id", None):
                 GLib.source_remove(self._deferred_save_id)
-            self._deferred_save_id = GLib.timeout_add(2000, self._deferred_save)
+            self._deferred_save_id = GLib.timeout_add(15000, self._deferred_save)
 
     def _refresh_cover_thumb(self):
         if not hasattr(self, "_cover_thumb"):
