@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev6 — Section headings: no rule, flow in column (bulletin + manuscript)
+
+### Fixed
+
+- **No horizontal rule above section headings** — removed the decorative rule that appeared above Gathering / Word / Response / Sending headings in both bulletin and manuscript mode. They now read as plain centred small-caps text without any preceding line.
+- **Manuscript section headings now flow inside the two-column block** — same structural fix applied in dev5 for the bulletin: section headings in the manuscript no longer sit outside `#columns()`, so they flow naturally within whichever column they land in rather than forcing a break before each section.
+
+---
+
 ## 0.17.8-dev5 — Bulletin section headings inside columns
 
 ### Fixed

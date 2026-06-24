@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev5"
+APP_VERSION = "0.17.8-dev6"
 
 
 config = Config()
@@ -7683,21 +7683,23 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             target.append('')
 
         for sec, items in groups:
-            if sec:
-                parts += [f'= {_typst_escape(sec)}', '']
-
-            if _ms_cols >= 2 and len(items) > 1 and sec is not None:
+            if _ms_cols >= 2 and (items or sec):
                 _ms_gutter = config.preamble.get("manuscript", {}).get("gutter", 1.0)
                 _col_items: list[str] = []
+                if sec:
+                    _col_items += [f'= {_typst_escape(sec)}', '']
                 for si in items:
                     _render_ms_item(si, _col_items)
-                parts += [
-                    f'#columns(2, gutter: {_ms_gutter}em)[',
-                    '\n'.join(_col_items),
-                    ']',
-                    '',
-                ]
+                if _col_items:
+                    parts += [
+                        f'#columns(2, gutter: {_ms_gutter}em)[',
+                        '\n'.join(_col_items),
+                        ']',
+                        '',
+                    ]
             else:
+                if sec:
+                    parts += [f'= {_typst_escape(sec)}', '']
                 for si in items:
                     _render_ms_item(si, parts)
 

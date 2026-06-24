@@ -409,11 +409,9 @@ TYPST_SHARED = r"""
 
 // Section heading: centred large bold small-caps (= Section)
 #show heading.where(level: 1): it => {
-  v(24pt)
-  line(length: 100%, stroke: 0.4pt + luma(200))
-  v(8pt)
+  v(14pt, weak: true)
   align(center, text(size: 1.3em, weight: "bold", smallcaps(it.body)))
-  v(12pt)
+  v(8pt, weak: true)
 }
 
 // Element heading: bold small-caps with a thin rule below (== Item)
