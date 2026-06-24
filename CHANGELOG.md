@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.8-dev9 — Preview compile mode selector and compile button
+## 0.17.8-dev10 — Preview compile mode selector and compile button
 
 ### Added
 
