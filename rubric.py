@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev22"
+APP_VERSION = "0.17.8-dev23"
 
 
 config = Config()
@@ -8412,12 +8412,6 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             self._load_typst_preamble("manuscript"),
             '',
             TYPST_SHARED,
-            # Override level-3 for minister: === is a section heading, not a sub-heading.
-            # TYPST_SHARED styles level 3 as 0.95em (sub-heading), which is too small here.
-            '#show heading.where(level: 3): it => block(',
-            '  above: 10pt, below: 4pt, sticky: true,',
-            '  text(size: 1.1em, weight: "bold", it.body)',
-            ')',
             '',
         ]
         parts += ['#align(center)[']
@@ -8441,7 +8435,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
 
         for entry in self.service_entries:
             if isinstance(entry, SectionDivider):
-                parts.append(f'=== {_typst_escape(entry.title)}')
+                parts.append(f'= {_typst_escape(entry.title)}')
                 parts.append('')
             elif isinstance(entry, ServiceItem):
                 leader_str = (

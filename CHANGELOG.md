@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev23 — Fix leader's order section headings to use level 1
+
+### Fixed
+
+- **Section headings in leader's order now match the preview** — sections (Gathering, Word, etc.) were generated as `===` (level 3, styled by TYPST_SHARED as 0.95em sub-headings) instead of `=` (level 1, styled as centred bold small-caps at 1.1em). Changed to `=` so the export uses the same heading rules as the manuscript preview. Removed the temporary level-3 override added in dev22.
+
+---
+
 ## 0.17.8-dev22 — Fix leader's order heading sizes and column breaks
 
 ### Fixed
