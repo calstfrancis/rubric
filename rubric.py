@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8-dev18"
+APP_VERSION = "0.17.8-dev19"
 
 
 config = Config()
@@ -7138,7 +7138,12 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             self._show_toast("Bulletin opened in browser — use File → Print to print", timeout=6)
 
     def _print_bulletin_webkit(self):
-        """Print bulletin or manuscript as HTML (with CSS columns matching preamble settings)."""
+        """Print the compiled Typst PDF via Poppler, or fall back to HTML."""
+        pdf_path = self._preview_pdf_path()
+        if pdf_path.exists():
+            self._print_pdf_poppler(pdf_path)
+            return
+        # No compiled PDF yet — fall back to HTML
         try:
             mode = getattr(self, "_preview_mode", "bulletin")
             html = self._build_manuscript_html() if mode == "manuscript" else self._build_bulletin_html()
@@ -7152,6 +7157,40 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 op = _WebKit.PrintOperation.new(view)
                 op.run_dialog(self)
         wv.connect("load-changed", on_load)
+
+    def _print_pdf_poppler(self, pdf_path: Path) -> None:
+        """Render each page of a PDF via Poppler into a GtkPrintOperation."""
+        try:
+            import gi as _gi
+            _gi.require_version("Poppler", "0.18")
+            from gi.repository import Poppler as _Poppler
+            doc = _Poppler.Document.new_from_file(pdf_path.as_uri())
+        except Exception:
+            return
+        n_pages = doc.get_n_pages()
+        if n_pages == 0:
+            return
+
+        op = Gtk.PrintOperation()
+        op.set_n_pages(n_pages)
+        op.set_use_full_page(True)
+        op.set_unit(Gtk.Unit.POINTS)
+
+        def on_draw_page(_op, ctx, page_num):
+            page = doc.get_page(page_num)
+            pw, ph = page.get_size()
+            cr = ctx.get_cairo_context()
+            # Scale to fill the print context, preserving aspect ratio
+            cw, ch = ctx.get_width(), ctx.get_height()
+            scale = min(cw / pw, ch / ph) if pw and ph else 1.0
+            cr.scale(scale, scale)
+            page.render_for_printing(cr)
+
+        op.connect("draw-page", on_draw_page)
+        try:
+            op.run(Gtk.PrintOperationAction.PRINT_DIALOG, self)
+        except Exception:
+            pass
 
     def _export_bulletin_file(self, digital: bool):
         title = self.service_title_entry.get_text() or "bulletin"

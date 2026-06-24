@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev19 — Print directly from compiled PDF via Poppler
+
+### Fixed
+
+- **Print button now prints the actual Typst PDF** — uses Poppler to render each PDF page to a Cairo surface inside a `GtkPrintOperation`, giving a proper print dialog with the full Typst layout (fonts, real columns, etc.). Falls back to HTML only if no compiled PDF exists yet. The HTML table-column layout from dev18 is kept as that fallback.
+
+---
+
 ## 0.17.8-dev18 — Fix print columns using table layout
 
 ### Fixed
