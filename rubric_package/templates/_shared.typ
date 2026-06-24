@@ -50,21 +50,21 @@
 )
 
 // Element heading: bold small-caps with a thin rule below
-#show heading.where(level: 3): it => {
-  block(sticky: true, {
-    v(6pt)
+#show heading.where(level: 3): it => block(
+  above: 6pt,
+  below: 6pt,
+  sticky: true,
+  {
     text(weight: "bold", smallcaps(it.body))
     v(2pt, weak: true)
     line(length: 100%, stroke: 0.4pt + luma(160))
-    v(6pt, weak: true)
-  })
-}
+  }
+)
 
 // Movement heading: centred bold larger text
-#show heading.where(level: 2): it => {
-  block(sticky: true, {
-    v(8pt)
-    align(center, text(size: 1.1em, weight: "bold", it.body))
-    v(6pt)
-  })
-}
+#show heading.where(level: 2): it => block(
+  above: 8pt,
+  below: 6pt,
+  sticky: true,
+  align(center, text(size: 1.1em, weight: "bold", it.body))
+)

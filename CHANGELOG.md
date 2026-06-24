@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 0.17.8-dev20 — Pane persistence, rubric resize, sticky headings, export fonts
+
+### Added
+
+- **Pane widths remembered across sessions** — the order list / notes split, the element palette width, and the preview panel width are saved to config on exit and restored on next launch.
+- **Rubric area is now drag-to-resize** — the leader instructions area (toggled with the Rubric button) is a proper draggable pane divider rather than a fixed-height box. Drag the handle between the rubric area and the content editor to set your preferred split. The last position is remembered within the session.
+
+### Changed
+
+- **Preview now defaults to "Save" mode** — the compile-on-save mode is the default instead of auto. This prevents constant background Typst invocations while typing.
+
+### Fixed
+
+- **Orphaned element headings (another attempt)** — the heading show rules now use Typst's `above` and `below` block parameters for spacing instead of `v()` calls inside/outside the sticky block. `v()` inside a `block(sticky: true)` can confuse Typst's break logic; `above`/`below` are block-level spacing and interact correctly with sticky. Applied to both `TYPST_SHARED` (bulletin/manuscript) and `_shared.typ` (leader manuscript).
+- **Leader's order PDF now respects manuscript font settings** — `_build_minister_typst()` was hardcoding `#set text(size: 10pt)` regardless of what was set in the manuscript preamble. It now reads `font` and `size` from the manuscript preamble config, the same source the manuscript preview uses.
+
+---
+
 ## 0.17.8-dev19 — Print directly from compiled PDF via Poppler
 
 ### Fixed

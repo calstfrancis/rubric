@@ -54,6 +54,7 @@ class Config:
         self.recurring_elements: list[str] = []
         self.element_defaults: dict[str, str] = {}
         self.preamble: dict[str, Any] = {}
+        self.ui_panes: dict[str, int] = {}
         self.custom_dates: list[dict] = []  # legacy; migrated into all_dates on first run
         self.all_dates: list[dict] = []
         self._load()
@@ -104,6 +105,7 @@ class Config:
                 self.recurring_elements = d.get("recurring_elements", [])
                 self.element_defaults  = d.get("element_defaults", {})
                 self.preamble          = d.get("preamble", {})
+                self.ui_panes          = d.get("ui_panes", {})
                 self.custom_dates      = d.get("custom_dates", [])
                 self.all_dates        = d.get("all_dates", [])
                 # migrate old single template
@@ -141,6 +143,7 @@ class Config:
             "recurring_elements":    self.recurring_elements,
             "element_defaults":      self.element_defaults,
             "preamble":              self.preamble,
+            "ui_panes":              self.ui_panes,
             "custom_dates":          self.custom_dates,
             "all_dates":             self.all_dates,
         }

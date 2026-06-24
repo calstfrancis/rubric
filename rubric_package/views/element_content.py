@@ -108,39 +108,6 @@ class ElementContentWidget(Gtk.Box):
         self.append(header)
         self.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        # ── Rubric note area (hidden by default) ──────────────────────────────
-        self._rubric_rev = Gtk.Revealer()
-        self._rubric_rev.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self._rubric_rev.set_transition_duration(150)
-        self._rubric_rev.set_reveal_child(False)
-
-        rubric_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-
-        rubric_lbl = Gtk.Label(label="Leader instructions (manuscript only, never bulletin)")
-        rubric_lbl.add_css_class("caption"); rubric_lbl.add_css_class("dim-label")
-        rubric_lbl.set_xalign(0)
-        rubric_lbl.set_margin_start(12); rubric_lbl.set_margin_top(6); rubric_lbl.set_margin_bottom(2)
-        rubric_outer.append(rubric_lbl)
-
-        rubric_sw = Gtk.ScrolledWindow()
-        rubric_sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        rubric_sw.set_size_request(-1, 72)
-        rubric_sw.set_margin_start(12); rubric_sw.set_margin_end(12)
-        rubric_sw.set_margin_bottom(6)
-        self._rubric_view = Gtk.TextView()
-        self._rubric_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self._rubric_view.add_css_class("rubric-note-editor")
-        self._rubric_view.set_top_margin(6); self._rubric_view.set_bottom_margin(6)
-        self._rubric_view.set_left_margin(8); self._rubric_view.set_right_margin(8)
-        self._rubric_buf = self._rubric_view.get_buffer()
-        self._rubric_buf.connect("changed", self._on_rubric_buf_changed)
-        rubric_sw.set_child(self._rubric_view)
-        rubric_outer.append(rubric_sw)
-        rubric_outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        self._rubric_rev.set_child(rubric_outer)
-        self.append(self._rubric_rev)
-
         # Notice banner: shown when typst→rich conversion loses some markup
         self._notice_rev = Gtk.Revealer()
         self._notice_rev.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
@@ -159,6 +126,31 @@ class ElementContentWidget(Gtk.Box):
         notice_box.append(dismiss_btn)
         self._notice_rev.set_child(notice_box)
         self.append(self._notice_rev)
+
+        # ── Rubric note area ──────────────────────────────────────────────────
+        # Sits in the top child of _rubric_paned; hidden (position=0) until toggled.
+        rubric_outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        rubric_lbl = Gtk.Label(label="Leader instructions (manuscript only, never bulletin)")
+        rubric_lbl.add_css_class("caption"); rubric_lbl.add_css_class("dim-label")
+        rubric_lbl.set_xalign(0)
+        rubric_lbl.set_margin_start(12); rubric_lbl.set_margin_top(6); rubric_lbl.set_margin_bottom(2)
+        rubric_outer.append(rubric_lbl)
+
+        rubric_sw = Gtk.ScrolledWindow()
+        rubric_sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        rubric_sw.set_vexpand(True)
+        rubric_sw.set_margin_start(12); rubric_sw.set_margin_end(12)
+        rubric_sw.set_margin_bottom(6)
+        self._rubric_view = Gtk.TextView()
+        self._rubric_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self._rubric_view.add_css_class("rubric-note-editor")
+        self._rubric_view.set_top_margin(6); self._rubric_view.set_bottom_margin(6)
+        self._rubric_view.set_left_margin(8); self._rubric_view.set_right_margin(8)
+        self._rubric_buf = self._rubric_view.get_buffer()
+        self._rubric_buf.connect("changed", self._on_rubric_buf_changed)
+        rubric_sw.set_child(self._rubric_view)
+        rubric_outer.append(rubric_sw)
 
         # ── Rich text editor ──────────────────────────────────────────────────
         rich_sw = Gtk.ScrolledWindow()
@@ -222,7 +214,17 @@ class ElementContentWidget(Gtk.Box):
         self._editor_stack.add_named(typst_sw, "typst")
         self._typst_mode = False
         self._typst_updating = False
-        self.append(self._editor_stack)
+
+        # Vertical paned: rubric area (top, collapsed by default) | editor (bottom)
+        self._rubric_paned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        self._rubric_paned.set_shrink_start_child(True)
+        self._rubric_paned.set_shrink_end_child(False)
+        self._rubric_paned.set_start_child(rubric_outer)
+        self._rubric_paned.set_end_child(self._editor_stack)
+        self._rubric_paned.set_vexpand(True)
+        self._rubric_paned.set_position(0)
+        self._rubric_paned_pos = 120  # remembered height when open
+        self.append(self._rubric_paned)
 
         # Keyboard shortcuts
         key_ctrl = Gtk.EventControllerKey()
@@ -322,7 +324,17 @@ class ElementContentWidget(Gtk.Box):
 
     def _on_rubric_toggled(self, btn: Gtk.ToggleButton) -> None:
         self._rubric_active = btn.get_active()
-        self._rubric_rev.set_reveal_child(self._rubric_active)
+        if self._rubric_active:
+            self._rubric_paned.set_shrink_start_child(False)
+            pos = self._rubric_paned_pos
+            from gi.repository import GLib as _GLib
+            _GLib.idle_add(lambda: self._rubric_paned.set_position(pos) or False)
+        else:
+            cur = self._rubric_paned.get_position()
+            if cur > 10:
+                self._rubric_paned_pos = cur
+            self._rubric_paned.set_shrink_start_child(True)
+            self._rubric_paned.set_position(0)
 
     # ── Formatting actions ─────────────────────────────────────────────────────
 
