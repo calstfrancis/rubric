@@ -4,196 +4,33 @@ All notable changes are documented here, newest first.
 
 ---
 
-## 0.17.8-dev23 — Fix leader's order section headings to use level 1
-
-### Fixed
-
-- **Section headings in leader's order now match the preview** — sections (Gathering, Word, etc.) were generated as `===` (level 3, styled by TYPST_SHARED as 0.95em sub-headings) instead of `=` (level 1, styled as centred bold small-caps at 1.1em). Changed to `=` so the export uses the same heading rules as the manuscript preview. Removed the temporary level-3 override added in dev22.
-
----
-
-## 0.17.8-dev22 — Fix leader's order heading sizes and column breaks
-
-### Fixed
-
-- **Section headings in leader's order are large again** — `===` (level 3) is used for section headings (Gathering, Word, etc.) in the minister format. TYPST_SHARED styles level 3 as 0.95em (a sub-heading), which was making section headings smaller than body text. An explicit override after TYPST_SHARED now styles minister level-3 headings at 1.1em bold — larger than body text, as expected.
-- **Spurious column breaks removed** — hardcoded `#colbreak()` calls before "Word", "Response", and "Sending" sections have been removed. Typst now flows the two-column content naturally without forced breaks.
-- **Preamble heading style no longer applied to leader's order** — the heading style choice in the manuscript preamble is for the manuscript/bulletin layout, not the compact minister format. The minister format now always uses its own appropriate heading rules.
-
----
-
-## 0.17.8-dev21 — Leader's order export uses full manuscript preamble
-
-### Fixed
-
-- **Leader's order export now uses all manuscript preamble settings** — page margins, font, size, paragraph spacing, and heading style override are all sourced from the manuscript preamble, exactly matching what the manuscript preview uses. Previously all of those were hardcoded or ignored.
-
----
-
-## 0.17.8-dev20 — Pane persistence, rubric resize, sticky headings, export fonts
+## [0.17.8] "Still Water" — Print quality, layout fidelity, and persistent settings
 
 ### Added
 
-- **Pane widths remembered across sessions** — the order list / notes split, the element palette width, and the preview panel width are saved to config on exit and restored on next launch.
-- **Rubric area is now drag-to-resize** — the leader instructions area (toggled with the Rubric button) is a proper draggable pane divider rather than a fixed-height box. Drag the handle between the rubric area and the content editor to set your preferred split. The last position is remembered within the session.
+- **Multi-window support** — a new-window button (⧉) in the header bar and `Ctrl+Shift+N` open a second independent window in the same process. Useful for comparing services side-by-side.
+- **Live Typst preview** — a side-by-side preview panel compiles the service to PDF via Typst and renders it live. Compile mode (Auto / Save / Manual) is a cycle button in the justice bar; a ⟳ button in the preview header forces an immediate compile. Defaults to Save mode.
+- **Compact title header for manuscript** — toggle in manuscript Layout settings to show a centred church name / title / date header with a thin rule above the body text.
+- **Pane widths remembered across sessions** — the order list / notes split, the element palette width, and the preview panel width are restored on next launch.
+- **Rubric area is now drag-to-resize** — the leader instructions panel is a draggable pane divider rather than a fixed-height box.
 
 ### Changed
 
-- **Preview now defaults to "Save" mode** — the compile-on-save mode is the default instead of auto. This prevents constant background Typst invocations while typing.
+- **Preview compile mode button in justice bar** — Auto/Save/Manual is a single cycle button on the right side of the justice dates bar, keeping the preview header clean.
+- **Deferred autosave extended to 15 s** — prevents Save mode from recompiling on every keystroke during active editing.
 
 ### Fixed
 
-- **Orphaned element headings (another attempt)** — the heading show rules now use Typst's `above` and `below` block parameters for spacing instead of `v()` calls inside/outside the sticky block. `v()` inside a `block(sticky: true)` can confuse Typst's break logic; `above`/`below` are block-level spacing and interact correctly with sticky. Applied to both `TYPST_SHARED` (bulletin/manuscript) and `_shared.typ` (leader manuscript).
-- **Leader's order PDF now respects manuscript font settings** — `_build_minister_typst()` was hardcoding `#set text(size: 10pt)` regardless of what was set in the manuscript preamble. It now reads `font` and `size` from the manuscript preamble config, the same source the manuscript preview uses.
-
----
-
-## 0.17.8-dev19 — Print directly from compiled PDF via Poppler
-
-### Fixed
-
-- **Print button now prints the actual Typst PDF** — uses Poppler to render each PDF page to a Cairo surface inside a `GtkPrintOperation`, giving a proper print dialog with the full Typst layout (fonts, real columns, etc.). Falls back to HTML only if no compiled PDF exists yet. The HTML table-column layout from dev18 is kept as that fallback.
-
----
-
-## 0.17.8-dev18 — Fix print columns using table layout
-
-### Fixed
-
-- **Print columns now actually appear** — CSS `column-count` is unreliable in WebKitGTK when printing (the engine collapses multi-column content to a single column). Replaced the CSS column approach with an HTML `<table>` layout: bulletin groups are split in half and placed in left/right `<td>` cells, which WebKit renders correctly in the print dialog.
-
----
-
-## 0.17.8-dev17 — Fix sticky headings and print output
-
-### Fixed
-
-- **Orphaned element headings** — the leading space before each element heading was placed *outside* the sticky block, which meant Typst could place that space at the bottom of a column and then start a fresh block for the heading text. Moving the `v(10pt)` inside `block(sticky: true)` ensures the entire heading unit (space + text + rule) either fits in the column or is bumped to the next one together. Same fix applied to level-2 and level-3 headings in `_shared.typ`.
-- **Print button producing black rectangles** — printing via `PrintOperation.new(self._preview_webview)` rasterised WebKit's built-in PDF viewer plugin as solid black boxes. Reverted to HTML printing, with the bulletin service order now wrapped in a CSS `column-count` div that matches the preamble column setting, so the printed HTML layout matches the Typst output.
-
----
-
-## 0.17.8-dev16 — Sticky element headings; print from compiled PDF
-
-### Fixed
-
-- **Element headings no longer orphan at the bottom of a page** — level-2 headings (individual service elements) are now wrapped in `block(sticky: true)`, so Typst will bump the heading to the next page/column rather than leave it stranded with its content starting elsewhere. Same fix applied to level-3 headings in `_shared.typ`.
-- **Print button now prints the Typst-compiled PDF** — when the preview is open and a PDF has been compiled, clicking the print icon (🖨) sends that PDF directly to the print dialog, preserving columns, fonts, and layout. Previously it regenerated an HTML version which had no column layout and ignored preamble fonts.
-
----
-
-## 0.17.8-dev15 — Fix print and leader's order export ignoring manuscript mode
-
-### Fixed
-
-- **Print button now prints the active preview mode** — clicking the print button (🖨) while the manuscript preview is showing now prints the manuscript HTML, not the bulletin. Previously it always printed the bulletin regardless of which tab was active.
-- **Leader's order PDF now includes rubric notes** — the "Leader's order PDF" export (`Export as… → Leader's order PDF`) was silently omitting rubric/leader instruction blocks. They now appear in red italic in the compiled PDF, matching how they look in the manuscript preview.
-
----
-
-## 0.17.8-dev14 — Deferred autosave interval increased to 15 s
-
-### Changed
-
-- **Deferred autosave now fires after 15 seconds** of inactivity (was 2 s). The 2 s save was causing the preview to recompile constantly in "Save" mode since every edit triggered a save almost immediately. 15 s still saves your work promptly when you pause, but gives a clear distinction between "typing" and "done for now". Ctrl+S still saves and compiles instantly.
-
----
-
-## 0.17.8-dev13 — Preview compile mode button in justice bar
-
-### Changed
-
-- **Preview compile mode moved to the justice bar** — the Auto/Save/Manual selector is now a single cycle button on the right side of the justice dates bar. Clicking it steps through Auto → Save → Manual → Auto. The button appears when the preview panel is open and keeps the justice bar visible while the preview is showing.
-- Removed the linked Auto/Save/Manual button group from the preview panel header; the ⟳ compile button remains there.
-
----
-
-## 0.17.8-dev12 — Manuscript compact title header
-
-### Added
-
-- **Compact title header for manuscript** — the manuscript can now show a centred header at the top with the church name (bold small-caps), service title (bold), and date, followed by a thin rule. Controlled by a new "Compact title header" toggle in the manuscript Layout settings (on by default). Toggling it off produces the previous headerless output.
-
----
-
-## 0.17.8-dev10 — Preview compile mode selector and compile button
-
-### Added
-
-- **Compile mode selector** — the preview panel header now shows three linked buttons: **Auto** (recompile whenever the service changes, 700 ms debounce), **Save** (recompile each time the file is saved), and **Manual** (only recompile when you click the button). Default is Auto.
-- **Compile button** — a refresh button (⟳) in the preview header triggers an immediate compile in any mode.
-- Removed the old "Live" HTML-preview toggle; the HTML fallback still activates automatically when Typst is unavailable.
-
----
-
-## 0.17.8-dev8 — Preview compile throttling; unique PDF path per window
-
-### Fixed
-
-- **Preview no longer busy-polls during compilation** — previously, if a change arrived while Typst was compiling, the app would poll every 500 ms waiting for the compile to finish, then immediately start another. Now a "dirty" flag is set instead; the next compile is scheduled 200 ms after the current one finishes. This eliminates the repeated `_do_preview_update` wakeups during a compile.
-- **Multiple windows no longer share a preview PDF file** — each window now writes to its own `preview_<mode>_<window-id>.pdf`, so two open windows can compile their previews concurrently without clobbering each other.
-
----
-
-## 0.17.8-dev7 — Manuscript section headings: single columns block (no breaks)
-
-### Fixed
-
-- **Manuscript section headings no longer cause column/section breaks** — the manuscript now uses a single `#columns()` block for all content (same structure as the bulletin since dev5), so section headings (Gathering, Word, Response, Sending) flow continuously within the columns without any implicit break between sections.
-
----
-
-## 0.17.8-dev6 — Section headings: no rule, flow in column (bulletin + manuscript)
-
-### Fixed
-
-- **No horizontal rule above section headings** — removed the decorative rule that appeared above Gathering / Word / Response / Sending headings in both bulletin and manuscript mode. They now read as plain centred small-caps text without any preceding line.
-- **Manuscript section headings now flow inside the two-column block** — same structural fix applied in dev5 for the bulletin: section headings in the manuscript no longer sit outside `#columns()`, so they flow naturally within whichever column they land in rather than forcing a break before each section.
-
----
-
-## 0.17.8-dev5 — Bulletin section headings inside columns
-
-### Fixed
-
-- **Section headings now flow inside the two-column block** — previously each section (Gathering, Word, Response, Sending) placed its heading outside `#columns()`, creating an implicit break between sections. All service-order content now lives in a single `#columns()` block so headings flow within the columns like everything else, with no page or column breaks forced by section titles.
-
----
-
-## 0.17.8-dev4 — Multiple windows; heading spacing
-
-### Added
-
-- **New Window** — a new-window button (⧉) in the header bar and `Ctrl+Shift+N` open a second independent Rubric window in the same process. Useful for comparing liturgies side-by-side and moving elements between services. Launching a second instance from the terminal or app launcher also opens a new window rather than raising the existing one.
-
-### Fixed
-
-- **Heading spacing in manuscript** — the gap below element headings (bold small-caps + rule) and movement headings increased from 4 pt to 6 pt, ensuring at least as much clearance as a normal paragraph gap. The gap between the heading text and its rule also increased from 1 pt to 2 pt.
-
----
-
-## 0.17.8-dev3 — Heading spacing in manuscript
-
-### Fixed
-
-- **Headings no longer touch the following text** — the space below element headings (bold small-caps + rule) and movement headings increased from 4 pt to 6 pt, giving at least as much clearance as the normal paragraph gap. The gap between the heading text and its rule also bumped from 1 pt to 2 pt.
-
----
-
-## 0.17.8-dev2 — Font picker driven by Typst
-
-### Fixed
-
-- **Font picker now shows only fonts Typst can actually use** — previously the picker was populated from Pango/fontconfig, which exposes variable-font axis values as separate family names (e.g. "Crimson Pro ExtraBold", "EB Garamond Medium", "Junicode Light"). Selecting those names caused Typst to silently fall back to its default font. The picker now runs `typst fonts` with the same `--font-path` arguments used at compile time, so every listed font renders correctly in the preview and exported PDF.
-
----
-
-## 0.17.8-dev1 — PDF toolbar fix; planning notes no longer trigger preview
-
-### Fixed
-
-- **PDF viewer toolbar overflow** — WebKit's built-in PDF toolbar now stays compact in the narrow preview pane via injected CSS: `height: auto`, `flex-wrap: nowrap`, and unified `font-size: 13px` across the page-number input and "of N" label so they match.
-- **Service Notes no longer trigger a preview redraw** — typing in the planning notes area previously called `_mark_modified()`, which scheduled a Typst recompile and caused the preview to flash on every keystroke. Notes changes now only update the modified flag and schedule autosave.
+- **Print button now sends the Typst-compiled PDF to the printer** — uses Poppler to render each page into a `GtkPrintOperation`, preserving fonts, columns, and layout. Falls back to HTML (with table-based 2-column layout) if no compiled PDF exists yet. Previously printing via WebKit's PDF plugin produced solid black rectangles.
+- **Element headings no longer orphan at the bottom of a column** — `block(above:, below:, sticky: true)` using Typst's block-level spacing parameters prevents headings from being stranded at the bottom of a column without any following content.
+- **Section headings flow inside the two-column block** — section headings no longer sit outside `#columns()`, eliminating implicit column breaks at every section boundary.
+- **No horizontal rule above section headings.**
+- **Leader's order PDF now matches the manuscript preview** — uses the full manuscript preamble (margins, font, size, paragraph spacing) instead of hardcoded values. Section headings correctly use level-1 Typst headings, matching the style and size seen in the preview.
+- **Leader's order PDF includes rubric notes** — red-italic leader instruction blocks now appear in the exported PDF.
+- **Print button respects the active preview mode** — printing while the manuscript preview is open prints the manuscript, not the bulletin.
+- **Font picker shows only fonts Typst can actually use** — the picker now queries `typst fonts` so variable-font axis entries from fontconfig (which Typst ignores) are excluded.
+- **Preview no longer busy-polls during compilation** — a dirty flag replaces the 500 ms poll loop; the next compile is scheduled 200 ms after the current one finishes.
+- **Multiple windows no longer share a preview PDF file** — each window writes to its own `preview_<mode>_<window-id>.pdf`.
 
 ---
 

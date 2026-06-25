@@ -41,6 +41,21 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.8" date="2026-06-25">
+      <description>
+        <p>0.17.8 "Still Water" — Print quality, layout fidelity, and persistent settings.</p>
+        <ul>
+          <li>Print button now sends the Typst-compiled PDF directly to the printer via Poppler, preserving fonts, columns, and layout.</li>
+          <li>Leader's order PDF now matches the manuscript preview: full preamble settings (margins, font, size) applied, section headings at the correct level.</li>
+          <li>Pane widths (order list, palette, preview panel) are remembered across sessions.</li>
+          <li>Rubric leader instructions area is now a drag-to-resize pane.</li>
+          <li>Element headings no longer orphan at the bottom of a column.</li>
+          <li>Section headings flow inside the two-column block without implicit column breaks.</li>
+          <li>Live preview with Auto/Save/Manual compile mode; defaults to Save mode.</li>
+          <li>Multi-window support (⧉ button or Ctrl+Shift+N).</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.7" date="2026-06-23">
       <description>
         <p>0.17.7 "Tended Ground" — Service notes, justice bar, and unified dates editor.</p>

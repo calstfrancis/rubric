@@ -1,4 +1,4 @@
-# Rubric v0.17.7 "Tended Ground"
+# Rubric v0.17.8 "Still Water"
 
 Install via Flatpak:
 
@@ -18,11 +18,17 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Service Notes** — a collapsible text area above the service order for theology, metaphors, movement notes, or any pre-service reflection. Not included in the bulletin or manuscript. A pop-out button opens the same notes in a floating window sharing the same text buffer — useful on a second monitor while building the service.
+**Print from the compiled PDF** — the print button now sends the Typst-compiled PDF directly to the print dialog via Poppler, preserving fonts, columns, and exact layout. Previously printing went through WebKit's HTML renderer and produced black rectangles or missing columns.
 
-**Justice / observances bar** — a second status bar row surfaces upcoming and recent social justice, indigenous, ecological, and pride observances as coloured chips. A calendar icon opens the full dates editor.
+**Leader's order export matches the preview** — the leader's order PDF now uses the full manuscript preamble (margins, font, size, paragraph spacing, heading style), so the exported PDF looks the same as the manuscript preview. Section headings are also correctly sized.
 
-**Unified dates spreadsheet** — all built-in observances and custom dates are now in one editable spreadsheet. Every row (Month, Day, Name, Type) can be edited or deleted. Reset to defaults at any time from the header bar.
+**Layout settings persist** — the order list / notes split, the element palette width, and the preview panel width are all remembered across sessions and restored on next launch.
+
+**Drag-to-resize rubric area** — the leader instructions field is now a draggable pane rather than a fixed-height box.
+
+**Live preview with compile modes** — the side-by-side Typst preview now defaults to "Save" mode (compile on Ctrl+S or autosave) instead of auto-compile on every keystroke, reducing background CPU usage. Auto and Manual modes are still available via the cycle button in the justice bar.
+
+**Multi-window support** — open a second service window with ⧉ in the header bar or Ctrl+Shift+N.
 
 ---
 
