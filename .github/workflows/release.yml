@@ -1,4 +1,4 @@
-name: Release packages
+name: Release
 
 on:
   push:
@@ -6,8 +6,7 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  build-packages:
-    name: Build .deb and .rpm
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -15,31 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install rpmbuild
-        run: sudo apt-get install -y rpm
-
-      - name: Download typst binary
-        run: |
-          TYPST_VERSION="v0.14.2"
-          curl -fsSL "https://github.com/typst/typst/releases/download/${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" \
-            | tar -xJ --strip-components=1 -C /usr/local/bin \
-                typst-x86_64-unknown-linux-musl/typst
-          typst --version
-
-      - name: Build .deb
-        run: bash build-deb.sh
-
-      - name: Build .rpm
-        run: bash build-rpm.sh
-
-      - name: Collect packages
-        run: ls -lh *.deb *.rpm
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Rubric ${{ github.ref_name }}"
           body_path: RELEASE.md
-          files: |
-            *.deb
-            *.rpm
