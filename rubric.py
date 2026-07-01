@@ -3482,8 +3482,8 @@ class MainWindow(Adw.ApplicationWindow):
             _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
             _ico.set_margin_start(2)
             row.add_prefix(_ico)
-        handle = Gtk.Image.new_from_icon_name("list-drag-symbolic")
-        handle.set_pixel_size(12); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
+        handle = Gtk.Label(label="⠿")
+        handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
         row.add_suffix(handle)
         if not si.show_in_bulletin:
@@ -3506,8 +3506,8 @@ class MainWindow(Adw.ApplicationWindow):
         stripe.set_draw_func(_draw_stripe)
         stripe.set_valign(Gtk.Align.FILL)
         bx.append(stripe)
-        handle = Gtk.Image.new_from_icon_name("list-drag-symbolic")
-        handle.set_pixel_size(12); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
+        handle = Gtk.Label(label="⠿")
+        handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
         bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
@@ -11300,8 +11300,8 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
   50%       { opacity: 0.35; }
 }
 .unsaved-pulse { animation: rubric-unsaved-pulse 1.6s ease-in-out infinite; }
-/* Preview pane: medium-gray desk surface so pages appear to float */
-.preview-pane { background-color: #c8c7c4; padding: 12px; }
+/* Preview pane: warm off-white page background */
+.preview-pane { background-color: #fafaf8; }
 /* Cover art thumbnail: rounded corners */
 .cover-thumb { border-radius: 4px; }
 """)
