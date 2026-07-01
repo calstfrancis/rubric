@@ -4,6 +4,19 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.9-dev1] — Polish: undo toast, word count, duplicate element, and more
+
+### Added
+
+- **Undo button on element removal** — deleting an element via the Remove button or the drag-to-delete handles now shows a toast with an "Undo" button, so accidental removals are recoverable without hunting for Ctrl+Z.
+- **Word count chip in status bar** — a live "N words · ~M min" chip appears in the status bar right once the service has content, counting spoken words (leader notes excluded) at 130 wpm.
+- **Duplicate element (Ctrl+Shift+D)** — duplicates the selected element (or section divider) and inserts the copy directly below it, preserving all fields.
+- **Auto-focus on element add** — adding an element from the palette now focuses the Leader field immediately; opening "Add custom element" (Ctrl+Shift+N) focuses the name entry.
+- **Planner "Today" button** — a "Today" button in the Service Planner header switches to calendar view and scrolls to this Sunday's row.
+- **Recently opened in Archive tab** — the Archive tab now shows a "Recently opened" section at the top (up to 8 files) when no search is active, for quick re-access.
+- **Compile error element attribution** — when a manuscript Typst compile fails with a line number, the toast now names the specific element whose content triggered the error.
+- **Duplicate element in shortcuts window** — Ctrl+Shift+D is listed in the keyboard shortcuts overlay (Ctrl+?).
+
 ## [0.17.8] "Still Water" — Print quality, layout fidelity, and persistent settings
 
 ### Added

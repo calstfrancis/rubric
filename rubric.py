@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.8"
+APP_VERSION = "0.17.9-dev1"
 
 
 config = Config()
@@ -2124,6 +2124,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("copy-as-text",       self._copy_as_text,                  "<Ctrl><Shift>t"),
             ("toggle-bulletin-edit", self._toggle_bulletin_edit,        None),
             ("show-shortcuts",     self._show_shortcuts_window,         "<Ctrl>question"),
+            ("duplicate-item",     self.duplicate_item,                 "<Ctrl><Shift>d"),
         ]:
             a = Gio.SimpleAction.new(name, None)
             a.connect("activate", lambda _a,_p,f=cb: f()); self.add_action(a)
@@ -2377,6 +2378,15 @@ class MainWindow(Adw.ApplicationWindow):
         _right_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         _right_box.set_halign(Gtk.Align.END)
         _right_box.set_margin_end(2)
+
+        # Word count chip — updates as content changes
+        self._word_count_lbl = Gtk.Label()
+        self._word_count_lbl.add_css_class("caption")
+        self._word_count_lbl.add_css_class("dim-label")
+        self._word_count_lbl.set_margin_start(4); self._word_count_lbl.set_margin_end(6)
+        self._word_count_lbl.set_visible(False)
+        self._word_count_lbl.set_tooltip_text("Approximate spoken word count and reading time")
+        _right_box.append(self._word_count_lbl)
 
         # Save-state chip — shows "● Unsaved" when modified, hidden when saved
         self._save_state_lbl = Gtk.Label()
@@ -3788,6 +3798,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._fill_palette_inner()
         else:
             self._refresh_recently_used()
+        GLib.idle_add(self.leader_entry.grab_focus)
     def _add_selected_palette_item(self):
         for lb in self._palette_listboxes.values():
             r = lb.get_selected_row()
@@ -3832,15 +3843,28 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_entries.insert(ins, e); self._refresh_order_list(ins); self._mark_modified()
 
     def _remove_at(self, idx):
+        if not (0 <= idx < len(self.service_entries)): return
+        entry = self.service_entries[idx]
+        label = entry.title if entry.is_divider else entry.name
         self._push_undo()
-        if 0 <= idx < len(self.service_entries): del self.service_entries[idx]; self._refresh_order_list(idx); self._mark_modified()
+        del self.service_entries[idx]; self._refresh_order_list(idx); self._mark_modified()
+        toast = Adw.Toast.new(f'"{label}" removed')
+        toast.set_timeout(6); toast.set_button_label("Undo")
+        toast.connect("button-clicked", lambda _: self.undo())
+        self._toast_overlay.add_toast(toast)
 
     # ── Order actions ─────────────────────────────────────────────────────────
 
     def remove_item(self):
         idx = self._selected_index()
         if idx < 0: return
+        entry = self.service_entries[idx]
+        label = entry.title if entry.is_divider else entry.name
         self._push_undo(); del self.service_entries[idx]; self._refresh_order_list(idx); self._mark_modified()
+        toast = Adw.Toast.new(f'"{label}" removed')
+        toast.set_timeout(6); toast.set_button_label("Undo")
+        toast.connect("button-clicked", lambda _: self.undo())
+        self._toast_overlay.add_toast(toast)
 
     def move_up(self):
         idx = self._selected_index()
@@ -3945,6 +3969,25 @@ class MainWindow(Adw.ApplicationWindow):
         outer.append(btn_row)
 
         tv.set_content(outer); win.set_content(tv); win.present()
+        GLib.idle_add(name_row.grab_focus)
+
+    def duplicate_item(self):
+        """Duplicate the currently selected element and insert it immediately after."""
+        idx = self._selected_index()
+        if idx < 0: return
+        entry = self.service_entries[idx]
+        if entry.is_divider:
+            dup = SectionDivider(entry.title)
+        else:
+            dup = ServiceItem(entry.name, entry.section)
+            for attr in ("content_typst", "leader", "rubric_note", "duration",
+                         "show_in_bulletin", "bulletin_heading_only", "bulletin_summary", "icon"):
+                if hasattr(entry, attr):
+                    setattr(dup, attr, getattr(entry, attr))
+        self._push_undo()
+        self.service_entries.insert(idx + 1, dup)
+        self._refresh_order_list(idx + 1)
+        self._mark_modified()
 
     def duplicate_service(self):
         entries = [_entry_from_dict(e.to_dict()) for e in self.service_entries]
@@ -4369,6 +4412,7 @@ class MainWindow(Adw.ApplicationWindow):
             row.set_subtitle(sub)
         self._mark_modified()
         self._detect_scripture_ref(content)
+        self._update_word_count()
 
     def _on_rubric_note_changed(self, text: str):
         """Called by ElementContentWidget when the rubric note is edited."""
@@ -5314,8 +5358,18 @@ class MainWindow(Adw.ApplicationWindow):
                 err = (result.stderr or result.stdout or "").strip()
                 GLib.idle_add(self._preview_compile_done)
                 if err:
-                    short = format_typst_error(err)[:100]
-                    GLib.idle_add(lambda msg=short: self._show_toast(f"Preview: {msg}", timeout=4))
+                    from rubric_package.utils.typst import parse_typst_errors as _pte2
+                    _errs2 = _pte2(err)
+                    short = format_typst_error(err)[:90]
+                    _line2 = _errs2[0]["line"] if _errs2 else None
+                    def _show_preview_err(msg=short, line=_line2):
+                        _prefix2 = ""
+                        if line:
+                            _eidx2 = self._item_idx_from_error_line(line)
+                            if 0 <= _eidx2 < len(self.service_entries):
+                                _prefix2 = f"{self.service_entries[_eidx2].name}: "
+                        self._show_toast(f"Preview error — {_prefix2}{msg}", timeout=4)
+                    GLib.idle_add(_show_preview_err)
         except subprocess.TimeoutExpired:
             GLib.idle_add(self._preview_compile_done)
         except Exception:
@@ -7823,12 +7877,26 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 target.append(linebreak_fix(escape_unmatched_brackets(si.content_typst)))
             target.append('')
 
+        # Track which Typst line each service item starts on for compile-error attribution.
+        preamble_src = "\n".join(parts)
+        _cur_line = preamble_src.count('\n') + 2  # +1 for join newline, +1 for 1-based
+        self._ms_item_line_map: dict[int, int] = {}  # start_line → service_entries index
+
         _all_ms_items: list[str] = []
         for sec, items in groups:
             if sec:
                 _all_ms_items += [f'= {_typst_escape(sec)}', '']
+                _cur_line += 2
             for si in items:
+                try:
+                    _global_idx = self.service_entries.index(si)
+                except ValueError:
+                    _global_idx = -1
+                self._ms_item_line_map[_cur_line] = _global_idx
+                _before = len(_all_ms_items)
                 _render_ms_item(si, _all_ms_items)
+                for _s in _all_ms_items[_before:]:
+                    _cur_line += _s.count('\n') + 1
 
         if _ms_cols >= 2:
             _ms_gutter = config.preamble.get("manuscript", {}).get("gutter", 1.0)
@@ -7842,6 +7910,17 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             parts += _all_ms_items + ['']
 
         return "\n".join(parts) + "\n"
+
+    def _item_idx_from_error_line(self, line_no: int) -> int:
+        """Return service_entries index for the item whose Typst block contains line_no."""
+        m = getattr(self, "_ms_item_line_map", {})
+        if not m:
+            return -1
+        best_idx, best_line = -1, -1
+        for start, idx in m.items():
+            if start <= line_no and start > best_line:
+                best_idx, best_line = idx, start
+        return best_idx
 
     def _write_typst(self, path: str) -> bool:
         """Write manuscript Typst to path, record as linked file, save the .liturgy.
@@ -7946,9 +8025,17 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
 
         if result.returncode != 0:
             err = (result.stderr or result.stdout or "").strip()
+            from rubric_package.utils.typst import parse_typst_errors as _pte
+            _errs = _pte(err) if err else []
             msg = format_typst_error(err) if err else "typst error"
+            _line = _errs[0]["line"] if _errs else None
+            _prefix = ""
+            if _line:
+                _eidx = self._item_idx_from_error_line(_line)
+                if 0 <= _eidx < len(self.service_entries):
+                    _prefix = f"{self.service_entries[_eidx].name}: "
             self._show_toast(
-                f"Compilation failed: {msg[:120]} — full log at ~/.cache/rubric/compile-error.log",
+                f"Compile error — {_prefix}{msg[:100]} (see ~/.cache/rubric/compile-error.log)",
                 timeout=15,
             )
             return
@@ -8072,17 +8159,36 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
         timed = [e for e in items if getattr(e, "duration", 0) > 0]
         if not timed:
             self._time_bar.set_visible(False)
-            return
-        total = sum(e.duration for e in timed)
-        self._time_bar.set_visible(True)
-        # Simple over-time warning: assume ~75 min typical service
-        TARGET = 75
-        if total > TARGET:
-            self._time_bar.set_markup(
-                f'<span color="#B91C1C">~{total} min total</span>'
-                f'<span color="#B91C1C" size="small">  ({total - TARGET} over)</span>')
         else:
-            self._time_bar.set_markup(f'<span color="#15803D">~{total} min total</span>')
+            total = sum(e.duration for e in timed)
+            self._time_bar.set_visible(True)
+            TARGET = 75
+            if total > TARGET:
+                self._time_bar.set_markup(
+                    f'<span color="#B91C1C">~{total} min total</span>'
+                    f'<span color="#B91C1C" size="small">  ({total - TARGET} over)</span>')
+            else:
+                self._time_bar.set_markup(f'<span color="#15803D">~{total} min total</span>')
+        self._update_word_count()
+
+    def _update_word_count(self):
+        """Recompute word count across all service items and update the status chip."""
+        import re as _re
+        total = 0
+        for e in self.service_entries:
+            if not isinstance(e, ServiceItem):
+                continue
+            text = strip_typst_plain(e.content_typst or "")
+            # strip leader notes (not spoken by congregation)
+            text = strip_leader_notes(text)
+            words = _re.split(r'\s+', text.strip())
+            total += sum(1 for w in words if w)
+        if total < 10:
+            self._word_count_lbl.set_visible(False)
+        else:
+            mins = max(1, round(total / 130))
+            self._word_count_lbl.set_text(f"{total:,} words · ~{mins} min")
+            self._word_count_lbl.set_visible(True)
 
     # ── Hymn suggestions ──────────────────────────────────────────────────────
 
@@ -9105,6 +9211,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;z</property><property name='title'>Redo</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;n</property><property name='title'>Add custom element</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;d</property><property name='title'>Add section divider</property></object></child>
+            <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;&lt;shift&gt;d</property><property name='title'>Duplicate element</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;Up</property><property name='title'>Move element up</property></object></child>
             <child><object class='GtkShortcutsShortcut'><property name='accelerator'>&lt;ctrl&gt;Down</property><property name='title'>Move element down</property></object></child>
           </object>
@@ -9316,6 +9423,10 @@ class ServicesWindow(Adw.Window):
         self._planner_folder_lbl.set_hexpand(True); self._planner_folder_lbl.set_xalign(0)
         self._planner_folder_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         top.append(self._planner_folder_lbl)
+        today_btn = Gtk.Button(label="Today", tooltip_text="Jump to this Sunday (Ctrl+T)")
+        today_btn.add_css_class("flat")
+        today_btn.connect("clicked", lambda _: self._planner_jump_to_today())
+        top.append(today_btn)
         choose_btn = Gtk.Button(label="Folder…"); choose_btn.add_css_class("flat")
         choose_btn.connect("clicked", self._on_choose_folder); top.append(choose_btn)
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
@@ -9350,6 +9461,7 @@ class ServicesWindow(Adw.Window):
         # Calendar view
         cal_scroll = Gtk.ScrolledWindow(); cal_scroll.set_vexpand(True)
         cal_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._planner_cal_scroll = cal_scroll
         self._planner_cal_box = Gtk.ListBox()
         self._planner_cal_box.set_selection_mode(Gtk.SelectionMode.NONE)
         self._planner_cal_box.add_css_class("boxed-list")
@@ -9357,6 +9469,7 @@ class ServicesWindow(Adw.Window):
         self._planner_cal_box.set_margin_top(8); self._planner_cal_box.set_margin_bottom(12)
         cal_scroll.set_child(self._planner_cal_box)
         self._planner_view_stack.add_named(cal_scroll, "calendar")
+        self._planner_today_row: "Gtk.Widget | None" = None
 
         def on_view_toggle(btn):
             if btn.get_active():
@@ -9367,6 +9480,14 @@ class ServicesWindow(Adw.Window):
 
         box.append(self._planner_view_stack)
         return box
+
+    def _planner_jump_to_today(self):
+        """Switch to calendar view and scroll to this Sunday's row."""
+        self._planner_cal_btn.set_active(True)
+        self._planner_view_stack.set_visible_child_name("calendar")
+        row = getattr(self, "_planner_today_row", None)
+        if row:
+            GLib.idle_add(row.grab_focus)
 
     def _init_planner_folder(self):
         repo = config.github_repo
@@ -9649,6 +9770,9 @@ class ServicesWindow(Adw.Window):
             if is_past and not has_service:
                 row.add_css_class("dim-label")
 
+            if sunday == last_sunday:
+                self._planner_today_row = row
+
             self._planner_cal_box.append(row)
 
     # ── Library tab ───────────────────────────────────────────────────────────
@@ -9844,6 +9968,25 @@ class ServicesWindow(Adw.Window):
     def _arch_rebuild(self, query: str):
         self._arch_search = query
         while self._arch_list.get_first_child(): self._arch_list.remove(self._arch_list.get_first_child())
+
+        # Show recently opened files at the top when not filtering
+        if not query:
+            recent = [p for p in config.recent_files if Path(p).exists()]
+            if recent:
+                hdr = Gtk.ListBoxRow(); hdr.set_selectable(False); hdr.set_activatable(False)
+                lbl = Gtk.Label(label="Recently opened"); lbl.add_css_class("caption")
+                lbl.add_css_class("dim-label"); lbl.set_xalign(0)
+                lbl.set_margin_start(12); lbl.set_margin_top(8); lbl.set_margin_bottom(4)
+                hdr.set_child(lbl); self._arch_list.append(hdr)
+                for rpath in recent[:8]:
+                    p = Path(rpath)
+                    row = Adw.ActionRow(title=p.stem, subtitle=str(p.parent))
+                    row.set_activatable(True)
+                    row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+                    row.connect("activated", lambda _r, _p=rpath: self._open_service(_p))
+                    self._arch_list.append(row)
+                self._arch_list.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
         try:
             from rubric_package.db import element_services, element_for_service
         except ImportError:
