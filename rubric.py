@@ -28,7 +28,7 @@ try:
         strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
         format_typst_error,
     )
-    from rubric_package.utils.colors import section_colour, hex_to_rgb
+    from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
     from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS as _HYMN_KW
     from rubric_package.views.element_content import ElementContentWidget
 except ImportError as _pkg_err:
@@ -1950,6 +1950,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._simple_status_lbl.set_markup("<b>SIMPLE</b>")
             else:
                 self._simple_status_lbl.set_text("SIMPLE")
+        if hasattr(self, "_simple_status_btn"):
+            self._toggle_chip(self._simple_status_btn, simple)
         if hasattr(self, "_dev_status_btn"):
             self._dev_status_btn.set_visible(not simple)
         if hasattr(self, "_gost_status_btn"):
@@ -1973,10 +1975,19 @@ class MainWindow(Adw.ApplicationWindow):
                 self._gost_status_lbl.set_markup("<b>GOST</b>")
             else:
                 self._gost_status_lbl.set_text("GOST")
+        if hasattr(self, "_gost_status_btn"):
+            self._toggle_chip(self._gost_status_btn, config.gost_mode)
         if config.gost_mode:
             self._gost_css.load_from_data(b"* { font-family: 'GOST type B'; }")
         else:
             self._gost_css.load_from_data(b"")
+
+    def _toggle_chip(self, btn: Gtk.Widget, active: bool) -> None:
+        """Add/remove the active-pill visual on a status bar toggle button."""
+        if active:
+            btn.add_css_class("mode-btn-active")
+        else:
+            btn.remove_css_class("mode-btn-active")
 
     def _on_compact_status_clicked(self, _btn):
         config.compact_mode = not config.compact_mode
@@ -1993,6 +2004,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._compact_status_lbl.set_markup("<b>Compact</b>")
             else:
                 self._compact_status_lbl.set_text("Compact")
+        if hasattr(self, "_compact_status_btn"):
+            self._toggle_chip(self._compact_status_btn, config.compact_mode)
 
     def _on_dev_status_clicked(self, _btn):
         self._dev_mode = not getattr(self, "_dev_mode", False)
@@ -2004,6 +2017,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._typst_edit_lbl.set_markup("<b>Typst</b>")
         else:
             self._typst_edit_lbl.set_text("Typst")
+        self._toggle_chip(self._typst_edit_btn, self._typst_edit_active)
         if hasattr(self, "_content_widget"):
             self._content_widget.set_typst_mode(self._typst_edit_active)
 
@@ -2014,6 +2028,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._dev_status_lbl.set_markup("<b>Dev</b>")
             else:
                 self._dev_status_lbl.set_text("Dev")
+        if hasattr(self, "_dev_status_btn"):
+            self._toggle_chip(self._dev_status_btn, dev)
         if hasattr(self, "_preview_copy_typst_bar"):
             self._preview_copy_typst_bar.set_visible(dev)
         if hasattr(self, "_typst_edit_btn"):
@@ -2382,7 +2398,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Word count chip — updates as content changes
         self._word_count_lbl = Gtk.Label()
         self._word_count_lbl.add_css_class("caption")
-        self._word_count_lbl.add_css_class("dim-label")
+        self._word_count_lbl.add_css_class("metric-pill")
         self._word_count_lbl.set_margin_start(4); self._word_count_lbl.set_margin_end(6)
         self._word_count_lbl.set_visible(False)
         self._word_count_lbl.set_tooltip_text("Approximate spoken word count and reading time")
@@ -2519,6 +2535,13 @@ class MainWindow(Adw.ApplicationWindow):
         self._toast_overlay.set_child(paned)
         tv.set_content(self._toast_overlay)
         self.set_content(tv)
+
+        # Per-season reading chip tint — updated whenever the liturgical date changes
+        self._reading_chip_css = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(), self._reading_chip_css,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
         self._apply_simple_mode()
         self._apply_gost_mode()
 
@@ -2650,6 +2673,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_preamble_clicked(self, _btn):
         self._preamble_active = not self._preamble_active
+        self._toggle_chip(self._preamble_btn, self._preamble_active)
         if self._preamble_active:
             self._preamble_lbl.set_markup("<b>Template</b>")
             self._main_stack.set_visible_child_name("preamble")
@@ -3054,7 +3078,7 @@ class MainWindow(Adw.ApplicationWindow):
         chips_box.set_hexpand(True); chips_box.set_halign(Gtk.Align.END)
         for key in ("ot", "psalm", "epistle", "gospel"):
             btn = Gtk.Button(label=self._reading_abbrs[key])
-            btn.add_css_class("pill"); btn.add_css_class("flat")
+            btn.add_css_class("pill"); btn.add_css_class("flat"); btn.add_css_class("reading-chip")
             btn.set_sensitive(False)
             btn.set_tooltip_text(self._reading_labels[key])
             btn.connect("clicked", lambda _b, k=key: self._on_reading_clicked(k))
@@ -3182,7 +3206,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._time_bar.set_xalign(1.0)
         self._time_bar.set_margin_start(12); self._time_bar.set_margin_end(12)
         self._time_bar.set_margin_top(2); self._time_bar.set_margin_bottom(0)
-        self._time_bar.add_css_class("dim-label")
+        self._time_bar.add_css_class("caption")
+        self._time_bar.add_css_class("metric-pill")
         self._time_bar.set_visible(False)
         order_box.append(self._time_bar)
 
@@ -3406,25 +3431,29 @@ class MainWindow(Adw.ApplicationWindow):
     def _build_planning_notes_area(self) -> Gtk.Box:
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Header bar: label + expand toggle + pop-out button
+        # Header bar: label + arrow indicator + pop-out button
+        # The entire header is clickable (via GestureClick); the pop-out button is separate
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         hdr.set_margin_start(12); hdr.set_margin_end(6)
         hdr.set_margin_top(2); hdr.set_margin_bottom(2)
+        hdr.add_css_class("notes-header")
 
         lbl = Gtk.Label(label="Service Notes")
         lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
         lbl.set_xalign(0); lbl.set_hexpand(True)
         hdr.append(lbl)
 
+        arrow_img = Gtk.Image.new_from_icon_name("pan-down-symbolic")
+        arrow_img.set_pixel_size(12); arrow_img.set_valign(Gtk.Align.CENTER)
+        arrow_img.add_css_class("dim-label")
+        arrow_img.set_margin_end(4)
+        hdr.append(arrow_img)
+
         popout_btn = Gtk.Button(icon_name="window-new-symbolic",
                                 tooltip_text="Open in pop-out window")
         popout_btn.add_css_class("flat"); popout_btn.add_css_class("circular")
         hdr.append(popout_btn)
 
-        toggle_btn = Gtk.ToggleButton(icon_name="pan-down-symbolic",
-                                      tooltip_text="Show / hide service notes")
-        toggle_btn.add_css_class("flat"); toggle_btn.add_css_class("circular")
-        hdr.append(toggle_btn)
         outer.append(hdr)
 
         # Revealer containing the text area
@@ -3453,12 +3482,14 @@ class MainWindow(Adw.ApplicationWindow):
         outer.append(rev)
         outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        def _toggle(_btn):
+        def _toggle(_=None):
             revealed = not rev.get_reveal_child()
             rev.set_reveal_child(revealed)
-            toggle_btn.set_icon_name("pan-up-symbolic" if revealed else "pan-down-symbolic")
+            arrow_img.set_from_icon_name("pan-up-symbolic" if revealed else "pan-down-symbolic")
 
-        toggle_btn.connect("clicked", _toggle)
+        hdr_click = Gtk.GestureClick()
+        hdr_click.connect("released", lambda _g, _n, _x, _y: _toggle())
+        hdr.add_controller(hdr_click)
         popout_btn.connect("clicked", lambda _: self._open_planning_notes_window())
 
         return outer
@@ -3498,8 +3529,11 @@ class MainWindow(Adw.ApplicationWindow):
         row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
         row.set_subtitle_lines(1); row._entry = si
         colour = _section_colour(si.section)
-        dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER)
-        row.add_prefix(dot)
+        try:
+            _cidx = SECTION_COLORS.index(colour)
+            row.add_css_class(f"section-c{_cidx}")
+        except ValueError:
+            row.add_css_class("section-gray")
         # User-assigned icon takes priority; fall back to auto type icon
         user_icon = getattr(si, "icon", "")
         _ico_name = user_icon or _item_type_icon(si.name)
@@ -3508,7 +3542,9 @@ class MainWindow(Adw.ApplicationWindow):
             _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
             _ico.set_margin_start(2)
             row.add_prefix(_ico)
-        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER)
+        handle = Gtk.Image.new_from_icon_name("list-drag-symbolic")
+        handle.set_pixel_size(12); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
+        handle.set_valign(Gtk.Align.CENTER)
         row.add_suffix(handle)
         if not si.show_in_bulletin:
             row.set_opacity(0.45)
@@ -3519,19 +3555,21 @@ class MainWindow(Adw.ApplicationWindow):
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row._entry = div
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        bx.set_margin_top(4); bx.set_margin_bottom(4); bx.set_margin_start(8); bx.set_margin_end(8)
-        bx.add_css_class("divider-pill")
+        bx.set_margin_top(2); bx.set_margin_bottom(2)
+        bx.add_css_class("divider-header")
         colour = _section_colour(div.title)
         # Left accent stripe in section colour
         r, g, b = _hex_to_rgb(colour)
-        stripe = Gtk.DrawingArea(); stripe.set_size_request(4, -1)
+        stripe = Gtk.DrawingArea(); stripe.set_size_request(6, -1)
         def _draw_stripe(_da, cr, _w, _h, _r=r, _g=g, _b=b):
             cr.set_source_rgb(_r, _g, _b); cr.paint()
         stripe.set_draw_func(_draw_stripe)
         stripe.set_valign(Gtk.Align.FILL)
         bx.append(stripe)
-        dot = Gtk.Label(); dot.set_markup(f'<span color="{colour}">⬤</span>'); dot.set_valign(Gtk.Align.CENTER); bx.append(dot)
-        handle = Gtk.Label(label="⠿"); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle"); handle.set_valign(Gtk.Align.CENTER); bx.append(handle)
+        handle = Gtk.Image.new_from_icon_name("list-drag-symbolic")
+        handle.set_pixel_size(12); handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
+        handle.set_valign(Gtk.Align.CENTER)
+        bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
         bx.append(tl)
@@ -4630,7 +4668,10 @@ class MainWindow(Adw.ApplicationWindow):
             r8, g8, b8 = (int(cx.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
             self._season_hdr_css.load_from_data(
                 f".rubric-main-hdr {{ background-image: linear-gradient("
-                f"to right, rgba({r8},{g8},{b8},0.09) 0%, transparent 55%); }}".encode())
+                f"to right, rgba({r8},{g8},{b8},0.15) 0%, transparent 70%); }}".encode())
+            if hasattr(self, "_reading_chip_css"):
+                self._reading_chip_css.load_from_data(
+                    f"button.reading-chip {{ background: rgba({r8},{g8},{b8},0.10); }}".encode())
         if hasattr(self, "_sb_season_dot"):
             self._sb_season_dot.set_markup(f'<span color="{cx}">●</span>')
             self._sb_season_dot.set_visible(True)
@@ -5092,6 +5133,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._focus_status_lbl.set_markup("<b>Focus</b>")
             else:
                 self._focus_status_lbl.set_text("Focus")
+        if hasattr(self, "_focus_status_btn"):
+            self._toggle_chip(self._focus_status_btn, active)
         if active:
             self._pre_focus_palette_pos = self._palette_paned.get_position()
             self._pre_focus_order_pos  = self._order_hpaned.get_position()
@@ -11302,16 +11345,33 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
 /* Drag handle: subtle at rest, visible on hover, grab cursor */
 .order-list row .drag-handle { opacity: 0.18; transition: opacity 120ms; cursor: grab; }
 .order-list row:hover .drag-handle { opacity: 0.6; }
-/* Section divider pill */
-.divider-pill { background: alpha(@accent_bg_color, 0.08); border-radius: 6px; padding: 2px 4px; }
+/* Section divider - full-width coloured header row */
+.divider-header { background: alpha(@headerbar_shade_color, 0.06); min-height: 28px; }
+/* Section colour left borders on element rows */
+.section-c0 { border-left: 3px solid #1D9E75; }
+.section-c1 { border-left: 3px solid #534AB7; }
+.section-c2 { border-left: 3px solid #993C1D; }
+.section-c3 { border-left: 3px solid #185FA5; }
+.section-c4 { border-left: 3px solid #B45309; }
+.section-c5 { border-left: 3px solid #6B21A8; }
+.section-c6 { border-left: 3px solid #15803D; }
+.section-c7 { border-left: 3px solid #B91C1C; }
+.section-gray { border-left: 3px solid #888780; }
+/* Active mode toggle chips */
+.mode-btn-active { background: alpha(@accent_bg_color, 0.18); border-radius: 9999px; }
+/* Metric pill chips (time bar, word count) */
+.metric-pill { background: alpha(@headerbar_shade_color, 0.5); border-radius: 9999px; padding: 1px 7px; }
+/* Planning notes header: pointer cursor + subtle hover */
+.notes-header { cursor: pointer; border-radius: 4px; }
+.notes-header:hover { background: alpha(@accent_bg_color, 0.06); }
 /* Unsaved chip: pulse animation after 30s */
 @keyframes rubric-unsaved-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
 }
 .unsaved-pulse { animation: rubric-unsaved-pulse 1.6s ease-in-out infinite; }
-/* Preview pane: warm off-white page background */
-.preview-pane { background-color: #fafaf8; }
+/* Preview pane: medium-gray desk surface so pages appear to float */
+.preview-pane { background-color: #c8c7c4; padding: 12px; }
 /* Cover art thumbnail: rounded corners */
 .cover-thumb { border-radius: 4px; }
 """)
