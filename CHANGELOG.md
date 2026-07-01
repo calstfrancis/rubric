@@ -4,6 +4,8 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.9-dev2] — Visual polish: section borders, mode chips, metric pills, divider headers
+
 ## [0.17.9-dev1] — Polish: visual refresh, undo toast, word count, duplicate element, and more
 
 ### Added
