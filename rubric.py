@@ -2369,24 +2369,25 @@ class MainWindow(Adw.ApplicationWindow):
 
         status_bar.append(_left_box)
 
-        # Centre: prev event · season dot · next event — spread apart
+        # Centre: single events popover button (replaces prev/dot/next layout)
         _left_spacer = Gtk.Box(); _left_spacer.set_hexpand(True)
         status_bar.append(_left_spacer)
-        _centre_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        _centre_box.set_halign(Gtk.Align.CENTER)
-        # Previous event
-        self._prev_obs_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        _centre_box.append(self._prev_obs_box)
-        # Season dot with wider margins to spread the two event listings
-        self._sb_season_dot = Gtk.Label(label="●")
-        self._sb_season_dot.add_css_class("caption"); self._sb_season_dot.add_css_class("dim-label")
-        self._sb_season_dot.set_margin_start(36); self._sb_season_dot.set_margin_end(36)
-        self._sb_season_dot.set_visible(False)
-        _centre_box.append(self._sb_season_dot)
-        # Next/upcoming event
-        self._obs_status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        _centre_box.append(self._obs_status_box)
-        status_bar.append(_centre_box)
+
+        self._events_btn_lbl = Gtk.Label()
+        self._events_btn_lbl.add_css_class("caption")
+        self._events_popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self._events_popover_box.set_margin_start(10); self._events_popover_box.set_margin_end(10)
+        self._events_popover_box.set_margin_top(8); self._events_popover_box.set_margin_bottom(8)
+        self._events_popover_box.set_size_request(280, -1)
+        _evpop = Gtk.Popover()
+        _evpop.set_child(self._events_popover_box)
+        self._events_btn = Gtk.MenuButton()
+        self._events_btn.set_child(self._events_btn_lbl)
+        self._events_btn.set_popover(_evpop)
+        self._events_btn.add_css_class("flat")
+        self._events_btn.set_visible(False)
+        status_bar.append(self._events_btn)
+
         _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
         status_bar.append(_right_spacer)
 
@@ -2436,67 +2437,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         status_bar.append(_right_box)
 
-        # ── Justice / custom dates bar ────────────────────────────────────────
-        # Added first so it sits above the main status bar (ToolbarView stacks
-        # bottom bars from content outward — first added = closest to content).
-        jbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        jbar.add_css_class("toolbar")
-        jbar.set_visible(False)
-
-        _jleft_spacer = Gtk.Box(); _jleft_spacer.set_hexpand(True)
-        jbar.append(_jleft_spacer)
-
-        _jcenter = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        _jcenter.set_halign(Gtk.Align.CENTER)
-
-        self._justice_prev_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        _jcenter.append(self._justice_prev_box)
-
-        self._justice_dot = Gtk.Label(label="●")
-        self._justice_dot.add_css_class("caption"); self._justice_dot.add_css_class("dim-label")
-        self._justice_dot.set_margin_start(36); self._justice_dot.set_margin_end(36)
-        self._justice_dot.set_visible(False)
-        _jcenter.append(self._justice_dot)
-
-        self._justice_next_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        _jcenter.append(self._justice_next_box)
-
-        jbar.append(_jcenter)
-
-        _jright_spacer = Gtk.Box(); _jright_spacer.set_hexpand(True)
-        jbar.append(_jright_spacer)
-
-        self._preview_mode_btn = Gtk.Button(label="Auto")
-        self._preview_mode_btn.add_css_class("flat")
-        self._preview_mode_btn.add_css_class("caption")
-        _pmlbl = self._preview_mode_btn.get_child()
-        if _pmlbl:
-            _pmlbl.set_margin_top(1); _pmlbl.set_margin_bottom(1)
-        self._preview_mode_btn.set_margin_start(1); self._preview_mode_btn.set_margin_end(1)
-        self._preview_mode_btn.set_tooltip_text(
-            "Preview compile mode: Auto (on every change) · Save (on file save) · Manual (compile button only)")
-        self._preview_mode_btn.set_visible(False)
-
-        def _on_preview_mode_cycle(_btn):
-            _modes = ["auto", "on_save", "manual"]
-            _labels = {"auto": "Auto", "on_save": "Save", "manual": "Manual"}
-            cur = getattr(self, "_preview_update_mode", "auto")
-            nxt = _modes[(_modes.index(cur) + 1) % len(_modes)]
-            self._preview_update_mode = nxt
-            self._preview_mode_btn.set_label(_labels[nxt])
-
-        self._preview_mode_btn.connect("clicked", _on_preview_mode_cycle)
-        jbar.append(self._preview_mode_btn)
-
-        _jedit_btn = Gtk.Button(icon_name="x-office-calendar-symbolic",
-                                tooltip_text="View and edit all observances")
-        _jedit_btn.add_css_class("flat"); _jedit_btn.add_css_class("caption")
-        _jedit_btn.set_margin_end(4)
-        _jedit_btn.connect("clicked", lambda _: self._open_dates_window())
-        jbar.append(_jedit_btn)
-
-        self._justice_bar = jbar
-        tv.add_bottom_bar(jbar)
         tv.add_bottom_bar(status_bar)
 
         # GOST CSS provider (priority above application so it overrides theme fonts)
@@ -4661,6 +4601,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.readings_card.set_visible(True)
         self.year_badge.set_label(f"Year {info['year']}")
         cx = info["colour_hex"]
+        self._season_colour_hex = cx
         self.season_dot.set_markup(f'<span color="{cx}">●</span>')
         self.season_label.set_markup(f'<span color="{cx}">{GLib.markup_escape_text(info["week"])}</span>')
         self._colour_bar_rgb = _hex_to_rgb(cx); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
@@ -4672,9 +4613,6 @@ class MainWindow(Adw.ApplicationWindow):
             if hasattr(self, "_reading_chip_css"):
                 self._reading_chip_css.load_from_data(
                     f"button.reading-chip {{ background: rgba({r8},{g8},{b8},0.10); }}".encode())
-        if hasattr(self, "_sb_season_dot"):
-            self._sb_season_dot.set_markup(f'<span color="{cx}">●</span>')
-            self._sb_season_dot.set_visible(True)
 
         # Stepper
         self._sunday_step_box.set_visible(show_stepper)
@@ -4703,149 +4641,136 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_observances_row(self._readings_sunday or d)
 
     def _refresh_observances_row(self, d) -> None:
-        """Rebuild the observances chips in the status bar centre."""
-        next_box = getattr(self, "_obs_status_box", None)
-        prev_box = getattr(self, "_prev_obs_box", None)
-        if next_box is None:
+        """Rebuild the events popover button and content for date d."""
+        btn = getattr(self, "_events_btn", None)
+        lbl = getattr(self, "_events_btn_lbl", None)
+        pop_box = getattr(self, "_events_popover_box", None)
+        if btn is None:
             return
-        for box in (next_box, prev_box):
-            if box:
-                while box.get_first_child():
-                    box.remove(box.get_first_child())
+
+        if pop_box is not None:
+            while pop_box.get_first_child():
+                pop_box.remove(pop_box.get_first_child())
+
         try:
             from observances import get_observances, get_previous_observance, TYPES
         except ImportError:
             return
 
         import re as _re
+        from datetime import timedelta
 
         def _strip_date_parens(name: str) -> str:
-            """Remove trailing (Mon Day) or (Mon DD) date suffixes from name."""
             return _re.sub(r'\s*\([A-Za-z]{3,9}\s+\d{1,2}\)\s*$', '', name).strip()
 
-        def _make_obs_chip(obs: dict, arrow: str, box: Gtk.Box) -> None:
-            ti = TYPES.get(obs.get("type", ""), {})
-            colour = ti.get("colour", "#6B7280")
-            tlabel = ti.get("label", "")
-            prox = obs.get("proximity", "")
-            # Strip redundant inline date from name if we already have a proximity label
-            display_name = _strip_date_parens(obs["name"]) if prox else obs["name"]
-            markup = ""
-            if arrow == "←":
-                markup = f'<span alpha="60%">← </span>'
-            if tlabel:
-                markup += f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
-            markup += GLib.markup_escape_text(display_name)
-            if prox:
-                markup += f' <span alpha="60%">{GLib.markup_escape_text(prox)}</span>'
-            if arrow == "→":
-                markup += ' <span alpha="60%">→</span>'
-            chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
-            chip_lbl.add_css_class("caption")
-            chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
-            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill")
-            chip_btn.add_css_class("obs-chip")
-            chip_btn.set_tooltip_text(f"Open Wikipedia: {obs['name']}")
-            chip_btn.connect("clicked", lambda _b, n=obs["name"]: self._open_observance_wiki(n))
-            box.append(chip_btn)
+        cx = getattr(self, "_season_colour_hex", "#888780")
+        season_text = self.season_label.get_text() if hasattr(self, "season_label") else ""
 
-        # Next/upcoming event: first observance with proximity field, or first without
-        obs_list = get_observances(d)
-        next_obs = None
-        for obs in obs_list:
-            if obs.get("proximity"):
-                next_obs = obs
-                break
-        if next_obs is None and obs_list:
-            next_obs = obs_list[0]
-        if next_obs and next_box:
-            _make_obs_chip(next_obs, "→", next_box)
+        # Update button label: coloured dot + season week name
+        if lbl is not None:
+            if season_text:
+                lbl.set_markup(
+                    f'<span color="{cx}">●</span> {GLib.markup_escape_text(season_text)}')
+            else:
+                lbl.set_markup(f'<span color="{cx}">●</span>')
+        btn.set_visible(True)
 
-        # Previous event: most recent observance before d
-        if prev_box:
-            prev_obs = get_previous_observance(d)
-            if prev_obs:
-                _make_obs_chip(prev_obs, "←", prev_box)
-
-        self._refresh_justice_row(d)
-
-    def _refresh_justice_row(self, d) -> None:
-        """Rebuild the justice/custom-dates second status bar row from config.all_dates."""
-        bar = getattr(self, "_justice_bar", None)
-        if bar is None:
+        if pop_box is None:
             return
-        prev_box = getattr(self, "_justice_prev_box", None)
-        next_box = getattr(self, "_justice_next_box", None)
-        dot = getattr(self, "_justice_dot", None)
-        for box in (prev_box, next_box):
-            if box:
-                while box.get_first_child():
-                    box.remove(box.get_first_child())
-        if dot:
-            dot.set_visible(False)
 
-        from datetime import timedelta
-        try:
-            from observances import TYPES
-        except ImportError:
-            TYPES = {}
+        # ── Season header ──────────────────────────────────────────────────────
+        hdr_lbl = Gtk.Label()
+        hdr_lbl.set_markup(
+            f'<span color="{cx}"><b>●</b></span>  <b>{GLib.markup_escape_text(season_text)}</b>'
+            if season_text else f'<span color="{cx}"><b>●</b></span>')
+        hdr_lbl.set_xalign(0)
+        pop_box.append(hdr_lbl)
 
+        # ── Helper to build one event row ──────────────────────────────────────
+        def _event_row(name: str, type_key: str, prox: str, past: bool,
+                       wiki_name: str | None) -> Gtk.Widget:
+            ti = TYPES.get(type_key, {})
+            colour = ti.get("colour", "#888780")
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            row.set_margin_top(1); row.set_margin_bottom(1)
+            dot = Gtk.Label()
+            dot.set_markup(f'<span color="{colour}">{"○" if past else "●"}</span>')
+            dot.set_valign(Gtk.Align.CENTER)
+            row.append(dot)
+            name_lbl = Gtk.Label(label=_strip_date_parens(name))
+            name_lbl.set_xalign(0); name_lbl.set_hexpand(True)
+            name_lbl.add_css_class("caption")
+            if past:
+                name_lbl.add_css_class("dim-label")
+            row.append(name_lbl)
+            if prox:
+                prox_lbl = Gtk.Label(label=prox)
+                prox_lbl.add_css_class("caption"); prox_lbl.add_css_class("dim-label")
+                row.append(prox_lbl)
+            if wiki_name:
+                wrap = Gtk.Button()
+                wrap.set_child(row); wrap.add_css_class("flat")
+                wrap.set_tooltip_text(f"Open Wikipedia: {wiki_name}")
+                wrap.connect("clicked", lambda _b, n=wiki_name: (
+                    btn.get_popover().popdown() if btn.get_popover() else None,
+                    self._open_observance_wiki(n)))
+                return wrap
+            return row
+
+        # ── Liturgical events ──────────────────────────────────────────────────
+        obs_list = get_observances(d)
+        prev_obs = get_previous_observance(d)
+        pop_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        if prev_obs:
+            pop_box.append(_event_row(
+                prev_obs["name"], prev_obs.get("type", ""),
+                prev_obs.get("proximity", ""), past=True, wiki_name=prev_obs["name"]))
+        for obs in obs_list[:6]:
+            pop_box.append(_event_row(
+                obs["name"], obs.get("type", ""),
+                obs.get("proximity", ""), past=False, wiki_name=obs["name"]))
+
+        # ── Justice / custom dates ─────────────────────────────────────────────
         _JUSTICE_TYPES = {"social_justice", "indigenous", "ecological", "pride"}
 
-        def _justice_on(wd):
-            return [e for e in config.all_dates
-                    if e.get("month") == wd.month and e.get("day") == wd.day
-                    and e.get("type") in _JUSTICE_TYPES]
+        justice_events: list[tuple] = []
+        seen: set[tuple] = set()
+        for delta in range(-30, 61):
+            wd = d + timedelta(days=delta)
+            key = (wd.month, wd.day)
+            if key in seen:
+                continue
+            for e in config.all_dates:
+                if (e.get("month") == wd.month and e.get("day") == wd.day
+                        and e.get("type") in _JUSTICE_TYPES):
+                    seen.add(key)
+                    justice_events.append((wd, e))
+                    break
 
-        past_obs = past_dt = None
-        for days in range(1, 60):
-            wd = d - timedelta(days=days)
-            items = _justice_on(wd)
-            if items:
-                past_obs, past_dt = items[0], wd
-                break
+        if justice_events:
+            pop_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+            sec_lbl = Gtk.Label(label="Justice & Custom Dates")
+            sec_lbl.add_css_class("caption"); sec_lbl.add_css_class("dim-label")
+            sec_lbl.set_xalign(0); sec_lbl.set_margin_top(2); sec_lbl.set_margin_bottom(2)
+            pop_box.append(sec_lbl)
+            for wd, e in justice_events:
+                pop_box.append(_event_row(
+                    e["name"], e.get("type", ""),
+                    wd.strftime("%-d %b"), past=(wd < d), wiki_name=None))
 
-        future_obs = future_dt = None
-        for days in range(0, 60):
-            wd = d + timedelta(days=days)
-            items = _justice_on(wd)
-            if items:
-                future_obs, future_dt = items[0], wd
-                break
+        # ── Edit dates button ──────────────────────────────────────────────────
+        pop_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        edit_btn = Gtk.Button(label="Edit dates…")
+        edit_btn.add_css_class("flat"); edit_btn.set_halign(Gtk.Align.END)
+        edit_btn.set_margin_top(2)
+        edit_btn.connect("clicked", lambda _: (
+            btn.get_popover().popdown() if btn.get_popover() else None,
+            self._open_dates_window()))
+        pop_box.append(edit_btn)
 
-        _mode_btn_visible = getattr(self, "_preview_mode_btn", None) and self._preview_mode_btn.get_visible()
-        if not past_obs and not future_obs:
-            if not _mode_btn_visible:
-                bar.set_visible(False)
-            return
-        bar.set_visible(True)
-
-        def _make_chip(obs, dt, arrow, box):
-            t = obs.get("type", "")
-            colour = TYPES.get(t, {}).get("colour", "#6B7280")
-            tlabel = TYPES.get(t, {}).get("label", "")
-            prox = dt.strftime("%-d %b")
-            markup = ""
-            if arrow == "←":
-                markup = '<span alpha="60%">← </span>'
-            if tlabel:
-                markup += f'<span color="{colour}"><b>{GLib.markup_escape_text(tlabel)}</b></span> '
-            markup += GLib.markup_escape_text(obs["name"])
-            markup += f' <span alpha="60%">{GLib.markup_escape_text(prox)}</span>'
-            if arrow == "→":
-                markup += ' <span alpha="60%">→</span>'
-            chip_lbl = Gtk.Label(); chip_lbl.set_markup(markup)
-            chip_lbl.add_css_class("caption")
-            chip_btn = Gtk.Button(); chip_btn.set_child(chip_lbl)
-            chip_btn.add_css_class("flat"); chip_btn.add_css_class("pill")
-            box.append(chip_btn)
-
-        if past_obs and prev_box:
-            _make_chip(past_obs, past_dt, "←", prev_box)
-        if future_obs and next_box:
-            _make_chip(future_obs, future_dt, "→", next_box)
-        if past_obs and future_obs and dot:
-            dot.set_visible(True)
+    def _refresh_justice_row(self, d) -> None:
+        """Redirect to unified events popover (called by external windows on date edits)."""
+        self._refresh_observances_row(d)
 
     def _step_sunday(self, direction: int):
         """Move the readings display to the prev (-1) or next (+1) Sunday."""
@@ -4893,6 +4818,24 @@ class MainWindow(Adw.ApplicationWindow):
         mode_box.append(self._preview_bulletin_btn)
         mode_box.append(self._preview_manuscript_btn)
         hdr.append(mode_box)
+
+        # Compile mode cycle (Auto / Save / Manual) — lives here rather than in a second toolbar
+        _mode_labels = {"auto": "Auto", "on_save": "Save", "manual": "Manual"}
+        _initial_label = _mode_labels.get(getattr(self, "_preview_update_mode", "on_save"), "Save")
+        self._preview_mode_btn = Gtk.Button(label=_initial_label)
+        self._preview_mode_btn.add_css_class("flat")
+        self._preview_mode_btn.set_tooltip_text(
+            "Preview compile mode: Auto (on every change) · Save (on file save) · Manual (compile button only)")
+
+        def _on_preview_mode_cycle(_btn):
+            _modes = ["auto", "on_save", "manual"]
+            cur = getattr(self, "_preview_update_mode", "on_save")
+            nxt = _modes[(_modes.index(cur) + 1) % len(_modes)]
+            self._preview_update_mode = nxt
+            self._preview_mode_btn.set_label(_mode_labels[nxt])
+
+        self._preview_mode_btn.connect("clicked", _on_preview_mode_cycle)
+        hdr.append(self._preview_mode_btn)
 
         # Compile button — always visible; essential in Save/Manual modes
         self._preview_compile_btn = Gtk.Button(icon_name="view-refresh-symbolic",
@@ -5172,16 +5115,6 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._preview_lbl.set_text("Preview")
         self._preview_panel.set_visible(visible)
-        if hasattr(self, "_preview_mode_btn"):
-            self._preview_mode_btn.set_visible(visible)
-            if visible:
-                self._justice_bar.set_visible(True)
-            else:
-                # Let _refresh_justice_row decide if the bar should stay visible
-                if self.selected_date:
-                    self._refresh_justice_row(self.selected_date)
-                else:
-                    self._justice_bar.set_visible(False)
         if visible:
             if not self._preview_paned_positioned:
                 self._preview_paned_positioned = True
@@ -6539,11 +6472,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._content_widget.set_content("")
         self._clear_order_list(); self.selected_date=None; self._set_date_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
-        for _box_attr in ("_obs_status_box", "_prev_obs_box"):
-            b = getattr(self, _box_attr, None)
-            if b:
-                while b.get_first_child():
-                    b.remove(b.get_first_child())
+        if hasattr(self, "_events_btn"):
+            self._events_btn.set_visible(False)
         self.current_file=None; self.typ_file=None; self.modified=False
         self._selected_global_idx=-1; self._update_title()
         self.service_bulletin_text = ""

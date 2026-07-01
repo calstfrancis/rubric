@@ -4,7 +4,12 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.17.9-dev2] — Visual polish: section borders, mode chips, metric pills, divider headers
+## [0.17.9-dev2] — Events popover: replace double status bar with single compact button
+
+### Changed
+
+- **Events display reworked** — the two-bar status bar layout (liturgical events row + separate justice bar) is replaced by a single compact `● Season` button in the status bar. Clicking it opens a popover listing the previous, current, and upcoming liturgical observances and justice/custom dates, with an "Edit dates…" link.
+- **Preview compile mode button moved** — the Auto / Save / Manual compile cycle button now lives in the preview panel header where it logically belongs, rather than in a second toolbar that only appeared when the preview was open.
 
 ## [0.17.9-dev1] — Polish: visual refresh, undo toast, word count, duplicate element, and more
 
