@@ -4,34 +4,30 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.17.9-dev2] — Events popover: replace double status bar with single compact button
-
-### Changed
-
-- **Events display reworked** — the two-bar status bar layout (liturgical events row + separate justice bar) is replaced by a single compact `● Season` button in the status bar. Clicking it opens a popover listing the previous, current, and upcoming liturgical observances and justice/custom dates, with an "Edit dates…" link.
-- **Preview compile mode button moved** — the Auto / Save / Manual compile cycle button now lives in the preview panel header where it logically belongs, rather than in a second toolbar that only appeared when the preview was open.
-
-## [0.17.9-dev1] — Polish: visual refresh, undo toast, word count, duplicate element, and more
+## [0.17.9] "Quiet Margin" — Visual polish, events popover, and workflow improvements
 
 ### Added
 
-- **Section colour left borders** — each service element row now has a 3px left border in its section colour, replacing the small dot prefix. Sections are immediately scannable at a glance.
-- **Full-width section dividers** — section divider rows now span the full list width with a 6px colour stripe on the left and a subtle background tint, making section breaks much more prominent.
-- **Clickable planning notes header** — the entire "Service Notes" header bar is now a click target to expand/collapse the notes; a small arrow indicator shows state.
-- **Active mode toggle pills** — status bar mode buttons (SIMPLE, GOST, Compact, Dev, Typst, Template, Focus) now show a subtle tinted background when active, so active modes are visually distinct at a glance.
+- **Section colour left borders** — each service element row has a 3 px left border in its section colour, replacing the small dot prefix. Sections are immediately scannable at a glance.
+- **Full-width section dividers** — section divider rows now span the full list width with a 6 px colour stripe on the left and a subtle tinted background, making section breaks far more prominent.
+- **Undo button on element removal** — deleting an element now shows a toast with an "Undo" button, so accidental removals are recoverable without Ctrl+Z.
+- **Word count chip** — a live "N words · ~M min" pill appears in the status bar right once the service has content, counting spoken words at 130 wpm (leader notes excluded).
+- **Duplicate element (Ctrl+Shift+D)** — duplicates the selected element or section divider and inserts the copy directly below, preserving all fields.
+- **Auto-focus on element add** — adding an element from the palette now focuses the Leader field immediately; "Add custom element" focuses the name entry.
+- **Planner "Today" button** — a button in the Service Planner header switches to calendar view and scrolls to this Sunday's row.
+- **Recently opened in Archive tab** — the Archive tab shows a "Recently opened" section at the top (up to 8 files) when no search is active.
+- **Compile error element attribution** — when a manuscript Typst compile fails with a line number, the toast names the specific element whose content triggered the error.
+- **Duplicate element in shortcuts window** — Ctrl+Shift+D is listed in the keyboard shortcuts overlay (Ctrl+?).
+
+### Changed
+
+- **Events display reworked** — the two-bar layout (liturgical events row + separate justice bar) is replaced by a single compact `● Season` button in the status bar. Clicking it opens a popover listing the previous and upcoming liturgical observances and justice/custom dates together, with an "Edit dates…" link at the bottom. One bar, all the information.
+- **Preview compile mode button moved** — the Auto / Save / Manual cycle button now lives in the preview panel header, next to the compile ⟳ button, rather than in a second toolbar that only appeared when the preview was open.
+- **Active mode toggle pills** — status bar mode buttons (SIMPLE, GOST, Compact, Dev, Typst, Template, Focus) now show a subtle tinted background when active.
 - **Metric pill chips** — the word count and total time labels in the order list now appear as rounded pill chips with a translucent background.
 - **Season-tinted reading chips** — RCL reading chip buttons now show a subtle tint in the current liturgical season colour.
-- **Stronger season header tint** — the liturgical season colour gradient on the main header bar is 15% opacity (up from 9%), extending 70% across (up from 55%).
-- **List-drag icon for drag handles** — drag handles on element and section divider rows now use the `list-drag-symbolic` icon instead of the braille dots character.
-- **PDF preview desk surface** — the preview pane background is now a medium gray with 12px padding, so rendered pages appear to float on a desk surface.
-- **Undo button on element removal** — deleting an element via the Remove button now shows a toast with an "Undo" button.
-- **Word count chip in status bar** — a live "N words · ~M min" chip appears in the status bar once the service has content.
-- **Duplicate element (Ctrl+Shift+D)** — duplicates the selected element and inserts the copy directly below it, preserving all fields.
-- **Auto-focus on element add** — adding an element from the palette now focuses the Leader field immediately; "Add custom element" focuses the name entry.
-- **Planner "Today" button** — switches to calendar view and scrolls to this Sunday's row.
-- **Recently opened in Archive tab** — shows a "Recently opened" section at the top for quick re-access.
-- **Compile error element attribution** — when a manuscript Typst compile fails with a line number, the toast names the specific element.
-- **Duplicate element in shortcuts window** — Ctrl+Shift+D listed in the keyboard shortcuts overlay (Ctrl+?).
+- **Stronger season header tint** — the liturgical season colour gradient on the main header bar is 15 % opacity (up from 9 %), extending 70 % across (up from 55 %).
+- **Clickable planning notes header** — the entire "Service Notes" header bar is now a click target to expand/collapse the notes area; an arrow indicator shows the current state.
 
 ## [0.17.8] "Still Water" — Print quality, layout fidelity, and persistent settings
 

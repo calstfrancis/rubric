@@ -41,6 +41,26 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.17.9" date="2026-07-02">
+      <description>
+        <p>0.17.9 "Quiet Margin" — Visual polish, events popover, and workflow improvements.</p>
+        <ul>
+          <li>Events display reworked: the two-bar layout is replaced by a single compact season button in the status bar. Click it to open a popover listing liturgical observances and justice/custom dates together.</li>
+          <li>Preview compile mode (Auto/Save/Manual) moved into the preview panel header where it belongs.</li>
+          <li>Section colour left borders on element rows replace the small dot prefix.</li>
+          <li>Full-width section dividers with a 6 px colour stripe and subtle background tint.</li>
+          <li>Active mode toggle buttons show a tinted pill background when on.</li>
+          <li>Word count and total time labels styled as rounded metric pill chips.</li>
+          <li>RCL reading chips tinted with the current liturgical season colour.</li>
+          <li>Season header gradient strengthened (9 % → 15 %, 55 % → 70 % width).</li>
+          <li>Undo button on element removal toast.</li>
+          <li>Word count chip in status bar (spoken words at 130 wpm).</li>
+          <li>Duplicate element with Ctrl+Shift+D.</li>
+          <li>Planner Today button; Recently opened section in Archive tab.</li>
+          <li>Compile error element attribution in manuscript mode.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.8" date="2026-06-25">
       <description>
         <p>0.17.8 "Still Water" — Print quality, layout fidelity, and persistent settings.</p>
