@@ -38,6 +38,7 @@ try:
     from rubric_package.views.services_window import ServicesWindow
     from rubric_package.views.dates_editor_window import DatesEditorWindow
     from rubric_package.views.observance_wiki_window import ObservanceWikiWindow
+    from rubric_package.views.service_planning_notes_window import ServicePlanningNotesWindow
 except ImportError as _pkg_err:
     print(f"Fatal: rubric_package not found — {_pkg_err}", file=sys.stderr)
     sys.exit(1)
@@ -184,31 +185,6 @@ if not config.templates:
     config.templates["UCC Sunday"] = _UCC_DEFAULT_TEMPLATE
     config.default_template = "UCC Sunday"
     config.save()
-
-
-# ── Service planning notes pop-out window ─────────────────────────────────────
-
-class ServicePlanningNotesWindow(Adw.Window):
-    def __init__(self, buffer: Gtk.TextBuffer, **kw):
-        super().__init__(title="Service Notes", default_width=520, default_height=400, **kw)
-        self.set_hide_on_close(True)
-
-        tv_view = Adw.ToolbarView()
-        hdr = Adw.HeaderBar()
-        tv_view.add_top_bar(hdr)
-
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True)
-
-        tv = Gtk.TextView(buffer=buffer)
-        tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        tv.set_accepts_tab(False)
-        tv.set_left_margin(18); tv.set_right_margin(18)
-        tv.set_top_margin(12); tv.set_bottom_margin(12)
-        scroll.set_child(tv)
-        tv_view.set_content(scroll)
-        self.set_content(tv_view)
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
