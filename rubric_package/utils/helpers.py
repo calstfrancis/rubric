@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+
+def flatpak_git_prefix() -> list[str]:
+    """Return the git command prefix, routed through the host when sandboxed."""
+    return ["flatpak-spawn", "--host", "git"] if Path("/.flatpak-info").exists() else ["git"]
+
 
 # Keywords to identify hymn-type elements
 HYMN_KEYWORDS = {"hymn", "psalm", "sung", "song", "music", "anthem", "gloria"}
