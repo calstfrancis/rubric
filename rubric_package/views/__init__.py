@@ -4,5 +4,6 @@ from .element_content import ElementContentWidget
 from .help_window import HelpWindow
 from .preferences_window import PreferencesWindow
 from .bulletin_prefs_window import BulletinPrefsWindow
+from .bible_viewer import BibleViewer
 
-__all__ = ["ElementContentWidget", "HelpWindow", "PreferencesWindow", "BulletinPrefsWindow"]
+__all__ = ["ElementContentWidget", "HelpWindow", "PreferencesWindow", "BulletinPrefsWindow", "BibleViewer"]
