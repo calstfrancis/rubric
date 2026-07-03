@@ -6,8 +6,10 @@ from .preferences_window import PreferencesWindow
 from .bulletin_prefs_window import BulletinPrefsWindow
 from .bible_viewer import BibleViewer
 from .services_window import ServicesWindow
+from .dates_editor_window import DatesEditorWindow
 
 __all__ = [
     "ElementContentWidget", "HelpWindow", "PreferencesWindow",
     "BulletinPrefsWindow", "BibleViewer", "ServicesWindow",
+    "DatesEditorWindow",
 ]

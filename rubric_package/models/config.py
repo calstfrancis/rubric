@@ -164,3 +164,31 @@ def get_palette() -> list[tuple[str, list[str]]]:
     if config.palette:
         return [(d["section"], d["items"]) for d in config.palette]
     return SECTIONS
+
+
+def seed_all_dates() -> None:
+    """Populate config.all_dates from observances.py on first launch.
+    Also migrates any legacy custom_dates entries."""
+    if config.all_dates:
+        return
+    try:
+        from observances import FIXED, RANGES
+    except ImportError:
+        return
+    entries: list[dict] = []
+    for (mm, dd), obs_list in sorted(FIXED.items()):
+        for obs in obs_list:
+            entries.append({"month": mm, "day": dd,
+                            "name": obs["name"],
+                            "type": obs.get("type", "civil")})
+    for r in RANGES:
+        entries.append({"month": r["start"][0], "day": r["start"][1],
+                        "name": r["name"], "type": r["type"]})
+    # Migrate legacy custom_dates
+    _cat_map = {"justice": "social_justice", "religious": "feast"}
+    for cd in config.custom_dates:
+        t = _cat_map.get(cd.get("category", "justice"), "social_justice")
+        entries.append({"month": cd.get("month", 1), "day": cd.get("day", 1),
+                        "name": cd.get("name", ""), "type": t})
+    config.all_dates = entries
+    config.save()
