@@ -92,12 +92,37 @@ This section mixes two unrelated things:
 
 These got filed under one comment header by file proximity, not by logic. Splitting this section requires method-by-method triage, not a block move — plan this properly before starting it.
 
+### Step 2 — `BulletinPreview` (done, 2026-07-03)
+
+Untangled the "Live bulletin preview" section into its two halves as planned. The genuine preview/compile logic (17 methods, ~625 lines) moved into `rubric_package/preview/bulletin_preview.py`; the ~90 lines of core document-state methods (`_mark_modified`, `_confirm_discard`, `_service_data`, `_update_title`, `_deferred_save`, `_refresh_cover_thumb`, `_update_save_state_chip`, `_start_unsaved_pulse`) stayed on `MainWindow`, exactly as identified. `MainWindow.__init__` now creates `self._preview = BulletinPreview(self)` right after `self._exporter = BulletinExporter(self)` (both must exist before `_setup_actions()`/`_build_ui()` run, since `_build_ui` calls `self._preview._build_preview_panel()` and the action table wires `self._preview._toggle_bulletin_edit`). 10 external call sites elsewhere in `MainWindow` (action table, button `.connect()`, and calls from `_mark_modified`, preamble-panel toggles, save-file flow) were updated from `self.<method>()` to `self._preview.<method>()`.
+
+**The section header itself was misleading**: it also contained four general window-toggle methods (`_open_prefs_page`, `_open_sidebar`, `_toggle_palette_sidebar`, `_toggle_focus_mode`) and `_copy_as_text`, filed there by file proximity only — none of them touch preview or compile state. Left in place on `MainWindow` (not preview, not core document-state, just misfiled housekeeping — moving them wasn't in scope for this step). Renamed the stale `# ── Live bulletin preview ─` header to describe what's actually left there now.
+
+**Three Typst helpers stayed on `MainWindow` despite living inside the same section**: `_find_typst`, `_typst_compile_cmd`, `_load_typst_preamble`. Confirmed via grep that all three are called not just from the (now-moved) preview code but also from `BulletinExporter` (already `self._main._find_typst()` etc.) *and* from the not-yet-extracted "AV sheet export" and "Leader's order PDF" sections. Moving them into `BulletinPreview` would have made those other two sections reach into the preview module for unrelated Typst plumbing — backwards for composition. They're cross-cutting infrastructure, not preview-specific, so they stay put until/unless a dedicated Typst-helpers extraction happens.
+
+**One bare-self-as-argument bug, caught by the recipe exactly as predicted**: `_popout_preview` had `Adw.Window(title=title, transient_for=self)` — after the move `self` is the `BulletinPreview` instance, not a window, so this needed to become `transient_for=self._main`. Caught by the static bare-`self` grep *before* running anything (not by py_compile or construct-and-done), then confirmed fixed by asserting `win.get_transient_for() is main` in both the stub test and the real-`MainWindow` test.
+
+`rubric.py`: 6,481 → 5,910 lines.
+
+### Step 3 — `PreamblePanel` (done, 2026-07-03)
+
+Extracted the "Preamble panel" section (document-template editor: font/margin/layout/heading fields, the four bulletin style presets, the system-font picker) into `rubric_package/panels/preamble_panel.py` — a new `rubric_package/panels/` subpackage for embedded editor panels, sibling to `views/` (standalone windows), `exporters/`, and `preview/`. 7 methods (~335 lines) moved: `_preamble_heading_typst`, `_on_preamble_changed`, `_apply_bulletin_preset`, `_rebuild_preamble_form`, `_get_system_fonts`, `_build_preamble_form`, `_build_preamble_panel`, plus the `_BULLETIN_PRESETS` class-level constant. `MainWindow.__init__` now creates `self._preamble = PreamblePanel(self)` alongside `self._exporter`/`self._preview`.
+
+**`_on_preamble_clicked` stayed on `MainWindow`**, same reasoning as the window-toggle methods left behind in Step 2: it's a status-bar click handler that flips `_main_stack` to the "preamble" page and syncs `_preview_mode`/`_preview_visible` — it doesn't touch template fields, so it isn't preamble-panel logic even though it shares the section header. Left the widget attributes it reads (`_preamble_ms_btn`, `_preamble_btn`, `_preamble_lbl`, `_preamble_active`) as plain `MainWindow` attributes (assigned via `self._main.<attr>` from inside the moved methods), so this un-moved method needed zero changes.
+
+**One cross-module external call site, in an already-extracted sibling**: `BulletinExporter` (`rubric_package/exporters/bulletin_exporter.py`, lines 823 and 1138) called `self._main._preamble_heading_typst(...)` directly — that had to become `self._main._preamble._preamble_heading_typst(...)` now that the method lives on `PreamblePanel` instead of `MainWindow`. A reminder that "external call site" checks must cover already-extracted modules, not just what's left in `rubric.py`.
+
+No bare-self-as-argument bugs this time (the static grep came back clean — confirmed by construction, not by assumption).
+
+`rubric.py`: 5,910 → 5,579 lines.
+
 ### Order of work
 
 1. ~~**Exports**~~ — done, see above.
-2. **Next**: untangle "Live bulletin preview" into its two halves; extract the genuine preview/compile ~600 lines into e.g. `rubric_package/preview/bulletin_preview.py`; leave the ~200 lines of core document-state methods (`_mark_modified`, `_confirm_discard`, `_service_data`, `_update_title`, `_deferred_save`, `_refresh_cover_thumb`, `_update_save_state_chip`, `_start_unsaved_pulse`) on `MainWindow`. Note: the extracted preview module will itself need to call into `MainWindow` for those state methods (`self._main._mark_modified()` etc.) — same composition pattern as `BulletinExporter`, and it will also call into `BulletinExporter` for `_build_bulletin_html`/`_build_bulletin_typst`/etc. (`self._main._exporter.<method>()`), since preview reuses the document-building logic that already moved.
-3. Revisit remaining sections opportunistically — none of the rest are large enough to be urgent on their own.
+2. ~~**Live bulletin preview**~~ — done, see above.
+3. ~~**Preamble panel**~~ — done, see above.
+4. Revisit remaining sections opportunistically — none of the rest are large enough to be urgent on their own. If tackled, the largest remaining are Order panel (392, one single monolithic `_build_order_panel` method — likely needs splitting *within* the method before it can move anywhere useful, not a clean method-by-method extraction like the three done so far), UI general construction (335), File IO (293).
 
 ### Verification bar for this phase
 
-Same as Phase 1, plus the four-step recipe above (compile → instantiate → call every method against a realistic stub, explicitly grepping for bare-`self` tokens → construct the real owning class and call through it end-to-end). `python3 -m py_compile` and a bare instantiation aren't enough on their own for code this deep in the call graph.
+Same as Phase 1, plus the four-step recipe above (compile → instantiate → call every method against a realistic stub, explicitly grepping for bare-`self` tokens → construct the real owning class and call through it end-to-end). `python3 -m py_compile` and a bare instantiation aren't enough on their own for code this deep in the call graph. Two-for-two now on the bare-self grep catching a real bug before any test ran — treat it as mandatory, not optional, for every future composition-style extraction in this codebase.

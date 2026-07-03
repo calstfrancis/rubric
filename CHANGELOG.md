@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev3] — Continued codebase cleanup
+
+### Internal
+
+- Extracted the live bulletin/manuscript preview panel (UI, Typst-compile-to-PDF pipeline, WebKit scroll handling — 17 methods, ~625 lines) into `rubric_package/preview/bulletin_preview.py`.
+- Extracted the document-template editor panel (font/margin/layout/heading fields, style presets, system-font picker — 7 methods, ~335 lines) into a new `rubric_package/panels/preamble_panel.py`.
+- `rubric.py`: 6,481 → 5,579 lines since the previous dev build. No user-visible behaviour change; each extraction verified via headless GTK instantiation, direct calls to every moved method against a stub main window, and a full real-`MainWindow` construction exercising the real delegation paths.
+
+---
+
 ## [0.17.10-dev2] — Continued codebase cleanup
 
 ### Internal
