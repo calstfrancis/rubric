@@ -28,6 +28,8 @@ modules:
         dest: typst-bin
     build-commands:
       - rm -f rubric_package/data/CHANGELOG.md && cp CHANGELOG.md rubric_package/data/CHANGELOG.md
+      - rm -f rubric_package/data/HELP.md && cp HELP.md rubric_package/data/HELP.md
+      - rm -f rubric_package/data/FAQ.md && cp FAQ.md rubric_package/data/FAQ.md
       - pip3 install --prefix=/app --no-build-isolation .
       - install -Dm755 typst-bin/typst /app/bin/typst
       - install -Dm644 io.github.calstfrancis.rubric.desktop /app/share/applications/io.github.calstfrancis.rubric.desktop
