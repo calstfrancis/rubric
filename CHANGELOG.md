@@ -4,6 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev4] — Continued codebase cleanup
+
+### Internal
+
+- Extracted the hymn lookup/search/theme popover (number-based Hymnary lookup with manual-entry fallback, local-cache title search, theme browsing — 6 methods, ~286 lines) into `rubric_package/panels/hymn_lookup_panel.py`.
+- Extracted the service order editing panel (readings card, order/notes split, per-item toolbar, hymn-suggestions strip — one ~389-line method) into a new `rubric_package/panels/order_panel.py`.
+- `rubric.py`: 5,579 → 4,908 lines since the previous dev build. No user-visible behaviour change; each extraction verified via headless GTK instantiation, direct calls to every moved method against a stub main window, and a full real-`MainWindow` construction (including an actual GTK draw pass) exercising the real delegation paths.
+
+---
+
 ## [0.17.10-dev3] — Continued codebase cleanup
 
 ### Internal

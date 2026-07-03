@@ -116,12 +116,42 @@ No bare-self-as-argument bugs this time (the static grep came back clean — con
 
 `rubric.py`: 5,910 → 5,579 lines.
 
+### Step 4 — `HymnLookupPanel` (done, 2026-07-03)
+
+Extracted the entire "Hymn lookup" section into `rubric_package/panels/hymn_lookup_panel.py` — unlike Steps 2 and 3, *all six* methods moved (`_do_hymn_lookup`, `_save_manual_hymn`, `_build_hymn_search_popover`, `_on_hymn_search_changed`, `_on_theme_chip_clicked`, `_inject_hymn_line`, ~286 lines); nothing was left behind on `MainWindow` this time, because none of it was tangled with unrelated core state — the whole section is one cohesive feature (number-based Hymnary lookup with manual-entry fallback, local-cache title search, theme browsing, and injecting the result into the selected order item). `MainWindow.__init__` now creates `self._hymn = HymnLookupPanel(self)` alongside the other three helpers.
+
+The guarded top-level imports for `hymn_lookup`/`hymn_suggestions` (optional sibling modules, same pattern as `hymn_lookup`'s WebKit-style try/except in the other extracted modules) were re-declared locally in the new module, per the established pattern — only the names actually used here (`lookup_hymn`, `parse_hymn_ref`, `search_hymns`, `get_theme_names`, `get_theme_hymns`) were carried over, not the full original list (`prefetch_hymnal`, `get_suggestions` stayed behind since nothing moved needs them).
+
+**Two external call sites, both inside the still-unextracted, single-giant-method "Order panel" section** (`_build_order_panel`, where the hymn popover button is wired up): `self._build_hymn_search_popover()` → `self._hymn._build_hymn_search_popover()`, and the popover's `"show"` signal callback `self._on_hymn_search_changed(...)` → `self._hymn._on_hymn_search_changed(...)`. Both found by grepping the method names across the *whole* `rubric.py`, not just the section being extracted — same discipline as the cross-module fix in Step 3.
+
+No bare-self-as-argument bugs (static grep clean). Verified with the full recipe, including one incidental confirmation of correct async routing: the stub test's call to `_do_hymn_lookup` went all the way through a real network round-trip to hymnary.org (via the real `hymn_lookup` module, not mocked) and the `on_result` closure correctly called back into `self._main.*` for `_push_undo`, `_content_widget.set_content`, and `_mark_modified`.
+
+`rubric.py`: 5,579 → 5,295 lines.
+
+### Step 5 — `OrderPanel` (done, 2026-07-03)
+
+Extracted the "Order panel" section into `rubric_package/panels/order_panel.py` — the single monolithic `_build_order_panel` method (~389 lines), moved as one unit rather than pre-split into sub-methods. Decided against splitting first: the four prior extractions all moved *existing* method boundaries verbatim, never invented new ones; introducing `_build_readings_card`/`_build_order_pane`/`_build_item_toolbar` sub-methods here would have doubled the diff surface (restructuring *and* relocating in the same step) for no reuse benefit, since they'd have no other caller and would all land in the same new file regardless. Treated it exactly like the `HymnLookupPanel` step: one cohesive chunk, just bigger, with the method's existing internal `# ──` comment markers (Readings card, Quick-start banner, Planning notes, Horizontal split, Order pane left, Notes pane right, Item toolbar rows 1–2) preserved as-is as internal documentation of the seams. `MainWindow.__init__` now creates `self._order = OrderPanel(self)` alongside the other four helpers.
+
+44 widget/state attributes get assigned inside this method (`readings_card`, `_order_hpaned`, `_view_stack`, `order_listbox`, `_content_widget`, `_hymn_search_pop`, `_theme_selected_btn`, and so on) — all landed on `self._main.<attr>`, none on the new `OrderPanel` instance itself, matching the established convention that widget/state ownership always stays on `MainWindow` even when the *building* code moves. This mattered concretely here: `HymnLookupPanel` (Step 4) already reads/writes `self._main._theme_selected_btn` and `self._main._hymn_search_pop` — both built inside this method — so keeping every assignment on `self._main` meant the two-way dependency between `OrderPanel` and `HymnLookupPanel` needed zero special-casing; it "just worked" because both sides were already targeting the same `MainWindow` attribute.
+
+**One bare-self pitfall, of a new variety not seen in Steps 1–4**: a `hasattr(self, "_hymn_search_entry")` call (inside the popover's `"show"` callback) — the earlier bare-self grep pattern (`(?<![\w.])self(?!\.)(?!\w)`) matches this too (a bare `self` token as a `hasattr`/`getattr` argument, not just as a widget-constructor argument like `transient_for=self`), but this is a *plain attribute check* that needs `self._main` substituted, not a wrong-object-passed-to-a-constructor bug like the Step 2 case. Worth noting for future extractions: the bare-self grep catches two distinct failure shapes — (a) an object identity bug (wrong window passed as `transient_for=`/similar) and (b) a mechanical `self.` → `self._main.` transform that a naive dotted-attribute regex would miss because `hasattr(self, "x")`/`getattr(self, "x")` don't have a literal `self.` substring. Both need eyes-on fixing, not just grep-and-move-on.
+
+Two already-established cross-module call sites (`self._hymn._build_hymn_search_popover()`, `self._hymn._on_hymn_search_changed(...)`, both already `self._hymn.`-qualified since Step 4) simply gained one more level of indirection: `self._main._hymn.<method>(...)`.
+
+One external call site fixed in `rubric.py` (the only caller of `_build_order_panel`, in `_build_ui`): `self._build_order_panel()` → `self._order._build_order_panel()`.
+
+Verified with the full recipe — compile, bare-self grep (one hit, fixed as above), and a real `MainWindow` construction via `Adw.Application` exercising: the widgets landing on `self._main` as expected, `add_divider()` through the real button-bar wiring, the suggestions-strip dismiss closure (confirmed `_sugg_dismissed` flips and the revealer hides), the hymn-popover cross-module wiring, and — since this method is only ever called once from deep inside real UI construction, a stub-based test would have had to reproduce nearly all of `MainWindow` anyway — a full `win.present()` + real GTK draw pass with no exceptions, confirming the `_draw_order_strip` closure's `self._main._colour_bar_rgb` reference resolves correctly under an actual paint cycle, not just at construction time.
+
+`rubric.py`: 5,295 → 4,908 lines.
+
 ### Order of work
 
 1. ~~**Exports**~~ — done, see above.
 2. ~~**Live bulletin preview**~~ — done, see above.
 3. ~~**Preamble panel**~~ — done, see above.
-4. Revisit remaining sections opportunistically — none of the rest are large enough to be urgent on their own. If tackled, the largest remaining are Order panel (392, one single monolithic `_build_order_panel` method — likely needs splitting *within* the method before it can move anywhere useful, not a clean method-by-method extraction like the three done so far), UI general construction (335), File IO (293).
+4. ~~**Hymn lookup**~~ — done, see above.
+5. ~~**Order panel**~~ — done, see above.
+6. Revisit remaining sections opportunistically. UI general construction (335) is next by size. File IO (293, `new_service`/`open_file`/`save_file`/`_write`/etc.) looks more like core document-state ownership than a separable feature, similar to why `_mark_modified`/`_service_data` stayed on `MainWindow` in Step 2 — worth a closer look before assuming it should move at all.
 
 ### Verification bar for this phase
 
