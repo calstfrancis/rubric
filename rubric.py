@@ -811,7 +811,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _refresh_templates(self):
         for g in self._tmpl_groups:
             try: self._tmpl_page.remove(g)
-            except: pass
+            except Exception: pass
         self._tmpl_groups.clear()
 
         if config.templates:
@@ -874,7 +874,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _refresh_pal(self):
         for g in self._pal_grps:
             try: self._pal_page.remove(g)
-            except: pass
+            except Exception: pass
         self._pal_grps.clear()
         for sd in self._pal:
             grp = Adw.PreferencesGroup(title=sd["section"])
@@ -911,7 +911,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _refresh_snippets_prefs(self):
         for g in self._snip_groups:
             try: self._snip_page.remove(g)
-            except: pass
+            except Exception: pass
         self._snip_groups.clear()
 
         for i, snip in enumerate(self._snippets):
@@ -6393,7 +6393,10 @@ class MainWindow(Adw.ApplicationWindow):
                 AUTOSAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
                 d = self._service_data(); d["_autosave"]=True
                 AUTOSAVE_PATH.write_text(json.dumps(d,indent=2,ensure_ascii=False),encoding="utf-8")
-            except: pass
+            except Exception as e:
+                toast = Adw.Toast.new(f"Autosave failed: {e}")
+                toast.set_timeout(5)
+                self._toast_overlay.add_toast(toast)
         return True
 
     def _check_autosave(self):

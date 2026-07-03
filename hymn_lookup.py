@@ -59,7 +59,7 @@ def _curl_get(url: str, extra_headers: list[str] | None = None) -> tuple[str | N
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except Exception:
         return None, 0
     if result.returncode != 0:
         return None, 0
