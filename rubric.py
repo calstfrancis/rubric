@@ -20,7 +20,10 @@ from rcl_data import get_liturgical_info
 
 # Import from refactored package
 try:
-    from rubric_package.models.config import Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, SECTIONS
+    from rubric_package.models.config import (
+        Config, MAX_UNDO, AUTOSAVE_SECS, CONFIG_PATH, AUTOSAVE_PATH, SECTIONS,
+        config, get_palette,
+    )
     from rubric_package.models.service import ServiceItem, SectionDivider, entry_from_dict
     from rubric_package.utils.typst import (
         typst_escape, note_for_typst, linebreak_fix, escape_unmatched_brackets,
@@ -138,9 +141,6 @@ except Exception:
 APP_VERSION = "0.17.9"
 
 
-config = Config()
-
-
 def _seed_all_dates() -> None:
     """Populate config.all_dates from observances.py on first launch.
     Also migrates any legacy custom_dates entries."""
@@ -206,11 +206,6 @@ if not config.templates:
     config.templates["UCC Sunday"] = _UCC_DEFAULT_TEMPLATE
     config.default_template = "UCC Sunday"
     config.save()
-
-
-def get_palette() -> list[tuple[str, list[str]]]:
-    if config.palette: return [(d["section"], d["items"]) for d in config.palette]
-    return SECTIONS
 
 
 # ── Data model ────────────────────────────────────────────────────────────────
