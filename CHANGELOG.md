@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [dev] — Autosave reliability, doc-sync fix
+
+### Fixed
+
+- **Autosave failures are no longer silent** — if autosave can't write (disk full, permissions, etc.), you now get a toast telling you, instead of losing work with no warning.
+- **HELP.md and FAQ.md now stay in sync** — both are symlinked from the packaged copy back to the root file, the same way CHANGELOG.md already was, so in-app Help/FAQ content can't drift out of date again.
+
+---
+
 ## [0.17.9] "Quiet Margin" — Visual polish, events popover, and workflow improvements
 
 ### Added
