@@ -139,7 +139,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.9"
+APP_VERSION = "0.17.10-dev1"
 
 
 def _seed_all_dates() -> None:
