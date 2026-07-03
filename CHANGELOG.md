@@ -4,6 +4,17 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev2] — Continued codebase cleanup
+
+### Internal
+
+- Finished extracting every remaining standalone GTK window out of the `rubric.py` monolith into `rubric_package/views/`: `BulletinPrefsWindow`, `BibleViewer`, `ServicesWindow`, `DatesEditorWindow`, `ObservanceWikiWindow`, `ServicePlanningNotesWindow`.
+- Removed dead `PlannerWindow` (never instantiated, superseded by `ServicesWindow`'s Planner tab). Its per-service attendance/debrief-note editor was already unreachable; that functionality returns later as part of a planned Rubric "library" feature, not resurrected from this code.
+- Extracted the bulletin/manuscript export pipeline (Typst generation, compilation, export dialogs, publish-to-web — ~1,300 lines) into `rubric_package/exporters/bulletin_exporter.py`, the single largest cut of this cleanup effort.
+- `rubric.py`: 11,363 → 6,481 lines (~43% smaller) since this cleanup started. No user-visible behaviour change; each extraction verified via headless GTK instantiation and, for the exporter, direct calls to every moved method against a stub main window plus a full real-`MainWindow` construction.
+
+---
+
 ## [0.17.10-dev1] — Autosave reliability, doc-sync fix, codebase cleanup
 
 ### Fixed
