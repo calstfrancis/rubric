@@ -37,6 +37,20 @@ Every standalone `Adw.Window`/`Adw.PreferencesWindow` subclass in `rubric.py` ha
 
 `MainWindow` can't be moved wholesale like the window classes in Phase 1 — it's too large and too central. The approach is composition: pull cohesive chunks of functionality out into plain helper classes under a new `rubric_package/` subpackage, each taking `main_window` in its constructor and duck-typing into it (same pattern the Phase 1 windows already use via `self._main`). `MainWindow` keeps thin call sites or delegates directly to the helper. This is not a mixin-based split — mixins would still couple everything to `self` and wouldn't actually separate anything.
 
+### Step 1 — `BulletinExporter` (done, 2026-07-03)
+
+Extracted the full 1,303-line **Exports** section into `rubric_package/exporters/bulletin_exporter.py` (landed in an empty `rubric_package/exporters/` stub package left over from the earlier stalled refactor — now finally used). `MainWindow.__init__` creates `self._exporter = BulletinExporter(self)` before `_setup_actions()` runs; 15 methods that had external callers elsewhere in `MainWindow` (mostly the live-preview compile path, action/button wiring, and the `export_as` format-picker dialog) now get called as `self._exporter.<method>()` instead of `self.<method>()`. Also relocated `_log_compile_error()` (a module-level function only this code used) into the new module, and dropped the file-scope Typst alias variables (`_typst_escape` etc.) that existed only to serve this section.
+
+`rubric.py`: 7,807 → 6,481 lines (the single biggest cut of the whole refactor, Phase 1 included).
+
+**Important lesson — the mechanical `self.` → `self._main.` transform has a blind spot**: it only catches `self.attr` patterns. Bare `self` passed as an argument — `Adw.Window(transient_for=self, ...)`, `WebKit.PrintOperation.run_dialog(self)`, `Gtk.PrintOperation.run(action, self)`, `GtkFileDialog.save(self, None, callback)` — doesn't match that regex at all, so those 6 call sites kept passing the *exporter object itself* as the parent window instead of `self._main`. `python3 -m py_compile` and even a bare instantiation smoke test don't catch this class of bug — it only surfaces when the method that builds the dialog actually *runs*. Caught by building a fake `main_window` stub and calling every export method directly, which raised `TypeError: argument parent: Expected Gtk.Window, but got BulletinExporter` — then fixed and confirmed via a full `Adw.Application` + real `MainWindow` construction.
+
+**Verification recipe for future composition-style extractions** (methods moving out of a class that's still referenced by the class they came from), in order of strength:
+1. `python3 -m py_compile` — catches syntax errors only.
+2. Instantiate the moved class directly (with a stub `main_window`) — catches missing imports/attributes at construction time.
+3. **Call every moved method against a realistic stub** (not just construct-and-done) — catches wrong self-vs-self._main routing in method bodies, including bare-`self`-as-argument cases the regex misses. Grep for bare `self` tokens specifically (`(?<![\w.])self(?!\.)(?!\w)`) as a static check before even running anything — a line-based grep that excludes whole lines containing `self.attr` will miss cases where both patterns appear on the same line (learned the hard way — `dlg.save(self, None, self._on_x)` has both).
+4. Where feasible, construct the *real* owning class (here, a real `MainWindow` via `Adw.Application`) and call through the real delegation path, not just the extracted class in isolation.
+
 ### Section map (by internal `# ── Section ──` comment markers, ~37 total)
 
 Sizes in lines, largest first:
@@ -80,10 +94,10 @@ These got filed under one comment header by file proximity, not by logic. Splitt
 
 ### Order of work
 
-1. **Exports** (this session) — biggest win, lowest risk, no untangling required.
-2. Untangle "Live bulletin preview" into its two halves; extract the genuine preview/compile ~600 lines; leave the ~200 lines of state methods on `MainWindow`.
+1. ~~**Exports**~~ — done, see above.
+2. **Next**: untangle "Live bulletin preview" into its two halves; extract the genuine preview/compile ~600 lines into e.g. `rubric_package/preview/bulletin_preview.py`; leave the ~200 lines of core document-state methods (`_mark_modified`, `_confirm_discard`, `_service_data`, `_update_title`, `_deferred_save`, `_refresh_cover_thumb`, `_update_save_state_chip`, `_start_unsaved_pulse`) on `MainWindow`. Note: the extracted preview module will itself need to call into `MainWindow` for those state methods (`self._main._mark_modified()` etc.) — same composition pattern as `BulletinExporter`, and it will also call into `BulletinExporter` for `_build_bulletin_html`/`_build_bulletin_typst`/etc. (`self._main._exporter.<method>()`), since preview reuses the document-building logic that already moved.
 3. Revisit remaining sections opportunistically — none of the rest are large enough to be urgent on their own.
 
 ### Verification bar for this phase
 
-Same as Phase 1, plus: since the extracted helper will be *called by* `MainWindow` (not the reverse), also run the actual app (or as close to it as headless testing allows) to exercise an end-to-end export, not just construct the object. `python3 -m py_compile` and a bare instantiation aren't enough on their own for code this deep in the call graph.
+Same as Phase 1, plus the four-step recipe above (compile → instantiate → call every method against a realistic stub, explicitly grepping for bare-`self` tokens → construct the real owning class and call through it end-to-end). `python3 -m py_compile` and a bare instantiation aren't enough on their own for code this deep in the call graph.
