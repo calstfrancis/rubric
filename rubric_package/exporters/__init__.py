@@ -1,3 +1,5 @@
 """Export functionality for Rubric."""
 
-__all__ = []
+from .bulletin_exporter import BulletinExporter
+
+__all__ = ["BulletinExporter"]
