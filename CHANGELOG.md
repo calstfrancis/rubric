@@ -4,6 +4,17 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev6] — Test suite for the extracted panels
+
+### Internal
+
+- Extracted the element-palette sidebar (search, recently-used list, section expanders, hymn-cache indicator/clear — 6 methods, ~124 lines) into a new `rubric_package/panels/palette_panel.py`.
+- Added `tests/test_panels.py` — 22 unit tests against `BulletinExporter`, `BulletinPreview`, `PreamblePanel`, `HymnLookupPanel`, `PalettePanel`, and `OrderPanel`, using stub `main_window` objects. This is the payoff of the whole monolith-splitting effort: none of this logic was unit-testable while it lived inside the ~11,000-line `MainWindow` God object. `config.save()` and the SQLite hymn-cache writes are mocked so tests can never touch real user data on disk.
+- Wired tests into CI: a new `gtk-panels` job installs GTK4/libadwaita and runs the panel tests under `xvfb-run`; the existing backend job now also runs the `tests/` package (134 tests that existed but were never actually wired into CI before).
+- `rubric.py`: 4,578 → 4,459 lines since the previous dev build.
+
+---
+
 ## [0.17.10-dev5] — Continued codebase cleanup
 
 ### Internal
