@@ -147,12 +147,12 @@ class BulletinPreview:
 
         box.append(hdr)
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        box.add_css_class("preview-pane")
 
         self._main._preview_stack = Gtk.Stack()
         self._main._preview_stack.set_vexpand(True)
         self._main._preview_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self._main._preview_stack.set_transition_duration(120)
+        self._main._preview_stack.add_css_class("preview-pane")
 
         if _WEBKIT_OK:
             _ucm = _WebKit.UserContentManager()
