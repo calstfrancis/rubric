@@ -45,6 +45,7 @@ try:
     from rubric_package.panels.hymn_lookup_panel import HymnLookupPanel
     from rubric_package.panels.order_panel import OrderPanel
     from rubric_package.panels.main_chrome import MainChrome
+    from rubric_package.panels.palette_panel import PalettePanel
 except ImportError as _pkg_err:
     print(f"Fatal: rubric_package not found — {_pkg_err}", file=sys.stderr)
     sys.exit(1)
@@ -194,6 +195,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._hymn = HymnLookupPanel(self)
         self._order = OrderPanel(self)
         self._chrome = MainChrome(self)
+        self._palette = PalettePanel(self)
         self._setup_actions(); self._chrome._build_ui(); self._apply_density(); self._update_title(); self._exporter._update_tex_btn()
         self.connect("destroy", self._on_main_destroy)
         # Seed from default template on first launch
@@ -440,128 +442,7 @@ class MainWindow(Adw.ApplicationWindow):
     # (Moved to MainChrome, rubric_package/panels/main_chrome.py — see refactor.md.)
 
     # ── Palette panel ─────────────────────────────────────────────────────────
-
-    def _build_palette_panel(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL); box.set_size_request(230,-1)
-        # Search entry
-        self._palette_search = Gtk.SearchEntry()
-        self._palette_search.set_placeholder_text("Search elements…")
-        self._palette_search.set_margin_start(12); self._palette_search.set_margin_end(12)
-        self._palette_search.set_margin_top(8); self._palette_search.set_margin_bottom(2)
-        self._palette_search.connect("search-changed", self._on_palette_search_changed)
-        box.append(self._palette_search)
-
-        # Hymn cache indicator
-        cache_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        cache_bar.set_margin_start(12); cache_bar.set_margin_end(12)
-        cache_bar.set_margin_bottom(4)
-        try:
-            from rubric_package.db import hymn_count as _hcount
-            _n = _hcount()
-        except Exception:
-            _n = 0
-        self._hymn_cache_lbl = Gtk.Label(label=f"📚 {_n} hymns cached")
-        self._hymn_cache_lbl.add_css_class("caption")
-        self._hymn_cache_lbl.add_css_class("dim-label")
-        self._hymn_cache_lbl.set_hexpand(True); self._hymn_cache_lbl.set_xalign(0)
-        cache_bar.append(self._hymn_cache_lbl)
-        clear_btn = Gtk.Button(label="Clear")
-        clear_btn.add_css_class("flat"); clear_btn.add_css_class("caption")
-        clear_btn.connect("clicked", self._on_hymn_cache_clear)
-        cache_bar.append(clear_btn)
-        box.append(cache_bar)
-
-        scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
-        self._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self._palette_inner.set_margin_top(4); self._palette_inner.set_margin_bottom(8)
-        self._palette_listboxes: dict[str,Gtk.ListBox] = {}
-        self._palette_expanders: list[Gtk.Expander] = []
-        self._fill_palette_inner()
-        scroll.set_child(self._palette_inner); box.append(scroll)
-        return box
-
-    def _on_hymn_cache_clear(self, _btn):
-        try:
-            from rubric_package.db import hymn_clear, hymn_count as _hcount
-            hymn_clear()
-            self._hymn_cache_lbl.set_label(f"📚 {_hcount()} hymns cached")
-        except Exception:
-            pass
-
-    def _on_palette_search_changed(self, entry):
-        text = entry.get_text().lower().strip()
-        if text:
-            for exp in self._palette_expanders:
-                exp.set_expanded(True)
-        for lb in self._palette_listboxes.values():
-            if text:
-                lb.set_filter_func(
-                    lambda row, t=text: hasattr(row, '_item_name') and t in row._item_name.lower())
-            else:
-                lb.set_filter_func(None)
-            lb.invalidate_filter()
-
-    def _section_for_item(self, name: str) -> str:
-        for sname, items in get_palette():
-            if name in items:
-                return sname
-        return ""
-
-    def _fill_palette_inner(self):
-        while True:
-            c = self._palette_inner.get_first_child()
-            if c is None: break
-            self._palette_inner.remove(c)
-        self._palette_listboxes.clear()
-        self._palette_expanders.clear()
-
-        # Recently used section
-        if config.recently_used:
-            rec_lbl = Gtk.Label(label="Recent")
-            rec_lbl.add_css_class("caption"); rec_lbl.add_css_class("dim-label")
-            rec_lbl.set_xalign(0)
-            rec_lbl.set_margin_start(12); rec_lbl.set_margin_end(12)
-            rec_lbl.set_margin_top(8); rec_lbl.set_margin_bottom(2)
-            self._palette_inner.append(rec_lbl)
-            rec_lb = Gtk.ListBox(); rec_lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            rec_lb.add_css_class("boxed-list")
-            rec_lb.set_margin_start(12); rec_lb.set_margin_end(12); rec_lb.set_margin_bottom(4)
-            rec_lb.connect("row-activated", self._on_palette_row_activated)
-            for rname in config.recently_used[:6]:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
-                row._item_name = rname; row._section_name = self._section_for_item(rname)
-                rec_lb.append(row)
-            self._palette_inner.append(rec_lb)
-            self._palette_listboxes["__recent__"] = rec_lb
-            self._palette_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-
-        # Sections with expanders (first expanded, rest collapsed)
-        for i, (sname, items) in enumerate(get_palette()):
-            exp = Gtk.Expander(label=sname)
-            exp.set_margin_start(12); exp.set_margin_end(12)
-            exp.set_margin_top(8); exp.set_margin_bottom(2)
-            exp.set_expanded(i == 0)
-            lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            lb.add_css_class("boxed-list"); lb.set_margin_bottom(4)
-            lb.connect("row-activated", self._on_palette_row_activated)
-            for iname in items:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(iname)); row.set_activatable(True)
-                row._item_name = iname; row._section_name = sname; lb.append(row)
-            exp.set_child(lb)
-            self._palette_inner.append(exp)
-            self._palette_listboxes[sname] = lb
-            self._palette_expanders.append(exp)
-
-    def _refresh_recently_used(self):
-        lb = self._palette_listboxes.get("__recent__")
-        if lb is None:
-            self._fill_palette_inner(); return
-        while lb.get_first_child():
-            lb.remove(lb.get_first_child())
-        for rname in config.recently_used[:6]:
-            row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
-            row._item_name = rname; row._section_name = self._section_for_item(rname)
-            lb.append(row)
+    # (Moved to PalettePanel, rubric_package/panels/palette_panel.py — see refactor.md.)
 
     # ── Preamble panel toggle ─────────────────────────────────────────────────
     # (The template editor UI/state itself now lives in PreamblePanel,
@@ -1005,9 +886,9 @@ class MainWindow(Adw.ApplicationWindow):
         config.recently_used = config.recently_used[:6]
         config.save()
         if was_empty:
-            self._fill_palette_inner()
+            self._palette._fill_palette_inner()
         else:
-            self._refresh_recently_used()
+            self._palette._refresh_recently_used()
         GLib.idle_add(self.leader_entry.grab_focus)
     def _add_selected_palette_item(self):
         for lb in self._palette_listboxes.values():
@@ -4343,7 +4224,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         if page == "dates" and hasattr(prefs, "_dates_page"):
             prefs.set_visible_page(prefs._dates_page)
         def on_destroy(_):
-            self._fill_palette_inner(); self._apply_tab_mode()
+            self._palette._fill_palette_inner(); self._apply_tab_mode()
             if self.selected_date:
                 self._refresh_justice_row(self.selected_date)
         prefs.connect("destroy", on_destroy); prefs.present()

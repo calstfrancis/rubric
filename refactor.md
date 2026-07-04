@@ -160,6 +160,32 @@ Verified with the full recipe — compile, bare-self grep (one hit, fixed as abo
 
 `rubric.py`: 4,908 → 4,578 lines.
 
+### Step 7 — `PalettePanel` (done, 2026-07-04)
+
+Extracted the "Palette panel" section (the searchable element-palette sidebar: recently-used list, per-section expanders, hymn-cache indicator/clear button — 6 methods, ~124 lines) into `rubric_package/panels/palette_panel.py`. All six methods moved as one cohesive unit, same as Steps 4 and 5 — nothing here was tangled with unrelated core state. `MainWindow.__init__` now creates `self._palette = PalettePanel(self)` last in the composition-helper block, before `_setup_actions()`/`_chrome._build_ui()` run (since `_build_ui`, itself already moved into `MainChrome` in Step 6, calls `self._main._palette._build_palette_panel()`).
+
+No bare-self bugs this time (grep clean). Three external call sites fixed, spanning both `rubric.py` and an already-extracted sibling module — same discipline as Steps 3–5, checking beyond just the section being moved:
+- `rubric_package/panels/main_chrome.py` (Step 6's `_build_ui`, which already called this via `self._main._build_palette_panel()`) → `self._main._palette._build_palette_panel()`.
+- Two call sites in still-unmoved `MainWindow` code — one in "Palette actions" (`_on_palette_row_activated`, recently-used bookkeeping) and one in "Preferences" (`open_preferences`'s `on_destroy` callback, refreshing the palette after settings close) — both `self._fill_palette_inner()`/`self._refresh_recently_used()` → `self._palette.<method>()`.
+
+`_on_palette_row_activated` itself stayed on `MainWindow` (it lives in the separate "Palette actions" section, not "Palette panel") — calls into it from the moved code became `self._main._on_palette_row_activated`.
+
+Verified with the full recipe — compile, bare-self grep (clean), and a real `MainWindow` construction with `win.present()`: confirmed the palette widgets built correctly (5 listboxes, 4 expanders for a fresh service), exercised the search-filter wiring, a real row-activation → recently-used-list refresh round trip, and the hymn-cache-clear button — all through real signal-connected paths.
+
+`rubric.py`: 4,578 → 4,459 lines.
+
+### Payoff — real unit test suite for the extracted panels (2026-07-04)
+
+This was the actual point of the whole exercise, not just line-count reduction: `MainWindow` was previously an ~11,000-line God object that couldn't be unit-tested at all — the existing `tests/` suite only ever covered backend/data-layer code (`db`, `models`, `utils`, `observances`), and nothing imported `rubric.py` or a GTK window class. There was no way to write a test against, say, the hymn-injection logic or the Typst heading-override logic without dragging in an entire running application.
+
+Added `tests/test_panels.py` (22 tests) against `BulletinExporter`, `BulletinPreview`, `PreamblePanel`, `HymnLookupPanel`, `PalettePanel`, and `OrderPanel`, using exactly the stub-`main_window` pattern developed ad hoc during Steps 1–7's verification passes — now made permanent. `MainChrome._build_ui` was deliberately left without dedicated unit tests: stubbing its ~25 collaborator methods/attributes would mean re-stubbing nearly all of `MainWindow`, for no more confidence than the real end-to-end GUI smoke test (below) already provides.
+
+**Safety-critical detail**: `config.save()` and the SQLite hymn-cache helpers (`rubric_package.db.hymn_set`/`hymn_get`/`hymn_count`/`hymn_clear`) write to the user's *real* `~/.config/rubric/config.json` and `~/.local/share/rubric/rubric.db` — both are live, shared, human-owned files, not test fixtures. `config.save` is patched to a no-op for the whole test module (`setUpModule`/`tearDownModule`); the db helpers are patched per-test via `unittest.mock.patch("rubric_package.db.hymn_set", ...)`, which works even though the code under test does the import locally inside the method (`from rubric_package.db import hymn_set as _hset`) — the patch replaces the attribute on the `rubric_package.db` module object itself, so the local import picks up the patched version at call time. Verified by md5-comparing both files before and after a full test run — byte-identical.
+
+Wired into CI (`.github/workflows/tests.yml`) as a second job, `gtk-panels`, separate from the existing backend job: PyGObject bindings come from `apt-get install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`, which bind to the runner's *system* Python — `actions/setup-python`'s isolated interpreter can't see them, so this job deliberately skips that action and uses system `python3` directly. Tests run under `xvfb-run` since there's no display in the runner otherwise. A "verify GTK4/libadwaita import" step runs before the tests specifically so a broken apt install fails loudly instead of silently skipping every test (the module's own `try/except` around the `gi` import, which lets `test_panels.py` degrade gracefully on machines without GTK, would otherwise mask an actually-broken CI job as a wall of green skips).
+
+Also fixed in passing: the existing `tests/` package (`test_db.py`, `test_models.py`, `test_observances.py`, `test_utils.py` — 134 tests) was never actually wired into CI at all; only the two root-level files `test_rcl_data.py`/`test_bible_api.py` ran. Added `python3 -m unittest discover -s tests -v` to the backend job. (Not touched: `test_hymn_lookup.py` has one pre-existing failing test, `test_cache_miss_does_not_call_hymn_set_on_network_error` — references `hymn_lookup.urllib`, which doesn't exist as a module-level import anymore. Unrelated to this refactor; left as-is rather than expanding scope, and deliberately not added to the CI invocation so it doesn't turn a green build red.)
+
 ### Order of work
 
 1. ~~**Exports**~~ — done, see above.
@@ -168,7 +194,8 @@ Verified with the full recipe — compile, bare-self grep (one hit, fixed as abo
 4. ~~**Hymn lookup**~~ — done, see above.
 5. ~~**Order panel**~~ — done, see above.
 6. ~~**UI general construction**~~ — done, see above.
-7. Revisit remaining sections opportunistically — nothing left is especially large. File IO (293, `new_service`/`open_file`/`save_file`/`_write`/etc.) still looks like core document-state ownership rather than a separable feature, similar to why `_mark_modified`/`_service_data` stayed on `MainWindow` in Step 2 — worth a closer look before assuming it should move at all. Palette panel (`_build_palette_panel`, not yet measured precisely) is the next actual UI-panel-shaped candidate if further extraction is wanted.
+7. ~~**Palette panel**~~ — done, see above.
+8. Nothing left is especially large — the monolith is now mostly core document-state, action wiring, and smaller feature sections (Refresh logic, Order actions, Icon picker, Calendar/readings, Setup wizard, Lectionary service seeding, File IO, Snippets, Git/GitHub, Preferences, and ~15 more under 250 lines each). File IO (`new_service`/`open_file`/`save_file`/`_write`/etc.) still looks like core document-state ownership rather than a separable feature, similar to why `_mark_modified`/`_service_data` stayed on `MainWindow` in Step 2. Further extractions from here should each be re-measured and triaged individually rather than assumed — this phase has produced diminishing per-step returns (124–389 lines each vs. 1,300 for Step 1) and what's left is smaller and more interdependent with what stays behind.
 
 ### Verification bar for this phase
 

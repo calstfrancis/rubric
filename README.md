@@ -88,9 +88,19 @@ Service files use the `.liturgy` extension (JSON). They store the service title,
 
 ## Running tests
 
+Backend/data-layer tests (no GTK required):
+
 ```bash
 python3 -m unittest test_rcl_data test_bible_api -v
+python3 -m unittest discover -s tests -v
 ```
+
+The `tests/` package also includes `test_panels.py`, covering the composition-pattern
+classes extracted from `MainWindow` (`BulletinExporter`, `BulletinPreview`,
+`PreamblePanel`, `HymnLookupPanel`, `OrderPanel`, `PalettePanel`) against lightweight
+stub windows. Those tests need GTK4/libadwaita's Python bindings (`python3-gi`,
+`gir1.2-gtk-4.0`, `gir1.2-adw-1`) and are skipped automatically if unavailable —
+CI runs them in a separate job that installs those packages.
 
 ---
 

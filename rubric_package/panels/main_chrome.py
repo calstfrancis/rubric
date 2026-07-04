@@ -324,7 +324,7 @@ class MainChrome:
         # Outer paned: palette | content
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         paned.set_shrink_start_child(True); paned.set_shrink_end_child(False)
-        paned.set_start_child(self._main._build_palette_panel())
+        paned.set_start_child(self._main._palette._build_palette_panel())
         self._main._palette_paned = paned
         self._main._palette_visible = False
         GLib.idle_add(lambda: paned.set_position(0))
