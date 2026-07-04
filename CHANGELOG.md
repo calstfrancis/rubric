@@ -4,6 +4,14 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev1] — Fix invisible preview toolbar in dark mode
+
+### Fixed
+
+- **Preview panel toolbar was unreadable in dark mode** — the `.preview-pane` CSS class (hardcoded light `#fafaf8` background, meant for the document/page surface) was accidentally applied to the whole preview panel, including the toolbar row (Bulletin/Manuscript toggle, compile mode button, compile ⟳ button, edit toggle, gear menu, print, popout). In dark mode, the toolbar's light-theme text and icons rendered white-on-near-white and were effectively invisible. Moved the CSS class to just the inner document stack, so the toolbar now follows the normal theme background correctly.
+
+---
+
 ## [0.18.0] "Clean Lines" — Monolith split complete, autosave reliability, and aesthetic polish
 
 ### Fixed
