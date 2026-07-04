@@ -355,12 +355,20 @@ def strip_typst_plain(text: str) -> str:
 
 
 def notes_preview(text: str, limit: int = 200) -> str:
-    """Strip Typst markup and collapse whitespace for a short library-list preview."""
+    """Strip Typst markup and collapse whitespace for a short library-list preview.
+
+    Truncates on a word boundary and appends an ellipsis rather than cutting
+    mid-word, so list rows don't end on a chopped-off fragment.
+    """
     try:
         plain = strip_typst_plain(text or "")
     except Exception:
         plain = text or ""
-    return " ".join(plain.split())[:limit]
+    collapsed = " ".join(plain.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    cut = collapsed[:limit].rsplit(" ", 1)[0]
+    return (cut or collapsed[:limit]) + "…"
 
 
 # ── Shared Typst function definitions ─────────────────────────────────────────

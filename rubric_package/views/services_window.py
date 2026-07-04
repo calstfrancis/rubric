@@ -207,6 +207,12 @@ class ServicesWindow(Adw.Window):
         if not services:
             self._planner_list.append(self._status_row(f"No .liturgy files in {self._planner_folder}")); return
 
+        try:
+            from rubric_package.db import service_meta_all as _smeta_all
+            self._planner_meta = {s["path"]: s for s in _smeta_all()}
+        except ImportError:
+            self._planner_meta = {}
+
         upcoming = sorted([(d,t,c,p) for d,t,c,p in services if d and d >= today], key=lambda x: x[0])
         past     = sorted([(d,t,c,p) for d,t,c,p in services if not d or d < today],
                           key=lambda x: x[0] or _date.min, reverse=True)
@@ -220,20 +226,40 @@ class ServicesWindow(Adw.Window):
         if upcoming: _sep("Upcoming")
         for sd, title, count, path in upcoming:
             row = Adw.ActionRow(title=title, subtitle=f"{sd.strftime('%-d %B %Y')}  ·  {count} elements")
-            row.set_activatable(True); row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.set_activatable(True)
+            pills = self._planner_pill_suffix(str(path))
+            if pills: row.add_suffix(pills)
+            row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
             row.connect("activated", lambda _r, p=str(path): self._open_service(p))
             self._planner_list.append(row)
         if past: _sep("Past services")
         for sd, title, count, path in past:
             date_label = sd.strftime("%-d %B %Y") if sd else "No date"
             row = Adw.ActionRow(title=title, subtitle=f"{date_label}  ·  {count} elements")
-            row.set_activatable(True); row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+            row.set_activatable(True)
+            pills = self._planner_pill_suffix(str(path))
+            if pills: row.add_suffix(pills)
+            row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
             row.connect("activated", lambda _r, p=str(path): self._open_service(p))
             self._planner_list.append(row)
 
         # Store for calendar view
         self._planner_services = services
         self._load_planner_calendar(services, today)
+
+    def _planner_pill_suffix(self, path: str) -> "Gtk.Widget | None":
+        """Small series/tag pill row for a Planner list item, or None if it has neither."""
+        meta = getattr(self, "_planner_meta", {}).get(path)
+        if not meta:
+            return None
+        pills = ([meta["series"]] if meta.get("series") else []) + list(meta.get("tags") or [])
+        if not pills:
+            return None
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_valign(Gtk.Align.CENTER)
+        for text in pills[:3]:
+            box.append(self._make_pill(text))
+        return box
 
     def _plan_sunday(self, sunday):
         """Show a dialog to create a new .liturgy file for an unplanned Sunday."""
@@ -385,6 +411,8 @@ class ServicesWindow(Adw.Window):
                 subtitle = f"{week_str}  ·  {svc_count} elements"
                 row = Adw.ActionRow(title=svc_title or date_lbl, subtitle=subtitle)
                 row.set_activatable(True)
+                pills = self._planner_pill_suffix(str(svc_path))
+                if pills: row.add_suffix(pills)
                 row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
                 row.connect("activated", lambda _r, p=str(svc_path): self._open_service(p))
             else:
@@ -608,10 +636,42 @@ class ServicesWindow(Adw.Window):
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_hexpand(True)
-        se = Gtk.SearchEntry(); se.set_placeholder_text("Search past services…")
-        se.set_margin_start(12); se.set_margin_end(12); se.set_margin_top(10); se.set_margin_bottom(6)
+
+        top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        top.set_margin_start(12); top.set_margin_end(12); top.set_margin_top(10); top.set_margin_bottom(6)
+        se = Gtk.SearchEntry(); se.set_placeholder_text("Search past services…"); se.set_hexpand(True)
         se.connect("search-changed", lambda e: self._arch_rebuild(e.get_text().strip().lower()))
-        box.append(se); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        self._arch_search_entry = se
+        top.append(se)
+
+        self._arch_sort = "date_desc"
+        sort_labels = ["Newest first", "Oldest first", "Attendance: high to low", "Attendance: low to high"]
+        sort_dd = Gtk.DropDown.new_from_strings(sort_labels)
+        sort_dd.set_tooltip_text("Sort order")
+        _sort_keys = ["date_desc", "date_asc", "attendance_desc", "attendance_asc"]
+        def _on_sort_changed(dd, _pspec):
+            self._arch_sort = _sort_keys[dd.get_selected()]
+            self._arch_rebuild(self._arch_search)
+        sort_dd.connect("notify::selected", _on_sort_changed)
+        top.append(sort_dd)
+
+        self._arch_select_btn = Gtk.ToggleButton(label="Select")
+        self._arch_select_btn.connect("toggled", self._on_arch_select_toggled)
+        top.append(self._arch_select_btn)
+
+        manage_btn = Gtk.Button(label="Manage tags & series…")
+        manage_btn.connect("clicked", lambda _b: self._open_manage_tags_dialog())
+        top.append(manage_btn)
+
+        box.append(top)
+
+        self._arch_indicator_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._arch_indicator_box.set_margin_start(12); self._arch_indicator_box.set_margin_end(12)
+        self._arch_indicator_box.set_margin_bottom(6)
+        self._arch_indicator_box.set_visible(False)
+        box.append(self._arch_indicator_box)
+
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -620,9 +680,37 @@ class ServicesWindow(Adw.Window):
         self._arch_list.set_margin_start(12); self._arch_list.set_margin_end(12)
         self._arch_list.set_margin_top(8); self._arch_list.set_margin_bottom(12)
         scroll.set_child(self._arch_list); box.append(scroll)
+
+        self._arch_stats_lbl = Gtk.Label(); self._arch_stats_lbl.add_css_class("caption")
+        self._arch_stats_lbl.add_css_class("dim-label"); self._arch_stats_lbl.set_xalign(0)
+        self._arch_stats_lbl.set_margin_start(12); self._arch_stats_lbl.set_margin_bottom(4)
+        box.append(self._arch_stats_lbl)
+
+        self._arch_bulk_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._arch_bulk_bar.set_margin_start(12); self._arch_bulk_bar.set_margin_end(12)
+        self._arch_bulk_bar.set_margin_top(4); self._arch_bulk_bar.set_margin_bottom(8)
+        self._arch_bulk_bar.set_visible(False)
+        self._arch_bulk_lbl = Gtk.Label(label="0 selected"); self._arch_bulk_lbl.add_css_class("dim-label")
+        self._arch_bulk_lbl.set_hexpand(True); self._arch_bulk_lbl.set_xalign(0)
+        self._arch_bulk_bar.append(self._arch_bulk_lbl)
+        bulk_tag_btn = Gtk.Button(label="Add tag…"); bulk_tag_btn.add_css_class("flat")
+        bulk_tag_btn.connect("clicked", lambda _b: self._bulk_prompt("tag"))
+        self._arch_bulk_bar.append(bulk_tag_btn)
+        bulk_series_btn = Gtk.Button(label="Set series…"); bulk_series_btn.add_css_class("flat")
+        bulk_series_btn.connect("clicked", lambda _b: self._bulk_prompt("series"))
+        self._arch_bulk_bar.append(bulk_series_btn)
+        bulk_pin_btn = Gtk.Button(label="Pin"); bulk_pin_btn.add_css_class("flat")
+        bulk_pin_btn.connect("clicked", lambda _b: self._bulk_set_pinned(True))
+        self._arch_bulk_bar.append(bulk_pin_btn)
+        bulk_unpin_btn = Gtk.Button(label="Unpin"); bulk_unpin_btn.add_css_class("flat")
+        bulk_unpin_btn.connect("clicked", lambda _b: self._bulk_set_pinned(False))
+        self._arch_bulk_bar.append(bulk_unpin_btn)
+        box.append(self._arch_bulk_bar)
+
         outer.append(box)
 
         self._arch_filter = ("all", None)
+        self._arch_selected: set = set()
         self._populate_arch_filter_list()
         return outer
 
@@ -658,6 +746,7 @@ class ServicesWindow(Adw.Window):
         first = add_row("all", None, "All services", "view-list-symbolic")
         add_row("pinned", None, "Pinned", "starred-symbolic")
         add_row("untagged", None, "Untagged", "window-close-symbolic")
+        add_row("has_debrief", None, "Has debrief", "text-editor-symbolic")
 
         series = service_meta_all_series()
         if series:
@@ -671,6 +760,18 @@ class ServicesWindow(Adw.Window):
             for name, count in tags:
                 add_row("tag", name, f"{name} ({count})")
 
+        if not series and not tags:
+            hint = Gtk.ListBoxRow(); hint.set_selectable(False); hint.set_activatable(False)
+            hint_lbl = Gtk.Label(
+                label="Series and tags appear here once you set them — click the "
+                      "service title in the header bar to add a Series or Tags.")
+            hint_lbl.add_css_class("caption"); hint_lbl.add_css_class("dim-label")
+            hint_lbl.set_wrap(True); hint_lbl.set_xalign(0)
+            hint_lbl.set_margin_start(10); hint_lbl.set_margin_end(10)
+            hint_lbl.set_margin_top(12)
+            hint.set_child(hint_lbl)
+            lb.append(hint)
+
         lb.select_row(first)
 
     def _on_arch_filter_selected(self, _lb, row):
@@ -678,6 +779,54 @@ class ServicesWindow(Adw.Window):
             return
         self._arch_filter = row._filter
         self._arch_rebuild(self._arch_search)
+
+    _FILTER_LABELS = {
+        "pinned": "Pinned", "untagged": "Untagged", "has_debrief": "Has debrief",
+    }
+
+    def _update_arch_indicator(self, kind: str, value, query: str):
+        box = self._arch_indicator_box
+        while box.get_first_child(): box.remove(box.get_first_child())
+        parts = []
+        if kind == "series":
+            parts.append(f"Series: {value}")
+        elif kind == "tag":
+            parts.append(f"Tag: {value}")
+        elif kind in self._FILTER_LABELS:
+            parts.append(self._FILTER_LABELS[kind])
+        if query:
+            parts.append(f'"{query}"')
+        if not parts:
+            box.set_visible(False); return
+        lbl = Gtk.Label(label="Filtering by " + " + ".join(parts))
+        lbl.add_css_class("caption"); lbl.add_css_class("dim-label"); lbl.set_xalign(0); lbl.set_hexpand(True)
+        box.append(lbl)
+        clear_btn = Gtk.Button(label="Clear"); clear_btn.add_css_class("flat"); clear_btn.add_css_class("caption")
+        clear_btn.connect("clicked", lambda _b: self._clear_arch_filter())
+        box.append(clear_btn)
+        box.set_visible(True)
+
+    def _clear_arch_filter(self):
+        self._arch_search_entry.set_text("")
+        first = self._arch_filter_list.get_row_at_index(0)
+        if first:
+            self._arch_filter_list.select_row(first)
+        else:
+            self._arch_filter = ("all", None)
+            self._arch_rebuild("")
+
+    def _update_arch_stats(self, services: list[dict]):
+        if not services:
+            self._arch_stats_lbl.set_text(""); return
+        n = len(services)
+        counted = [int(s.get("attendance") or 0) for s in services if int(s.get("attendance") or 0) > 0]
+        if counted:
+            avg = sum(counted) / len(counted)
+            self._arch_stats_lbl.set_text(
+                f"{n} service{'s' if n != 1 else ''} · avg attendance {avg:.0f} "
+                f"({len(counted)} with attendance recorded)")
+        else:
+            self._arch_stats_lbl.set_text(f"{n} service{'s' if n != 1 else ''}")
 
     def _stable_tag_color(self, name: str) -> str:
         from rubric_package.utils.colors import SECTION_COLORS
@@ -704,14 +853,107 @@ class ServicesWindow(Adw.Window):
                 self._main.service_pinned = pinned
                 if hasattr(self._main, "_pinned_toggle"):
                     self._main._pinned_toggle.set_active(pinned)
-            from rubric_package.db import service_meta_update
-            from rubric_package.utils.typst import notes_preview
-            service_meta_update(str(p), data.get("title", ""), data.get("date", ""),
-                                 list(data.get("tags", []) or []), data.get("series", "") or "",
-                                 pinned, notes_preview(data.get("planning_notes", "")), p.stat().st_mtime)
+            self._reindex_service_meta(p, data)
         except Exception as e:
             self._show_toast(f"Couldn't update pin: {e}"); return
         self._populate_arch_filter_list()
+        self._arch_rebuild(self._arch_search)
+
+    def _reindex_service_meta(self, path: Path, data: dict) -> None:
+        """Refresh the service_meta cache row for one file from its current data."""
+        from rubric_package.db import service_meta_update
+        from rubric_package.utils.typst import notes_preview
+        service_meta_update(
+            str(path), data.get("title", ""), data.get("date", ""),
+            list(data.get("tags", []) or []), data.get("series", "") or "",
+            bool(data.get("pinned", False)), notes_preview(data.get("planning_notes", "")),
+            path.stat().st_mtime,
+            attendance=int(data.get("attendance", 0) or 0),
+            debrief_preview=notes_preview(data.get("debrief", "")),
+        )
+
+    def _on_arch_select_toggled(self, btn: Gtk.ToggleButton):
+        self._arch_bulk_mode = btn.get_active()
+        if not self._arch_bulk_mode:
+            self._arch_selected.clear()
+        self._arch_bulk_bar.set_visible(self._arch_bulk_mode)
+        self._update_arch_bulk_label()
+        self._arch_rebuild(self._arch_search)
+
+    def _on_arch_check_toggled(self, path: str, checked: bool):
+        if checked:
+            self._arch_selected.add(path)
+        else:
+            self._arch_selected.discard(path)
+        self._update_arch_bulk_label()
+
+    def _update_arch_bulk_label(self):
+        n = len(self._arch_selected)
+        self._arch_bulk_lbl.set_text(f"{n} selected" if n != 1 else "1 selected")
+
+    def _bulk_prompt(self, kind: str):
+        if not self._arch_selected:
+            self._show_toast("Select at least one service first"); return
+        dlg = Adw.MessageDialog(
+            transient_for=self,
+            heading="Add tag to selected" if kind == "tag" else "Set series for selected",
+            body=f"Applies to {len(self._arch_selected)} selected service(s).")
+        entry = Gtk.Entry()
+        entry.set_placeholder_text("e.g. communion" if kind == "tag" else "e.g. Advent 2026")
+        dlg.set_extra_child(entry)
+        dlg.add_response("cancel", "Cancel"); dlg.add_response("apply", "Apply")
+        dlg.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("apply")
+
+        def on_resp(_d, r):
+            value = entry.get_text().strip()
+            if r == "apply" and value:
+                self._bulk_apply(kind, value)
+        dlg.connect("response", on_resp)
+        entry.connect("entry-activated", lambda _e: (on_resp(dlg, "apply"), dlg.close()))
+        dlg.present()
+
+    def _bulk_apply(self, kind: str, value: str):
+        n = 0
+        for path in list(self._arch_selected):
+            try:
+                p = Path(path)
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if kind == "tag":
+                    tags = list(data.get("tags", []) or [])
+                    if value not in tags:
+                        tags.append(value)
+                    data["tags"] = tags
+                else:
+                    data["series"] = value
+                p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                self._reindex_service_meta(p, data)
+                n += 1
+            except Exception:
+                pass
+        self._show_toast(f"Updated {n} service(s)")
+        self._populate_arch_filter_list()
+        self._arch_rebuild(self._arch_search)
+
+    def _bulk_set_pinned(self, pinned: bool):
+        if not self._arch_selected:
+            self._show_toast("Select at least one service first"); return
+        n = 0
+        for path in list(self._arch_selected):
+            try:
+                p = Path(path)
+                data = json.loads(p.read_text(encoding="utf-8"))
+                data["pinned"] = pinned
+                p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                if self._main.current_file and str(Path(self._main.current_file)) == str(p):
+                    self._main.service_pinned = pinned
+                    if hasattr(self._main, "_pinned_toggle"):
+                        self._main._pinned_toggle.set_active(pinned)
+                self._reindex_service_meta(p, data)
+                n += 1
+            except Exception:
+                pass
+        self._show_toast(f"{'Pinned' if pinned else 'Unpinned'} {n} service(s)")
         self._arch_rebuild(self._arch_search)
 
     def _arch_rebuild(self, query: str):
@@ -728,7 +970,7 @@ class ServicesWindow(Adw.Window):
             by_path.setdefault(legacy["service_path"], {
                 "path": legacy["service_path"], "title": legacy["service_title"],
                 "date": legacy["service_date"], "tags": [], "series": "",
-                "pinned": False, "notes_preview": "",
+                "pinned": False, "notes_preview": "", "attendance": 0, "debrief_preview": "",
             })
         services = list(by_path.values())
 
@@ -741,10 +983,14 @@ class ServicesWindow(Adw.Window):
             services = [s for s in services if s.get("pinned")]
         elif kind == "untagged":
             services = [s for s in services if not s.get("tags")]
+        elif kind == "has_debrief":
+            services = [s for s in services if s.get("debrief_preview")]
         elif kind == "series":
             services = [s for s in services if s.get("series") == value]
         elif kind == "tag":
             services = [s for s in services if value in (s.get("tags") or [])]
+
+        self._update_arch_indicator(kind, value, query)
 
         # Show recently opened files at the top of the default, unfiltered view
         if not query and kind == "all":
@@ -772,8 +1018,9 @@ class ServicesWindow(Adw.Window):
                 series_v = (svc.get("series") or "").lower()
                 tags_v = " ".join(svc.get("tags") or []).lower()
                 notes_v = (svc.get("notes_preview") or "").lower()
+                debrief_v = (svc.get("debrief_preview") or "").lower()
                 if (query in title or query in date or query in series_v
-                        or query in tags_v or query in notes_v):
+                        or query in tags_v or query in notes_v or query in debrief_v):
                     filtered.append(svc)
                 else:
                     elems = element_for_service(svc["path"])
@@ -781,9 +1028,21 @@ class ServicesWindow(Adw.Window):
                            for e in elems):
                         filtered.append(svc)
             services = filtered
-            if not services: self._arch_list.append(self._status_row("No matches found")); return
+            if not services:
+                self._update_arch_stats([])
+                self._arch_list.append(self._status_row("No matches found")); return
 
-        services.sort(key=lambda s: s.get("date") or "", reverse=True)
+        sort = getattr(self, "_arch_sort", "date_desc")
+        if sort == "date_asc":
+            services.sort(key=lambda s: s.get("date") or "")
+        elif sort == "attendance_desc":
+            services.sort(key=lambda s: int(s.get("attendance") or 0), reverse=True)
+        elif sort == "attendance_asc":
+            services.sort(key=lambda s: int(s.get("attendance") or 0))
+        else:
+            services.sort(key=lambda s: s.get("date") or "", reverse=True)
+
+        self._update_arch_stats(services)
 
         for svc in services:
             self._arch_list.append(self._arch_svc_row(svc))
@@ -807,6 +1066,13 @@ class ServicesWindow(Adw.Window):
         header.set_margin_start(12); header.set_margin_end(8)
         header.set_margin_top(10); header.set_margin_bottom(10)
         header.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
+
+        if getattr(self, "_arch_bulk_mode", False):
+            check = Gtk.CheckButton()
+            check.set_active(path in self._arch_selected)
+            check.set_valign(Gtk.Align.CENTER)
+            check.connect("toggled", lambda b, p=path: self._on_arch_check_toggled(p, b.get_active()))
+            header.append(check)
 
         pinned = bool(svc.get("pinned"))
         pin_btn = Gtk.ToggleButton(icon_name="starred-symbolic" if pinned else "non-starred-symbolic")
@@ -912,7 +1178,9 @@ class ServicesWindow(Adw.Window):
             if self._main.current_file and str(Path(self._main.current_file)) == str(p):
                 self._main.service_attendance = data["attendance"]
                 self._main.service_debrief = data["debrief"]
+            self._reindex_service_meta(p, data)
             self._show_toast("Notes saved")
+            self._arch_rebuild(self._arch_search)
         except Exception as e:
             self._show_toast(f"Save failed: {e}")
 
@@ -950,6 +1218,104 @@ class ServicesWindow(Adw.Window):
                 note_lbl.set_wrap(True); note_lbl.add_css_class("caption"); note_lbl.set_selectable(True)
                 box.append(note_lbl)
         row.set_child(box); return row
+
+    def _open_manage_tags_dialog(self):
+        try:
+            from rubric_package.db import service_meta_all_tags, service_meta_all_series
+        except ImportError:
+            self._show_toast("Database not available"); return
+
+        win = Adw.Window(transient_for=self, modal=True)
+        win.set_title("Manage Tags & Series")
+        win.set_default_size(420, 480)
+        tv = Adw.ToolbarView(); tv.add_top_bar(Adw.HeaderBar())
+
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_start(12); outer.set_margin_end(12)
+        outer.set_margin_top(12); outer.set_margin_bottom(12)
+
+        def add_section(title, items, kind):
+            if not items:
+                return
+            lbl = Gtk.Label(label=title); lbl.add_css_class("heading"); lbl.set_xalign(0)
+            lbl.set_margin_top(8); lbl.set_margin_bottom(4)
+            outer.append(lbl)
+            grp = Adw.PreferencesGroup(); outer.append(grp)
+            for name, count in items:
+                row = Adw.ActionRow(title=GLib.markup_escape_text(name), subtitle=f"{count} service(s)")
+                rename_btn = Gtk.Button(icon_name="document-edit-symbolic", tooltip_text="Rename everywhere")
+                rename_btn.add_css_class("flat"); rename_btn.set_valign(Gtk.Align.CENTER)
+                rename_btn.connect("clicked", lambda _b, n=name, k=kind: self._prompt_rename(win, k, n))
+                row.add_suffix(rename_btn)
+                grp.add(row)
+
+        add_section("Series", service_meta_all_series(), "series")
+        add_section("Tags", service_meta_all_tags(), "tag")
+        if not service_meta_all_series() and not service_meta_all_tags():
+            outer.append(Gtk.Label(label="No series or tags yet.", css_classes=["dim-label"]))
+
+        scroll.set_child(outer)
+        tv.set_content(scroll); win.set_content(tv); win.present()
+
+    def _prompt_rename(self, parent_win, kind: str, old_name: str):
+        dlg = Adw.MessageDialog(
+            transient_for=parent_win,
+            heading=f"Rename {'series' if kind == 'series' else 'tag'}",
+            body=f'Renames "{old_name}" across every service that uses it.')
+        entry = Gtk.Entry(); entry.set_text(old_name)
+        dlg.set_extra_child(entry)
+        dlg.add_response("cancel", "Cancel"); dlg.add_response("rename", "Rename")
+        dlg.set_response_appearance("rename", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("rename")
+
+        def do_rename(_d, r):
+            new_name = entry.get_text().strip()
+            if r == "rename" and new_name and new_name != old_name:
+                self._rename_everywhere(kind, old_name, new_name)
+                parent_win.close()
+        dlg.connect("response", do_rename)
+        entry.connect("entry-activated", lambda _e: (do_rename(dlg, "rename"), dlg.close()))
+        dlg.present()
+
+    def _rename_everywhere(self, kind: str, old_name: str, new_name: str):
+        from rubric_package.db import service_meta_paths_for_tag, service_meta_paths_for_series
+        paths = (service_meta_paths_for_tag(old_name) if kind == "tag"
+                 else service_meta_paths_for_series(old_name))
+        n = 0
+        for path in paths:
+            try:
+                p = Path(path)
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if kind == "tag":
+                    tags = list(data.get("tags", []) or [])
+                    tags = [new_name if t == old_name else t for t in tags]
+                    # Dedupe in case new_name already existed alongside old_name
+                    seen = []
+                    for t in tags:
+                        if t not in seen:
+                            seen.append(t)
+                    data["tags"] = seen
+                else:
+                    data["series"] = new_name
+                p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                if self._main.current_file and str(Path(self._main.current_file)) == str(p):
+                    if kind == "tag":
+                        self._main.service_tags = data["tags"]
+                        if hasattr(self._main, "_tags_entry"):
+                            self._main._tags_entry.set_text(", ".join(data["tags"]))
+                    else:
+                        self._main.service_series = new_name
+                        if hasattr(self._main, "_series_entry"):
+                            self._main._series_entry.set_text(new_name)
+                self._reindex_service_meta(p, data)
+                n += 1
+            except Exception:
+                pass
+        self._show_toast(f'Renamed "{old_name}" to "{new_name}" in {n} service(s)')
+        self._populate_arch_filter_list()
+        self._arch_rebuild(self._arch_search)
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 

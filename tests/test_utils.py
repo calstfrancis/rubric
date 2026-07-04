@@ -14,6 +14,7 @@ from rubric_package.utils.typst import (
     passage_to_typst,
     strip_typst_for_html,
     strip_typst_plain,
+    notes_preview,
 )
 from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
 from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS
@@ -220,6 +221,37 @@ class TestStripTypstPlain(unittest.TestCase):
         """_italic_ is stripped to plain text."""
         result = strip_typst_plain("_hello_")
         self.assertIn("hello", result)
+        self.assertNotIn("_", result)
+
+
+class TestNotesPreview(unittest.TestCase):
+    """notes_preview tests."""
+
+    def test_short_text_unchanged(self):
+        self.assertEqual(notes_preview("Short note."), "Short note.")
+
+    def test_empty_text_returns_empty(self):
+        self.assertEqual(notes_preview(""), "")
+
+    def test_collapses_whitespace(self):
+        self.assertEqual(notes_preview("line one\n\n   line two"), "line one line two")
+
+    def test_truncates_on_word_boundary_with_ellipsis(self):
+        text = "word " * 60  # far longer than the default 200-char limit
+        result = notes_preview(text)
+        self.assertTrue(result.endswith("…"))
+        self.assertNotIn(" …", result[-3:])  # no dangling space before the ellipsis
+        # Every remaining "word" before the ellipsis should be a whole word, not chopped
+        self.assertTrue(result[:-1].split()[-1] == "word")
+
+    def test_respects_custom_limit(self):
+        result = notes_preview("one two three four five", limit=10)
+        self.assertTrue(len(result) <= 11)  # 10 + ellipsis
+        self.assertTrue(result.endswith("…"))
+
+    def test_strips_typst_markup(self):
+        result = notes_preview("*bold* and _italic_ text")
+        self.assertNotIn("*", result)
         self.assertNotIn("_", result)
 
 

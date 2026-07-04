@@ -127,7 +127,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.18.1-dev4"
+APP_VERSION = "0.18.1-dev5"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -3007,13 +3007,16 @@ class MainWindow(Adw.ApplicationWindow):
         # file immediately, with no race against a background thread finishing late.
         from rubric_package.utils.typst import notes_preview
         preview = notes_preview(data.get("planning_notes", ""))
+        debrief_preview = notes_preview(data.get("debrief", ""))
         try:
             mtime = Path(path).stat().st_mtime
         except OSError:
             mtime = 0.0
         _smeta(path, title, date, list(data.get("tags", []) or []),
                data.get("series", "") or "", bool(data.get("pinned", False)),
-               preview, mtime)
+               preview, mtime,
+               attendance=int(data.get("attendance", 0) or 0),
+               debrief_preview=debrief_preview)
 
     def _background_index_scan(self):
         """Scan repo liturgy folder and index any unindexed or stale services."""
@@ -3044,9 +3047,12 @@ class MainWindow(Adw.ApplicationWindow):
                     if path_str not in already:
                         _eidx(path_str, title, date, data.get("items", []))
                     preview = notes_preview(data.get("planning_notes", ""))
+                    debrief_preview = notes_preview(data.get("debrief", ""))
                     _smeta(path_str, title, date, list(data.get("tags", []) or []),
                            data.get("series", "") or "", bool(data.get("pinned", False)),
-                           preview, mtime)
+                           preview, mtime,
+                           attendance=int(data.get("attendance", 0) or 0),
+                           debrief_preview=debrief_preview)
                 except Exception:
                     pass
             _smeta_prune(on_disk)

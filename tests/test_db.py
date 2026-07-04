@@ -19,6 +19,7 @@ from rubric_package.db import (
     service_index_all, service_index_prune,
     service_meta_update, service_meta_get, service_meta_all,
     service_meta_prune, service_meta_all_tags, service_meta_all_series,
+    service_meta_paths_for_tag, service_meta_paths_for_series,
     migrate_from_json,
 )
 
@@ -181,6 +182,32 @@ class TestServiceMeta(_TempDB):
         service_meta_update("/c.liturgy", "C", "2026-01-15", [], "Advent 2026", False, "", 3.0)
         series = service_meta_all_series()
         self.assertEqual(series, [("Advent 2026", 2), ("Lent 2026", 1)])
+
+    def test_attendance_and_debrief_preview_round_trip(self):
+        service_meta_update("/a.liturgy", "A", "2026-01-01", [], "", False, "", 1.0,
+                             attendance=42, debrief_preview="Went well overall.")
+        row = service_meta_get("/a.liturgy")
+        self.assertEqual(row["attendance"], 42)
+        self.assertEqual(row["debrief_preview"], "Went well overall.")
+
+    def test_attendance_and_debrief_preview_default_to_empty(self):
+        service_meta_update("/a.liturgy", "A", "2026-01-01", [], "", False, "", 1.0)
+        row = service_meta_get("/a.liturgy")
+        self.assertEqual(row["attendance"], 0)
+        self.assertEqual(row["debrief_preview"], "")
+
+    def test_paths_for_tag_exact_match_only(self):
+        service_meta_update("/a.liturgy", "A", "2026-01-01", ["communion"], "", False, "", 1.0)
+        service_meta_update("/b.liturgy", "B", "2026-01-08", ["communion", "baptism"], "", False, "", 2.0)
+        service_meta_update("/c.liturgy", "C", "2026-01-15", ["baptism"], "", False, "", 3.0)
+        paths = service_meta_paths_for_tag("communion")
+        self.assertEqual(set(paths), {"/a.liturgy", "/b.liturgy"})
+
+    def test_paths_for_series_exact_match_only(self):
+        service_meta_update("/a.liturgy", "A", "2026-01-01", [], "Advent 2026", False, "", 1.0)
+        service_meta_update("/b.liturgy", "B", "2026-01-08", [], "Advent 2027", False, "", 2.0)
+        paths = service_meta_paths_for_series("Advent 2026")
+        self.assertEqual(paths, ["/a.liturgy"])
 
 
 class TestMigrateFromJson(_TempDB):

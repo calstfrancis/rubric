@@ -64,14 +64,16 @@ CREATE INDEX IF NOT EXISTS idx_elem_date    ON element_index(service_date DESC);
 CREATE INDEX IF NOT EXISTS idx_elem_name    ON element_index(name);
 
 CREATE TABLE IF NOT EXISTS service_meta (
-    path          TEXT PRIMARY KEY,
-    title         TEXT    NOT NULL DEFAULT '',
-    date          TEXT    NOT NULL DEFAULT '',
-    tags          TEXT    NOT NULL DEFAULT '',
-    series        TEXT    NOT NULL DEFAULT '',
-    pinned        INTEGER NOT NULL DEFAULT 0,
-    notes_preview TEXT    NOT NULL DEFAULT '',
-    mtime         REAL    NOT NULL DEFAULT 0
+    path            TEXT PRIMARY KEY,
+    title           TEXT    NOT NULL DEFAULT '',
+    date            TEXT    NOT NULL DEFAULT '',
+    tags            TEXT    NOT NULL DEFAULT '',
+    series          TEXT    NOT NULL DEFAULT '',
+    pinned          INTEGER NOT NULL DEFAULT 0,
+    notes_preview   TEXT    NOT NULL DEFAULT '',
+    attendance      INTEGER NOT NULL DEFAULT 0,
+    debrief_preview TEXT    NOT NULL DEFAULT '',
+    mtime           REAL    NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_svcmeta_date   ON service_meta(date DESC);
@@ -91,6 +93,15 @@ def init_db() -> None:
     con = _open()
     try:
         con.executescript(_SCHEMA)
+        for stmt in (
+            "ALTER TABLE service_meta ADD COLUMN attendance INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE service_meta ADD COLUMN debrief_preview TEXT NOT NULL DEFAULT ''",
+        ):
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        con.commit()
     finally:
         con.close()
 
@@ -277,15 +288,18 @@ def service_index_prune(keep_paths: set[str]) -> None:
 def service_meta_update(
     path: str, title: str, date: str, tags: list[str], series: str,
     pinned: bool, notes_preview: str, mtime: float,
+    attendance: int = 0, debrief_preview: str = "",
 ) -> None:
     """Upsert a service's organizational metadata, cached from its .liturgy file."""
     con = _open()
     try:
         con.execute(
             "INSERT OR REPLACE INTO service_meta "
-            "(path, title, date, tags, series, pinned, notes_preview, mtime) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (path, title, date, ",".join(tags), series, int(pinned), notes_preview, mtime),
+            "(path, title, date, tags, series, pinned, notes_preview, "
+            " attendance, debrief_preview, mtime) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (path, title, date, ",".join(tags), series, int(pinned), notes_preview,
+             int(attendance), debrief_preview, mtime),
         )
         con.commit()
     finally:
@@ -363,6 +377,28 @@ def service_meta_all_series() -> list[tuple[str, int]]:
             "WHERE series != '' GROUP BY series ORDER BY series COLLATE NOCASE"
         ).fetchall()
         return [(r["series"], r["n"]) for r in rows]
+    finally:
+        con.close()
+
+
+def service_meta_paths_for_tag(tag: str) -> list[str]:
+    """Return paths of every service tagged with the given tag (exact match)."""
+    con = _open()
+    try:
+        rows = con.execute("SELECT path, tags FROM service_meta WHERE tags != ''").fetchall()
+        return [r["path"] for r in rows if tag in r["tags"].split(",")]
+    finally:
+        con.close()
+
+
+def service_meta_paths_for_series(series: str) -> list[str]:
+    """Return paths of every service in the given series (exact match)."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT path FROM service_meta WHERE series = ?", (series,)
+        ).fetchall()
+        return [r["path"] for r in rows]
     finally:
         con.close()
 

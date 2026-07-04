@@ -4,6 +4,32 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev5] — Past Liturgies library: search, sort, bulk actions
+
+### Added
+
+- **Sort dropdown** in Past Liturgies — Newest first, Oldest first, Attendance high→low, Attendance low→high.
+- **"Has debrief" sidebar filter**, alongside the existing All/Pinned/Untagged.
+- **Attendance stats line** under the list — shows the count and average attendance for whatever's currently filtered/searched.
+- **Bulk actions** — a "Select" toggle reveals checkboxes and a bottom action bar (Add tag…, Set series…, Pin, Unpin) that apply to every selected service at once.
+- **Manage Tags & Series dialog** — lists every tag/series in use with a rename button that renames it across every service that uses it in one step.
+- **Series/tag pills in the Planner tab** — both the list and calendar views now show a service's series/tags, not just Past Liturgies.
+- **Filter/search indicator** — a "Filtering by …" chip with a Clear button appears above the list whenever a sidebar filter or search query is active, so it's never ambiguous why the list looks the way it does.
+- **Empty-sidebar hint** — a new install shows a note pointing to the title popover for where to set Series/Tags, instead of an unexplained empty sidebar.
+- **Search now matches debrief notes**, not just planning notes/title/date/series/tags.
+
+### Fixed
+
+- **`notes_preview()` no longer truncates mid-word** — previews now cut on a word boundary and end with "…".
+- **Editing attendance/debrief in Past Liturgies no longer went stale in the library cache** — saving those fields now re-indexes the service immediately, so sort/filter/stats reflect the change right away.
+
+### Internal
+
+- `service_meta` gained `attendance` and `debrief_preview` columns (migrated in-place for existing installs) and `service_meta_paths_for_tag`/`service_meta_paths_for_series` lookups, backing the new rename and bulk features.
+- Added `TestServiceMeta` cases for the new columns/lookups and a `TestNotesPreview` class covering the truncation fix.
+
+---
+
 ## [0.18.1-dev4] — Window size persistence
 
 ### Added
