@@ -3,5 +3,6 @@
 from .preamble_panel import PreamblePanel
 from .hymn_lookup_panel import HymnLookupPanel
 from .order_panel import OrderPanel
+from .main_chrome import MainChrome
 
-__all__ = ["PreamblePanel", "HymnLookupPanel", "OrderPanel"]
+__all__ = ["PreamblePanel", "HymnLookupPanel", "OrderPanel", "MainChrome"]

@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev5] — Continued codebase cleanup
+
+### Internal
+
+- Extracted the main window chrome (header bar, status bar, top-level paned layout stitching together the palette/order/preamble/preview panels — one ~335-line method) into a new `rubric_package/panels/main_chrome.py`.
+- `rubric.py`: 4,908 → 4,578 lines since the previous dev build. No user-visible behaviour change; verified via headless GTK instantiation and a full real-`MainWindow` construction (`win.present()`) exercising the header bar, status bar, and cross-panel wiring through their real signal-connected paths.
+
+---
+
 ## [0.17.10-dev4] — Continued codebase cleanup
 
 ### Internal

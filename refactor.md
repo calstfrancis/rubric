@@ -144,6 +144,22 @@ Verified with the full recipe — compile, bare-self grep (one hit, fixed as abo
 
 `rubric.py`: 5,295 → 4,908 lines.
 
+### Step 6 — `MainChrome` (done, 2026-07-03)
+
+Extracted "UI general construction" — the single `_build_ui` method (~335 lines: header bar, status bar, and the top-level paned layout stitching together the palette/order/preamble/preview panels) — into `rubric_package/panels/main_chrome.py`. Unlike Steps 2–5, this method has no sibling methods and no nested-closure state to reason about beyond two small local helper functions (`_status_toggle_btn`, `_sb_sep`, neither touching `self`), so the transform was purely mechanical: every `self.` in the body became `self._main.`, with no bare method calls staying "self." for anything.
+
+This one is a different flavour from the first five: it's not a discrete feature a user would name ("the preview panel", "the hymn lookup") — it's the orchestration code that builds `MainWindow`'s own chrome and wires the other panels together. Went ahead with the same extraction anyway, since the mechanical pattern holds regardless: even direct calls to `Gtk`/`Adw` methods *on the window itself* (e.g. `self.set_content(tv)`) become `self._main.set_content(tv)` cleanly, no different from any other attribute access.
+
+**One import wrinkle, new to this step**: the status bar's version button reads the module-level `APP_VERSION` constant, which lives in `rubric.py` itself (not `rubric_package`) — importing it at the top of `main_chrome.py` would create a circular import (`rubric.py` imports `rubric_package.panels` at module-load time, before `APP_VERSION` is even defined at line ~128). Resolved with a local `from rubric import APP_VERSION` *inside* `_build_ui`, deferred until the method actually runs (long after `rubric.py` has finished importing) — same precedent as the existing local imports elsewhere in the codebase (`import cairo as _cairo` inside `_draw_order_strip`, `from rubric_package.utils.typst import parse_typst_errors` inside `_run_preview_compile`).
+
+**A second bare-self variant, distinct from Step 5's `hasattr` case**: `self._preview_window_id = id(self)` — a bare `self` passed as a function argument (`id(...)`), same shape as Step 2's `transient_for=self` bug, not the `hasattr`/`getattr` pattern from Step 5. After the move this had to become `id(self._main)`, otherwise every window would get an id keyed to its (fresh-per-construction) `MainChrome` helper object rather than the actual `MainWindow` instance the comment says it's meant to identify. Fixed and confirmed via a real-`MainWindow` assertion (`win._preview_window_id == id(win)`).
+
+Only one external call site existed (`_build_ui()` was only ever called once, from `MainWindow.__init__`) — updated to `self._chrome._build_ui()`. `MainWindow.__init__` now creates `self._chrome = MainChrome(self)` last in the composition-helper block, then calls `self._chrome._build_ui()` in place of the old `self._build_ui()`.
+
+Verified with the full recipe — compile, bare-self grep (one hit, fixed as above), and a real `MainWindow` construction with `win.present()`: confirmed the header bar, status bar, and main stack all built correctly, exercised the title-entry → `_mark_modified` wiring, the chrome-wired preview-toggle button (crossing into `BulletinPreview`), and a status-bar mode toggle — all through the real signal-connected paths, not the extracted class in isolation.
+
+`rubric.py`: 4,908 → 4,578 lines.
+
 ### Order of work
 
 1. ~~**Exports**~~ — done, see above.
@@ -151,7 +167,8 @@ Verified with the full recipe — compile, bare-self grep (one hit, fixed as abo
 3. ~~**Preamble panel**~~ — done, see above.
 4. ~~**Hymn lookup**~~ — done, see above.
 5. ~~**Order panel**~~ — done, see above.
-6. Revisit remaining sections opportunistically. UI general construction (335) is next by size. File IO (293, `new_service`/`open_file`/`save_file`/`_write`/etc.) looks more like core document-state ownership than a separable feature, similar to why `_mark_modified`/`_service_data` stayed on `MainWindow` in Step 2 — worth a closer look before assuming it should move at all.
+6. ~~**UI general construction**~~ — done, see above.
+7. Revisit remaining sections opportunistically — nothing left is especially large. File IO (293, `new_service`/`open_file`/`save_file`/`_write`/etc.) still looks like core document-state ownership rather than a separable feature, similar to why `_mark_modified`/`_service_data` stayed on `MainWindow` in Step 2 — worth a closer look before assuming it should move at all. Palette panel (`_build_palette_panel`, not yet measured precisely) is the next actual UI-panel-shaped candidate if further extraction is wanted.
 
 ### Verification bar for this phase
 
