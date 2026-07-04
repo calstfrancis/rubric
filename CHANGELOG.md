@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev4] — Window size persistence
+
+### Added
+
+- **Window sizes are remembered between sessions** — the main editor window and the Services window now restore their last size (and maximized state) on launch instead of always starting at a fixed default.
+
+### Changed
+
+- The header bar's Services button now shows the text label "Services" (matching the Preview button's style) instead of an icon-only button.
+
+---
+
 ## [0.18.1-dev3] — Services button, attendance/debrief notes
 
 ### Added

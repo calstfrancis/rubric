@@ -55,6 +55,7 @@ class Config:
         self.element_defaults: dict[str, str] = {}
         self.preamble: dict[str, Any] = {}
         self.ui_panes: dict[str, int] = {}
+        self.window_sizes: dict[str, list] = {}
         self.custom_dates: list[dict] = []  # legacy; migrated into all_dates on first run
         self.all_dates: list[dict] = []
         self._load()
@@ -106,6 +107,7 @@ class Config:
                 self.element_defaults  = d.get("element_defaults", {})
                 self.preamble          = d.get("preamble", {})
                 self.ui_panes          = d.get("ui_panes", {})
+                self.window_sizes      = d.get("window_sizes", {})
                 self.custom_dates      = d.get("custom_dates", [])
                 self.all_dates        = d.get("all_dates", [])
                 # migrate old single template
@@ -120,6 +122,18 @@ class Config:
             self.recent_files.remove(path)
         self.recent_files.insert(0, path)
         self.recent_files = self.recent_files[:10]
+
+    def save_window_size(self, name: str, width: int, height: int, maximized: bool = False) -> None:
+        """Remember a window's last size (and maximized state) across sessions."""
+        self.window_sizes[name] = [width, height, maximized]
+
+    def get_window_size(self, name: str) -> tuple[int, int, bool] | None:
+        """Return (width, height, maximized) for a previously saved window, or None."""
+        v = self.window_sizes.get(name)
+        if not v or len(v) < 2:
+            return None
+        maximized = bool(v[2]) if len(v) > 2 else False
+        return int(v[0]), int(v[1]), maximized
 
     def save(self) -> None:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +158,7 @@ class Config:
             "element_defaults":      self.element_defaults,
             "preamble":              self.preamble,
             "ui_panes":              self.ui_panes,
+            "window_sizes":          self.window_sizes,
             "custom_dates":          self.custom_dates,
             "all_dates":             self.all_dates,
         }

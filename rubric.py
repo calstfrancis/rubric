@@ -127,7 +127,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.18.1-dev3"
+APP_VERSION = "0.18.1-dev4"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -173,7 +173,16 @@ if not config.templates:
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, **kw):
-        super().__init__(**kw); self.set_default_size(1000,700); self.maximize()
+        super().__init__(**kw)
+        saved = config.get_window_size("main")
+        if saved:
+            width, height, maximized = saved
+            self.set_default_size(width, height)
+            if maximized:
+                self.maximize()
+        else:
+            self.set_default_size(1000, 700)
+            self.maximize()
         self.service_entries: list = []
         self._undo_stack: list[list[dict]] = []
         self._redo_stack: list[list[dict]] = []
@@ -4325,6 +4334,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         elif config.ui_panes.get("preview_paned"):
             ui["preview_paned"] = config.ui_panes["preview_paned"]
         config.ui_panes = ui
+        config.save_window_size("main", self.get_width(), self.get_height(), self.is_maximized())
         config.save()
 
     def do_close_request(self):

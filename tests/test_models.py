@@ -228,6 +228,7 @@ class TestConfig(unittest.TestCase):
         self.config.use_tabs = False
         self.config.last_seen_version = ""
         self.config.bulletin = self.config._default_bulletin()
+        self.config.window_sizes = {}
 
     def test_default_bulletin_structure(self):
         """Default bulletin has expected structure."""
@@ -256,6 +257,28 @@ class TestConfig(unittest.TestCase):
         for i in range(15):
             self.config.add_recent(f"/file{i}")
         self.assertEqual(len(self.config.recent_files), 10)
+
+    def test_get_window_size_unknown_returns_none(self):
+        self.assertIsNone(self.config.get_window_size("main"))
+
+    def test_save_and_get_window_size(self):
+        self.config.save_window_size("main", 1024, 768, False)
+        self.assertEqual(self.config.get_window_size("main"), (1024, 768, False))
+
+    def test_save_window_size_maximized(self):
+        self.config.save_window_size("main", 1000, 700, True)
+        self.assertEqual(self.config.get_window_size("main"), (1000, 700, True))
+
+    def test_save_window_size_overwrites(self):
+        self.config.save_window_size("main", 1000, 700, False)
+        self.config.save_window_size("main", 1200, 800, True)
+        self.assertEqual(self.config.get_window_size("main"), (1200, 800, True))
+
+    def test_window_sizes_independent_by_name(self):
+        self.config.save_window_size("main", 1000, 700, False)
+        self.config.save_window_size("services", 700, 720, False)
+        self.assertEqual(self.config.get_window_size("main"), (1000, 700, False))
+        self.assertEqual(self.config.get_window_size("services"), (700, 720, False))
 
 
 class TestSections(unittest.TestCase):

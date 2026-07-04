@@ -22,9 +22,14 @@ class ServicesWindow(Adw.Window):
     _TAB_IDX = {"planner": 0, "library": 1, "archive": 2}
 
     def __init__(self, main_window, start_tab: str = "planner", **kw):
-        super().__init__(title="Services", default_width=700, default_height=720, **kw)
+        saved = config.get_window_size("services")
+        width, height = (saved[0], saved[1]) if saved else (700, 720)
+        super().__init__(title="Services", default_width=width, default_height=height, **kw)
+        if saved and saved[2]:
+            self.maximize()
         self._main = main_window
         self.set_modal(False)
+        self.connect("destroy", self._on_destroy)
         self._planner_folder: "Path | None" = None
         self._lib_search = ""; self._lib_expanded: set = set(); self._lib_selected = None
         self._lib_rebuilding = False; self._lib_mode = "services"
@@ -47,6 +52,10 @@ class ServicesWindow(Adw.Window):
 
     def switch_tab(self, name: str):
         self._nb.set_current_page(self._TAB_IDX.get(name, 0))
+
+    def _on_destroy(self, _widget):
+        config.save_window_size("services", self.get_width(), self.get_height(), self.is_maximized())
+        config.save()
 
     # ── Planner tab ───────────────────────────────────────────────────────────
 
