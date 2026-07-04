@@ -4,86 +4,29 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.17.10-dev7] — Aesthetic polish pass
-
-### Fixed
-
-- **Drag-handle and planning-notes cursors** — replaced invalid `cursor: grab`/`cursor: pointer` GTK CSS declarations (silently rejected by GTK4 at startup, logged as theme-parser warnings) with proper `Gtk.Widget.set_cursor()` calls in code. Drag handles and the planning-notes header now show the correct cursor on hover.
-- **Compact-mode row height floor raised** — the order list's compact-mode minimum row height was 20px, below comfortable click-target guidance; raised to 24px.
-- **Empty-state copy unified** — the "Empty section" placeholder now matches the wording and icon of the "Service is empty" placeholder, so both empty states read as one voice instead of two different phrasings.
-- **Drag-handle visibility** — resting opacity raised from 0.18 to 0.3 so the reorder affordance is easier to notice before hovering.
-
-### Internal
-
-- Removed dead `.obs-chip` CSS rule — it was never applied to any widget.
-- `headerbar button.suggested-action` no longer forced into the same fixed 32×32 box as other header buttons, so suggested-action buttons in dialogs keep their natural sizing.
-- Fixed a stale unit test (`test_hymn_lookup.py`) that patched `hymn_lookup.urllib.request.urlopen`, an attribute that hasn't existed since hymn lookups were switched to `curl` via subprocess (for flatpak sandbox compatibility). Now patches `hymn_lookup._fetch_url` directly.
-
----
-
-## [0.17.10-dev6] — Test suite for the extracted panels
-
-### Internal
-
-- Extracted the element-palette sidebar (search, recently-used list, section expanders, hymn-cache indicator/clear — 6 methods, ~124 lines) into a new `rubric_package/panels/palette_panel.py`.
-- Added `tests/test_panels.py` — 22 unit tests against `BulletinExporter`, `BulletinPreview`, `PreamblePanel`, `HymnLookupPanel`, `PalettePanel`, and `OrderPanel`, using stub `main_window` objects. This is the payoff of the whole monolith-splitting effort: none of this logic was unit-testable while it lived inside the ~11,000-line `MainWindow` God object. `config.save()` and the SQLite hymn-cache writes are mocked so tests can never touch real user data on disk.
-- Wired tests into CI: a new `gtk-panels` job installs GTK4/libadwaita and runs the panel tests under `xvfb-run`; the existing backend job now also runs the `tests/` package (134 tests that existed but were never actually wired into CI before).
-- `rubric.py`: 4,578 → 4,459 lines since the previous dev build.
-
----
-
-## [0.17.10-dev5] — Continued codebase cleanup
-
-### Internal
-
-- Extracted the main window chrome (header bar, status bar, top-level paned layout stitching together the palette/order/preamble/preview panels — one ~335-line method) into a new `rubric_package/panels/main_chrome.py`.
-- `rubric.py`: 4,908 → 4,578 lines since the previous dev build. No user-visible behaviour change; verified via headless GTK instantiation and a full real-`MainWindow` construction (`win.present()`) exercising the header bar, status bar, and cross-panel wiring through their real signal-connected paths.
-
----
-
-## [0.17.10-dev4] — Continued codebase cleanup
-
-### Internal
-
-- Extracted the hymn lookup/search/theme popover (number-based Hymnary lookup with manual-entry fallback, local-cache title search, theme browsing — 6 methods, ~286 lines) into `rubric_package/panels/hymn_lookup_panel.py`.
-- Extracted the service order editing panel (readings card, order/notes split, per-item toolbar, hymn-suggestions strip — one ~389-line method) into a new `rubric_package/panels/order_panel.py`.
-- `rubric.py`: 5,579 → 4,908 lines since the previous dev build. No user-visible behaviour change; each extraction verified via headless GTK instantiation, direct calls to every moved method against a stub main window, and a full real-`MainWindow` construction (including an actual GTK draw pass) exercising the real delegation paths.
-
----
-
-## [0.17.10-dev3] — Continued codebase cleanup
-
-### Internal
-
-- Extracted the live bulletin/manuscript preview panel (UI, Typst-compile-to-PDF pipeline, WebKit scroll handling — 17 methods, ~625 lines) into `rubric_package/preview/bulletin_preview.py`.
-- Extracted the document-template editor panel (font/margin/layout/heading fields, style presets, system-font picker — 7 methods, ~335 lines) into a new `rubric_package/panels/preamble_panel.py`.
-- `rubric.py`: 6,481 → 5,579 lines since the previous dev build. No user-visible behaviour change; each extraction verified via headless GTK instantiation, direct calls to every moved method against a stub main window, and a full real-`MainWindow` construction exercising the real delegation paths.
-
----
-
-## [0.17.10-dev2] — Continued codebase cleanup
-
-### Internal
-
-- Finished extracting every remaining standalone GTK window out of the `rubric.py` monolith into `rubric_package/views/`: `BulletinPrefsWindow`, `BibleViewer`, `ServicesWindow`, `DatesEditorWindow`, `ObservanceWikiWindow`, `ServicePlanningNotesWindow`.
-- Removed dead `PlannerWindow` (never instantiated, superseded by `ServicesWindow`'s Planner tab). Its per-service attendance/debrief-note editor was already unreachable; that functionality returns later as part of a planned Rubric "library" feature, not resurrected from this code.
-- Extracted the bulletin/manuscript export pipeline (Typst generation, compilation, export dialogs, publish-to-web — ~1,300 lines) into `rubric_package/exporters/bulletin_exporter.py`, the single largest cut of this cleanup effort.
-- `rubric.py`: 11,363 → 6,481 lines (~43% smaller) since this cleanup started. No user-visible behaviour change; each extraction verified via headless GTK instantiation and, for the exporter, direct calls to every moved method against a stub main window plus a full real-`MainWindow` construction.
-
----
-
-## [0.17.10-dev1] — Autosave reliability, doc-sync fix, codebase cleanup
+## [0.18.0] "Clean Lines" — Monolith split complete, autosave reliability, and aesthetic polish
 
 ### Fixed
 
 - **Autosave failures are no longer silent** — if autosave can't write (disk full, permissions, etc.), you now get a toast telling you, instead of losing work with no warning.
 - **HELP.md and FAQ.md now stay in sync** — both are symlinked from the packaged copy back to the root file, the same way CHANGELOG.md already was, so in-app Help/FAQ content can't drift out of date again.
+- **Drag-handle and planning-notes cursors** — replaced invalid `cursor: grab`/`cursor: pointer` GTK CSS declarations (silently rejected by GTK4, logged as theme-parser warnings at startup) with proper `Gtk.Widget.set_cursor()` calls. Drag handles and the planning-notes header now show the correct cursor on hover.
+- **Compact-mode row height floor raised** — the order list's compact-mode minimum row height was 20px, below comfortable click-target guidance; raised to 24px.
+- **Empty-state copy unified** — the "Empty section" placeholder now matches the wording and icon of the "Service is empty" placeholder, so both empty states read as one voice.
+- **Drag-handle visibility** — resting opacity raised from 0.18 to 0.3 so the reorder affordance is easier to notice before hovering.
 
-### Internal
+### Internal — the `rubric.py` monolith split
 
-- Removed two dead standalone windows (`ArchiveWindow`, `LibraryWindow`) that had been superseded by tabs in the unified Services window but were never deleted.
-- Fixed a latent bug where `rubric.py` created its own separate `config`/`get_palette()` instead of using the ones already in `rubric_package.models.config` — two live `Config` instances existed in memory, though only one was ever read from.
-- Extracted `HelpWindow` and `PreferencesWindow` out of the `rubric.py` monolith into `rubric_package/views/`, as part of an ongoing incremental refactor. No user-visible behaviour change; verified via headless GTK instantiation.
+`rubric.py` has gone from 11,363 lines to 4,461 (~61% smaller) as every standalone window, panel, and export pipeline has been extracted out of the original `MainWindow` God object into `rubric_package/`, following a strangler pattern (one piece at a time, verified against a real `MainWindow` construction each step) rather than a big-bang rewrite:
+
+- **Views** (`rubric_package/views/`): `HelpWindow`, `PreferencesWindow`, `BulletinPrefsWindow`, `BibleViewer`, `ServicesWindow`, `DatesEditorWindow`, `ObservanceWikiWindow`, `ServicePlanningNotesWindow`.
+- **Panels** (`rubric_package/panels/`): `MainChrome` (header bar, status bar, top-level layout), `PreamblePanel` (document template editor), `HymnLookupPanel`, `OrderPanel`, `PalettePanel`.
+- **Exporters/preview**: `BulletinExporter` (Typst generation, compilation, export dialogs, publish-to-web) and `BulletinPreview` (live PDF preview pipeline).
+- Removed dead code found along the way: `ArchiveWindow`, `LibraryWindow`, `PlannerWindow` (all superseded by `ServicesWindow`'s tabs, never actually reachable), and a duplicate `config`/`get_palette()` that meant two live `Config` instances existed in memory though only one was ever read from.
+- **New test coverage this refactor made possible**: `tests/test_panels.py` — 22 unit tests against the extracted panels/exporters, using stub `main_window` objects, none of which were unit-testable while this logic lived inside the monolith. Wired into CI alongside the rest of `tests/` (134 tests that existed but were never actually run in CI before).
+- Fixed a stale unit test (`test_hymn_lookup.py`) that patched `hymn_lookup.urllib.request.urlopen`, an attribute that hasn't existed since hymn lookups were switched to `curl` via subprocess (for flatpak sandbox compatibility). Now patches `hymn_lookup._fetch_url` directly.
+- Removed dead `.obs-chip` CSS rule — it was never applied to any widget.
+- `headerbar button.suggested-action` no longer forced into the same fixed 32×32 box as other header buttons, so suggested-action buttons in dialogs keep their natural sizing.
 
 ---
 

@@ -41,6 +41,19 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.18.0" date="2026-07-04">
+      <description>
+        <p>0.18.0 "Clean Lines" — Monolith split complete, autosave reliability, and aesthetic polish.</p>
+        <ul>
+          <li>Autosave failures now surface a toast instead of failing silently.</li>
+          <li>HELP.md and FAQ.md are now symlinked from the packaged copy, so in-app Help/FAQ content can't drift out of date.</li>
+          <li>The rubric.py monolith has been fully split: every standalone window, panel, and export pipeline now lives in rubric_package/ (11,363 → 4,461 lines, ~61% smaller), with new unit test coverage the old God-object structure made impossible.</li>
+          <li>Fixed invalid CSS cursor declarations on drag handles and the planning-notes header; correct cursors now show on hover.</li>
+          <li>Compact-mode row height floor raised for better click targets; drag-handle visibility improved at rest.</li>
+          <li>Empty-state placeholder copy unified across the service order list.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.9" date="2026-07-02">
       <description>
         <p>0.17.9 "Quiet Margin" — Visual polish, events popover, and workflow improvements.</p>

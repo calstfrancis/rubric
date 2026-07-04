@@ -1,4 +1,4 @@
-# Rubric v0.17.9 "Quiet Margin"
+# Rubric v0.18.0 "Clean Lines"
 
 Install via Flatpak:
 
@@ -18,21 +18,13 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Events display reworked** — the two-bar status bar layout (liturgical events row + separate justice bar) is replaced by a single compact `● Season` button. Click it to open a popover listing the previous and upcoming liturgical observances and justice/custom dates together, with an "Edit dates…" link. One bar, all the information.
+**The `rubric.py` monolith split is complete** — every standalone window, panel, and export pipeline has been extracted out of the original `MainWindow` God object into `rubric_package/`. `rubric.py` has gone from 11,363 lines to 4,461 (~61% smaller). This refactor also made a chunk of previously untestable logic unit-testable for the first time (`tests/test_panels.py`, 22 new tests), now wired into CI alongside the rest of the test suite.
 
-**Preview compile mode moved** — the Auto / Save / Manual compile cycle button now lives in the preview panel header next to the ⟳ button, rather than in a second toolbar that only appeared when the preview was open.
+**Autosave failures are no longer silent** — if autosave can't write (disk full, permissions, etc.), you now get a toast telling you, instead of losing work with no warning.
 
-**Visual polish throughout** — section element rows now have a 3 px left border in their section colour (replacing the small dot); section divider rows are full-width headers with a 6 px colour stripe. Mode buttons (SIMPLE, GOST, Compact…) show a tinted pill background when active. Word count and time labels appear as rounded metric chips. RCL reading chips pick up a subtle tint from the current liturgical season colour. The season gradient on the header bar is stronger and wider.
+**HELP.md and FAQ.md stay in sync** — both are symlinked from the packaged copy back to the root file, so in-app Help/FAQ content can't drift out of date.
 
-**Undo on element removal** — deleting an element shows a toast with an Undo button.
-
-**Word count chip** — a live "N words · ~M min" pill in the status bar right, counting spoken words at 130 wpm.
-
-**Duplicate element (Ctrl+Shift+D)** — duplicates the selected element or section divider and inserts the copy directly below.
-
-**Planner Today button** — jumps the Service Planner calendar to this Sunday.
-
-**Recently opened in Archive** — the Archive tab shows a "Recently opened" section at the top for quick re-access.
+**Aesthetic polish pass** — fixed invalid CSS cursor declarations on drag handles and the planning-notes header (correct cursors now show on hover); raised the compact-mode row height floor for better click targets; improved drag-handle visibility at rest; unified empty-state placeholder copy across the service order list.
 
 ---
 
