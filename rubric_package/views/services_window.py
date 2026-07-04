@@ -584,7 +584,21 @@ class ServicesWindow(Adw.Window):
     # ── Archive tab ───────────────────────────────────────────────────────────
 
     def _build_archive_tab(self) -> Gtk.Widget:
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        sidebar_scroll = Gtk.ScrolledWindow()
+        sidebar_scroll.set_size_request(170, -1)
+        sidebar_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._arch_filter_list = Gtk.ListBox()
+        self._arch_filter_list.add_css_class("navigation-sidebar")
+        self._arch_filter_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._arch_filter_list.connect("row-selected", self._on_arch_filter_selected)
+        sidebar_scroll.set_child(self._arch_filter_list)
+        outer.append(sidebar_scroll)
+        outer.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        box.set_hexpand(True)
         se = Gtk.SearchEntry(); se.set_placeholder_text("Search past services…")
         se.set_margin_start(12); se.set_margin_end(12); se.set_margin_top(10); se.set_margin_bottom(6)
         se.connect("search-changed", lambda e: self._arch_rebuild(e.get_text().strip().lower()))
@@ -597,14 +611,134 @@ class ServicesWindow(Adw.Window):
         self._arch_list.set_margin_start(12); self._arch_list.set_margin_end(12)
         self._arch_list.set_margin_top(8); self._arch_list.set_margin_bottom(12)
         scroll.set_child(self._arch_list); box.append(scroll)
-        return box
+        outer.append(box)
+
+        self._arch_filter = ("all", None)
+        self._populate_arch_filter_list()
+        return outer
+
+    def _populate_arch_filter_list(self):
+        lb = self._arch_filter_list
+        while lb.get_first_child(): lb.remove(lb.get_first_child())
+        try:
+            from rubric_package.db import service_meta_all_tags, service_meta_all_series
+        except ImportError:
+            service_meta_all_tags = service_meta_all_series = lambda: []
+
+        def add_row(kind, value, label, icon=None):
+            row = Gtk.ListBoxRow()
+            rbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            rbox.set_margin_start(10); rbox.set_margin_end(10)
+            rbox.set_margin_top(6); rbox.set_margin_bottom(6)
+            if icon:
+                rbox.append(Gtk.Image.new_from_icon_name(icon))
+            lbl = Gtk.Label(label=label); lbl.set_xalign(0); lbl.set_hexpand(True)
+            lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            rbox.append(lbl)
+            row.set_child(rbox); row._filter = (kind, value)
+            lb.append(row)
+            return row
+
+        def add_header(text):
+            row = Gtk.ListBoxRow(); row.set_selectable(False); row.set_activatable(False)
+            lbl = Gtk.Label(label=text); lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
+            lbl.set_xalign(0); lbl.set_margin_start(10); lbl.set_margin_top(10); lbl.set_margin_bottom(2)
+            row.set_child(lbl); row._filter = None
+            lb.append(row)
+
+        first = add_row("all", None, "All services", "view-list-symbolic")
+        add_row("pinned", None, "Pinned", "starred-symbolic")
+        add_row("untagged", None, "Untagged", "window-close-symbolic")
+
+        series = service_meta_all_series()
+        if series:
+            add_header("SERIES")
+            for name, count in series:
+                add_row("series", name, f"{name} ({count})")
+
+        tags = service_meta_all_tags()
+        if tags:
+            add_header("TAGS")
+            for name, count in tags:
+                add_row("tag", name, f"{name} ({count})")
+
+        lb.select_row(first)
+
+    def _on_arch_filter_selected(self, _lb, row):
+        if row is None or getattr(row, "_filter", None) is None:
+            return
+        self._arch_filter = row._filter
+        self._arch_rebuild(self._arch_search)
+
+    def _stable_tag_color(self, name: str) -> str:
+        from rubric_package.utils.colors import SECTION_COLORS
+        h = 0
+        for b in name.encode("utf-8"):
+            h = (h * 31 + b) & 0xFFFFFFFF
+        return SECTION_COLORS[h % len(SECTION_COLORS)]
+
+    def _make_pill(self, text: str) -> Gtk.Widget:
+        color = self._stable_tag_color(text)
+        lbl = Gtk.Label()
+        lbl.set_markup(f'<span color="{color}">●</span> '
+                        f'<span size="small">{GLib.markup_escape_text(text)}</span>')
+        lbl.set_xalign(0)
+        return lbl
+
+    def _on_toggle_pin(self, path: str, pinned: bool):
+        try:
+            p = Path(path)
+            data = json.loads(p.read_text(encoding="utf-8"))
+            data["pinned"] = pinned
+            p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            if self._main.current_file and str(Path(self._main.current_file)) == str(p):
+                self._main.service_pinned = pinned
+                if hasattr(self._main, "_pinned_toggle"):
+                    self._main._pinned_toggle.set_active(pinned)
+            from rubric_package.db import service_meta_update
+            from rubric_package.utils.typst import notes_preview
+            service_meta_update(str(p), data.get("title", ""), data.get("date", ""),
+                                 list(data.get("tags", []) or []), data.get("series", "") or "",
+                                 pinned, notes_preview(data.get("planning_notes", "")), p.stat().st_mtime)
+        except Exception as e:
+            self._show_toast(f"Couldn't update pin: {e}"); return
+        self._populate_arch_filter_list()
+        self._arch_rebuild(self._arch_search)
 
     def _arch_rebuild(self, query: str):
         self._arch_search = query
         while self._arch_list.get_first_child(): self._arch_list.remove(self._arch_list.get_first_child())
 
-        # Show recently opened files at the top when not filtering
-        if not query:
+        try:
+            from rubric_package.db import service_meta_all, element_for_service, element_services
+        except ImportError:
+            self._arch_list.append(self._status_row("Database not available")); return
+
+        by_path = {s["path"]: s for s in service_meta_all()}
+        for legacy in element_services(limit=500):
+            by_path.setdefault(legacy["service_path"], {
+                "path": legacy["service_path"], "title": legacy["service_title"],
+                "date": legacy["service_date"], "tags": [], "series": "",
+                "pinned": False, "notes_preview": "",
+            })
+        services = list(by_path.values())
+
+        if not services:
+            self._arch_list.append(self._status_row(
+                "No services in library yet — save a service to add it here")); return
+
+        kind, value = getattr(self, "_arch_filter", ("all", None))
+        if kind == "pinned":
+            services = [s for s in services if s.get("pinned")]
+        elif kind == "untagged":
+            services = [s for s in services if not s.get("tags")]
+        elif kind == "series":
+            services = [s for s in services if s.get("series") == value]
+        elif kind == "tag":
+            services = [s for s in services if value in (s.get("tags") or [])]
+
+        # Show recently opened files at the top of the default, unfiltered view
+        if not query and kind == "all":
             recent = [p for p in config.recent_files if Path(p).exists()]
             if recent:
                 hdr = Gtk.ListBoxRow(); hdr.set_selectable(False); hdr.set_activatable(False)
@@ -621,35 +755,31 @@ class ServicesWindow(Adw.Window):
                     self._arch_list.append(row)
                 self._arch_list.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        try:
-            from rubric_package.db import element_services, element_for_service
-        except ImportError:
-            self._arch_list.append(self._status_row("Database not available")); return
-
-        services = element_services(limit=500)
-        if not services:
-            self._arch_list.append(self._status_row(
-                "No services in library yet — save a service to add it here")); return
-
         if query:
             filtered = []
             for svc in services:
-                title = (svc.get("service_title") or "").lower()
-                date  = (svc.get("service_date") or "").lower()
-                if query in title or query in date:
+                title  = (svc.get("title") or "").lower()
+                date   = (svc.get("date") or "").lower()
+                series_v = (svc.get("series") or "").lower()
+                tags_v = " ".join(svc.get("tags") or []).lower()
+                notes_v = (svc.get("notes_preview") or "").lower()
+                if (query in title or query in date or query in series_v
+                        or query in tags_v or query in notes_v):
                     filtered.append(svc)
                 else:
-                    elems = element_for_service(svc["service_path"])
+                    elems = element_for_service(svc["path"])
                     if any(query in (e.get("name","")).lower() or query in (e.get("note","")).lower()
                            for e in elems):
                         filtered.append(svc)
             services = filtered
             if not services: self._arch_list.append(self._status_row("No matches found")); return
 
+        services.sort(key=lambda s: s.get("date") or "", reverse=True)
+
         for svc in services:
             self._arch_list.append(self._arch_svc_row(svc))
-            if svc["service_path"] in self._arch_expanded:
-                try: elems = element_for_service(svc["service_path"])
+            if svc["path"] in self._arch_expanded:
+                try: elems = element_for_service(svc["path"])
                 except Exception: elems = []
                 cur_section = ""
                 for elem in elems:
@@ -659,7 +789,7 @@ class ServicesWindow(Adw.Window):
                     self._arch_list.append(self._arch_elem_row(elem))
 
     def _arch_svc_row(self, svc: dict) -> Gtk.ListBoxRow:
-        path = svc["service_path"]; expanded = path in self._arch_expanded
+        path = svc["path"]; expanded = path in self._arch_expanded
         row = Gtk.ListBoxRow(); row._is_service = True; row._svc = svc
         row.set_activatable(True)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -667,13 +797,40 @@ class ServicesWindow(Adw.Window):
         header.set_margin_start(12); header.set_margin_end(8)
         header.set_margin_top(10); header.set_margin_bottom(10)
         header.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
+
+        pinned = bool(svc.get("pinned"))
+        pin_btn = Gtk.ToggleButton(icon_name="starred-symbolic" if pinned else "non-starred-symbolic")
+        pin_btn.set_active(pinned)
+        pin_btn.add_css_class("flat"); pin_btn.set_valign(Gtk.Align.CENTER)
+        pin_btn.set_tooltip_text("Pinned in library — click to unpin" if pinned else "Pin in library")
+        pin_btn.connect("toggled", lambda b, p=path: self._on_toggle_pin(p, b.get_active()))
+        header.append(pin_btn)
+
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1); info.set_hexpand(True)
-        title_lbl = Gtk.Label(label=svc.get("service_title") or Path(path).stem)
+        title_lbl = Gtk.Label(label=svc.get("title") or Path(path).stem)
         title_lbl.set_xalign(0); title_lbl.add_css_class("heading"); title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         info.append(title_lbl)
-        date_lbl = Gtk.Label(label=svc.get("service_date") or "No date")
+        date_lbl = Gtk.Label(label=svc.get("date") or "No date")
         date_lbl.set_xalign(0); date_lbl.add_css_class("caption"); date_lbl.add_css_class("dim-label")
-        info.append(date_lbl); header.append(info)
+        info.append(date_lbl)
+
+        pills = ([svc["series"]] if svc.get("series") else []) + list(svc.get("tags") or [])
+        if pills:
+            pill_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            pill_row.set_margin_top(3)
+            for text in pills:
+                pill_row.append(self._make_pill(text))
+            info.append(pill_row)
+
+        if svc.get("notes_preview"):
+            note_lbl = Gtk.Label(label=svc["notes_preview"])
+            note_lbl.set_xalign(0); note_lbl.set_wrap(True)
+            note_lbl.set_ellipsize(Pango.EllipsizeMode.END); note_lbl.set_lines(1)
+            note_lbl.add_css_class("caption"); note_lbl.add_css_class("dim-label")
+            note_lbl.set_margin_top(2)
+            info.append(note_lbl)
+
+        header.append(info)
         open_btn = Gtk.Button(label="Open in editor"); open_btn.add_css_class("flat")
         open_btn.set_valign(Gtk.Align.CENTER)
         open_btn.connect("clicked", lambda _b, p=path: self._open_service(p))

@@ -127,7 +127,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.18.1-dev1"
+APP_VERSION = "0.18.1-dev2"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -187,6 +187,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._colour_bar_rgb = (0.12,0.62,0.46)
         self._compiling_toast: Adw.Toast | None = None
         self.service_planning_notes: str = ""
+        self.service_tags: list[str] = []
+        self.service_series: str = ""
+        self.service_pinned: bool = False
 
         _seed_all_dates()
         self._exporter = BulletinExporter(self)
@@ -561,6 +564,18 @@ class MainWindow(Adw.ApplicationWindow):
             if getattr(self, "_deferred_save_id", None):
                 GLib.source_remove(self._deferred_save_id)
             self._deferred_save_id = GLib.timeout_add(15000, self._deferred_save)
+
+    def _on_series_changed(self, entry: Gtk.Entry):
+        self.service_series = entry.get_text().strip()
+        self._mark_modified()
+
+    def _on_tags_changed(self, entry: Gtk.Entry):
+        self.service_tags = [t.strip() for t in entry.get_text().split(",") if t.strip()]
+        self._mark_modified()
+
+    def _on_pinned_toggled(self, switch: Gtk.Switch, _pspec):
+        self.service_pinned = switch.get_active()
+        self._mark_modified()
 
     def _open_planning_notes_window(self):
         win = ServicePlanningNotesWindow(
@@ -1887,6 +1902,12 @@ class MainWindow(Adw.ApplicationWindow):
             d["debrief"] = self.service_debrief
         if getattr(self, "service_planning_notes", ""):
             d["planning_notes"] = self.service_planning_notes
+        if getattr(self, "service_tags", None):
+            d["tags"] = self.service_tags
+        if getattr(self, "service_series", ""):
+            d["series"] = self.service_series
+        if getattr(self, "service_pinned", False):
+            d["pinned"] = True
         return d
 
     def _confirm_discard(self, proceed):
@@ -2742,6 +2763,15 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_attendance = 0
         self.service_debrief = ""
         self.service_planning_notes = ""
+        self.service_tags = []
+        self.service_series = ""
+        self.service_pinned = False
+        if hasattr(self, "_tags_entry"):
+            self._tags_entry.set_text("")
+        if hasattr(self, "_series_entry"):
+            self._series_entry.set_text("")
+        if hasattr(self, "_pinned_toggle"):
+            self._pinned_toggle.set_active(False)
         if hasattr(self, "_planning_notes_buffer"):
             self._loading_notes = True
             self._planning_notes_buffer.set_text("")
@@ -2871,6 +2901,15 @@ class MainWindow(Adw.ApplicationWindow):
                 self._loading_notes = True
                 self._planning_notes_buffer.set_text(self.service_planning_notes)
                 self._loading_notes = False
+            self.service_tags = list(data.get("tags", []) or [])
+            self.service_series = data.get("series", "") or ""
+            self.service_pinned = bool(data.get("pinned", False))
+            if hasattr(self, "_tags_entry"):
+                self._tags_entry.set_text(", ".join(self.service_tags))
+            if hasattr(self, "_series_entry"):
+                self._series_entry.set_text(self.service_series)
+            if hasattr(self, "_pinned_toggle"):
+                self._pinned_toggle.set_active(self.service_pinned)
             if mark_unsaved: self.current_file=None; self.modified=True
             else:
                 self.current_file=path; self.modified=False
@@ -2935,9 +2974,10 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception as e: self._error("Error saving",str(e))
 
     def _index_service(self, path: str, data: dict | None = None):
-        """Index service elements into the library DB (runs in background thread)."""
+        """Index service elements and organizational metadata into the library DB
+        (runs in background threads)."""
         try:
-            from rubric_package.db import element_index_service as _eidx
+            from rubric_package.db import element_index_service as _eidx, service_meta_update as _smeta
         except ImportError:
             return
         if data is None:
@@ -2953,27 +2993,54 @@ class MainWindow(Adw.ApplicationWindow):
             target=_eidx, args=(path, title, date, items), daemon=True
         ).start()
 
+        # Metadata upsert is a single small write — done synchronously (unlike the
+        # element re-index above) so the Past Liturgies library reflects a just-saved
+        # file immediately, with no race against a background thread finishing late.
+        from rubric_package.utils.typst import notes_preview
+        preview = notes_preview(data.get("planning_notes", ""))
+        try:
+            mtime = Path(path).stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        _smeta(path, title, date, list(data.get("tags", []) or []),
+               data.get("series", "") or "", bool(data.get("pinned", False)),
+               preview, mtime)
+
     def _background_index_scan(self):
         """Scan repo liturgy folder and index any unindexed or stale services."""
         try:
-            from rubric_package.db import element_index_service as _eidx, element_services as _esvc
+            from rubric_package.db import (element_index_service as _eidx, element_services as _esvc,
+                service_meta_update as _smeta, service_meta_get as _smeta_get,
+                service_meta_prune as _smeta_prune)
         except ImportError:
             return
+        from rubric_package.utils.typst import notes_preview
         folders = []
         liturgy_dir = self._repo_subdir("liturgy")
         if liturgy_dir and liturgy_dir.is_dir():
             folders.append(liturgy_dir)
         for folder in folders:
             already = {s["service_path"] for s in _esvc(limit=5000)}
+            on_disk: set = set()
             for p in folder.glob("**/*.liturgy"):
-                path_str = str(p)
-                if path_str in already:
-                    continue
+                path_str = str(p); on_disk.add(path_str)
                 try:
+                    mtime = p.stat().st_mtime
+                    cached = _smeta_get(path_str)
+                    if cached is not None and abs(cached["mtime"] - mtime) < 0.01:
+                        if path_str in already:
+                            continue
                     data = json.loads(p.read_text(encoding="utf-8"))
-                    _eidx(path_str, data.get("title",""), data.get("date",""), data.get("items",[]))
+                    title = data.get("title", ""); date = data.get("date", "")
+                    if path_str not in already:
+                        _eidx(path_str, title, date, data.get("items", []))
+                    preview = notes_preview(data.get("planning_notes", ""))
+                    _smeta(path_str, title, date, list(data.get("tags", []) or []),
+                           data.get("series", "") or "", bool(data.get("pinned", False)),
+                           preview, mtime)
                 except Exception:
                     pass
+            _smeta_prune(on_disk)
 
     # ── Recent files ──────────────────────────────────────────────────────────
 

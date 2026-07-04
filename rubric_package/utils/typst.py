@@ -354,6 +354,15 @@ def strip_typst_plain(text: str) -> str:
     return text.strip()
 
 
+def notes_preview(text: str, limit: int = 200) -> str:
+    """Strip Typst markup and collapse whitespace for a short library-list preview."""
+    try:
+        plain = strip_typst_plain(text or "")
+    except Exception:
+        plain = text or ""
+    return " ".join(plain.split())[:limit]
+
+
 # ── Shared Typst function definitions ─────────────────────────────────────────
 # Inlined into every generated .typ document.
 

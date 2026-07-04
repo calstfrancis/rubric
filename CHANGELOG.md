@@ -4,6 +4,21 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev2] — Organize services in the Past Liturgies library
+
+### Added
+
+- **Series, tags, and pinning for services** — every service can now have a Series (e.g. "Advent 2026"), free-form Tags (e.g. "communion", "guest preacher"), and a Pinned flag, all editable from the title info popover in the header bar. Stored directly in the `.liturgy` file, alongside the existing planning notes.
+- **Past Liturgies tab reorganized** — the tab now has a sidebar (All services / Pinned / Untagged, plus per-series and per-tag filters with counts) instead of a single flat list. Each service row shows its series/tag pills, a quick pin-toggle star, and a preview snippet of its planning notes — the first place those notes are visible outside the editor itself.
+- New `service_meta` cache table backing the library sidebar/search, populated on every save and by the existing background repo scan — rebuildable, not a source of truth (the `.liturgy` file always is).
+
+### Internal
+
+- Added `notes_preview()` helper in `rubric_package/utils/typst.py`, shared between the live-save indexer and the background repo scan (previously duplicated).
+- `tests/test_db.py`: added `TestServiceMeta` (8 cases) covering the new cache table.
+
+---
+
 ## [0.18.1-dev1] — Fix invisible preview toolbar in dark mode
 
 ### Fixed

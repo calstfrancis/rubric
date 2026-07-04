@@ -62,6 +62,20 @@ CREATE TABLE IF NOT EXISTS element_index (
 CREATE INDEX IF NOT EXISTS idx_elem_service ON element_index(service_path);
 CREATE INDEX IF NOT EXISTS idx_elem_date    ON element_index(service_date DESC);
 CREATE INDEX IF NOT EXISTS idx_elem_name    ON element_index(name);
+
+CREATE TABLE IF NOT EXISTS service_meta (
+    path          TEXT PRIMARY KEY,
+    title         TEXT    NOT NULL DEFAULT '',
+    date          TEXT    NOT NULL DEFAULT '',
+    tags          TEXT    NOT NULL DEFAULT '',
+    series        TEXT    NOT NULL DEFAULT '',
+    pinned        INTEGER NOT NULL DEFAULT 0,
+    notes_preview TEXT    NOT NULL DEFAULT '',
+    mtime         REAL    NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_svcmeta_date   ON service_meta(date DESC);
+CREATE INDEX IF NOT EXISTS idx_svcmeta_series ON service_meta(series);
 """
 
 
@@ -254,6 +268,101 @@ def service_index_prune(keep_paths: set[str]) -> None:
         for stale in indexed - keep_paths:
             con.execute("DELETE FROM service_index WHERE path = ?", (stale,))
         con.commit()
+    finally:
+        con.close()
+
+
+# ── Service organization (tags, series, pinned, notes preview) ────────────────
+
+def service_meta_update(
+    path: str, title: str, date: str, tags: list[str], series: str,
+    pinned: bool, notes_preview: str, mtime: float,
+) -> None:
+    """Upsert a service's organizational metadata, cached from its .liturgy file."""
+    con = _open()
+    try:
+        con.execute(
+            "INSERT OR REPLACE INTO service_meta "
+            "(path, title, date, tags, series, pinned, notes_preview, mtime) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (path, title, date, ",".join(tags), series, int(pinned), notes_preview, mtime),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def service_meta_get(path: str) -> dict | None:
+    """Return cached organizational metadata for a single service, or None."""
+    con = _open()
+    try:
+        row = con.execute(
+            "SELECT * FROM service_meta WHERE path = ?", (path,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["tags"] = [t for t in d["tags"].split(",") if t]
+        d["pinned"] = bool(d["pinned"])
+        return d
+    finally:
+        con.close()
+
+
+def service_meta_all() -> list[dict]:
+    """Return organizational metadata for every indexed service, newest first."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT * FROM service_meta ORDER BY date DESC, title"
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = [t for t in d["tags"].split(",") if t]
+            d["pinned"] = bool(d["pinned"])
+            out.append(d)
+        return out
+    finally:
+        con.close()
+
+
+def service_meta_prune(keep_paths: set[str]) -> None:
+    """Delete service_meta entries for paths that no longer exist on disk."""
+    con = _open()
+    try:
+        indexed = {r[0] for r in con.execute("SELECT path FROM service_meta").fetchall()}
+        for stale in indexed - keep_paths:
+            con.execute("DELETE FROM service_meta WHERE path = ?", (stale,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def service_meta_all_tags() -> list[tuple[str, int]]:
+    """Return (tag, count) for every distinct tag in use, most-used first."""
+    con = _open()
+    try:
+        rows = con.execute("SELECT tags FROM service_meta WHERE tags != ''").fetchall()
+        counts: dict[str, int] = {}
+        for r in rows:
+            for t in r["tags"].split(","):
+                if t:
+                    counts[t] = counts.get(t, 0) + 1
+        return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+    finally:
+        con.close()
+
+
+def service_meta_all_series() -> list[tuple[str, int]]:
+    """Return (series, count) for every distinct series in use, alphabetical."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT series, COUNT(*) AS n FROM service_meta "
+            "WHERE series != '' GROUP BY series ORDER BY series COLLATE NOCASE"
+        ).fetchall()
+        return [(r["series"], r["n"]) for r in rows]
     finally:
         con.close()
 

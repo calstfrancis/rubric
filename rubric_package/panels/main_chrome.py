@@ -116,6 +116,33 @@ class MainChrome:
         self._main._lect_label.set_xalign(0); self._main._lect_label.set_margin_top(2)
         pop_box.append(self._main._lect_label)
 
+        # Organization — series, tags, pinned (surfaced in the Past Liturgies library)
+        org_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        org_sep.set_margin_top(4); pop_box.append(org_sep)
+
+        series_lbl = Gtk.Label(label="Series"); series_lbl.add_css_class("heading"); series_lbl.set_xalign(0)
+        series_lbl.set_margin_top(4); pop_box.append(series_lbl)
+        self._main._series_entry = Gtk.Entry()
+        self._main._series_entry.set_placeholder_text("e.g. Advent 2026")
+        self._main._series_entry.connect("changed", self._main._on_series_changed)
+        pop_box.append(self._main._series_entry)
+
+        tags_lbl = Gtk.Label(label="Tags"); tags_lbl.add_css_class("heading"); tags_lbl.set_xalign(0)
+        tags_lbl.set_margin_top(6); pop_box.append(tags_lbl)
+        self._main._tags_entry = Gtk.Entry()
+        self._main._tags_entry.set_placeholder_text("communion, guest preacher, …")
+        self._main._tags_entry.connect("changed", self._main._on_tags_changed)
+        pop_box.append(self._main._tags_entry)
+
+        pin_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        pin_row.set_margin_top(8)
+        pin_lbl = Gtk.Label(label="Pinned in library"); pin_lbl.set_xalign(0); pin_lbl.set_hexpand(True)
+        pin_row.append(pin_lbl)
+        self._main._pinned_toggle = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self._main._pinned_toggle.connect("notify::active", self._main._on_pinned_toggled)
+        pin_row.append(self._main._pinned_toggle)
+        pop_box.append(pin_row)
+
         info_pop = Gtk.Popover(); info_pop.set_child(pop_box)
         info_pop.set_has_arrow(False); info_pop.set_position(Gtk.PositionType.BOTTOM)
 
