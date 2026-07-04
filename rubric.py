@@ -127,7 +127,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.17.10-dev6"
+APP_VERSION = "0.17.10-dev7"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -490,6 +490,7 @@ class MainWindow(Adw.ApplicationWindow):
         hdr.set_margin_start(12); hdr.set_margin_end(6)
         hdr.set_margin_top(2); hdr.set_margin_bottom(2)
         hdr.add_css_class("notes-header")
+        hdr.set_cursor(Gdk.Cursor.new_from_name("pointer"))
 
         lbl = Gtk.Label(label="Service Notes")
         lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
@@ -598,6 +599,7 @@ class MainWindow(Adw.ApplicationWindow):
         handle = Gtk.Label(label="⠿")
         handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
+        handle.set_cursor(Gdk.Cursor.new_from_name("grab"))
         row.add_suffix(handle)
         if not si.show_in_bulletin:
             row.set_opacity(0.45)
@@ -622,6 +624,7 @@ class MainWindow(Adw.ApplicationWindow):
         handle = Gtk.Label(label="⠿")
         handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
+        handle.set_cursor(Gdk.Cursor.new_from_name("grab"))
         bx.append(handle)
         tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
@@ -754,7 +757,9 @@ class MainWindow(Adw.ApplicationWindow):
             lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE); lb.add_css_class("boxed-list")
             lb.set_margin_start(16); lb.set_margin_end(16); lb.set_margin_top(12); lb.set_margin_bottom(12)
             lb.connect("row-selected", lambda _lb,row,d=div,i=items: self._on_tab_row_selected(row))
-            ph = Adw.StatusPage(title="Empty section", description='Add elements from the palette or drag them here')
+            ph = Adw.StatusPage(title="Section is empty",
+                description="Double-click an element in the palette to add it, or drag elements here.",
+                icon_name="rubric-symbolic")
             ph.set_vexpand(True); lb.set_placeholder(ph)
             for item in items:
                 g_idx = self.service_entries.index(item)
@@ -4333,7 +4338,7 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .compact-mode row.activatable > box { padding-top: 1px; padding-bottom: 1px; }
 .compact-mode row.activatable title { font-size: 0.8em; }
 .compact-mode row.activatable subtitle { font-size: 0.7em; }
-.compact-mode .order-list row.activatable { min-height: 20px; }
+.compact-mode .order-list row.activatable { min-height: 24px; }
 .compact-mode .order-list row.activatable title { font-size: 0.8em; margin-top: 0; margin-bottom: 0; }
 /* Status bar: slim height */
 .toolbar { min-height: 18px; padding-top: 0; padding-bottom: 0; }
@@ -4342,8 +4347,6 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .rubric-statusbar-sep { opacity: 0.25; }
 /* Selected service order row: left accent bar */
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
-/* Observance chips in status bar */
-.obs-chip { padding-left: 4px; padding-right: 4px; padding-top: 0; padding-bottom: 0; }
 /* Reading chip: inserted into service */
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
@@ -4366,10 +4369,9 @@ notebook > header.left { background: transparent; border-right: 1px solid alpha(
 notebook > header.left tab { padding: 4px 2px; min-height: 0; }
 notebook > header.left tab:checked { background: alpha(@accent_bg_color, 0.15); border-right: 2px solid @accent_color; }
 /* Header bar buttons: square, not tall */
-headerbar button { min-width: 32px; min-height: 32px; padding: 4px; }
-headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 4px; }
-/* Drag handle: subtle at rest, visible on hover, grab cursor */
-.order-list row .drag-handle { opacity: 0.18; transition: opacity 120ms; cursor: grab; }
+headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; padding: 4px; }
+/* Drag handle: subtle at rest, visible on hover (grab cursor set in code) */
+.order-list row .drag-handle { opacity: 0.3; transition: opacity 120ms; }
 .order-list row:hover .drag-handle { opacity: 0.6; }
 /* Section divider - full-width coloured header row */
 .divider-header { background: alpha(@headerbar_shade_color, 0.06); min-height: 28px; }
@@ -4388,7 +4390,7 @@ headerbar button.suggested-action { min-width: 32px; min-height: 32px; padding: 
 /* Metric pill chips (time bar, word count) */
 .metric-pill { background: alpha(@headerbar_shade_color, 0.5); border-radius: 9999px; padding: 1px 7px; }
 /* Planning notes header: pointer cursor + subtle hover */
-.notes-header { cursor: pointer; border-radius: 4px; }
+.notes-header { border-radius: 4px; }
 .notes-header:hover { background: alpha(@accent_bg_color, 0.06); }
 /* Unsaved chip: pulse animation after 30s */
 @keyframes rubric-unsaved-pulse {

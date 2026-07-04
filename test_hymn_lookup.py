@@ -112,15 +112,14 @@ class TestLookupHymnCacheHit(unittest.TestCase):
     def test_cache_miss_does_not_call_hymn_set_on_network_error(self):
         """Network failure does not write a bad title to the cache."""
         import hymn_lookup
-        import urllib.error
 
         results = []
 
         with patch.object(hymn_lookup, "_DB_OK", True), \
              patch("hymn_lookup.hymn_get", return_value=None), \
              patch("hymn_lookup.hymn_set") as mock_set, \
-             patch("hymn_lookup.urllib.request.urlopen",
-                   side_effect=Exception("timeout")), \
+             patch("hymn_lookup._fetch_url",
+                   return_value=(None, "timeout")), \
              patch("hymn_lookup.GLib") as mock_glib:
 
             mock_glib.idle_add.side_effect = lambda fn, *args: fn(*args)

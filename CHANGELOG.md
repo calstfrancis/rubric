@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.17.10-dev7] — Aesthetic polish pass
+
+### Fixed
+
+- **Drag-handle and planning-notes cursors** — replaced invalid `cursor: grab`/`cursor: pointer` GTK CSS declarations (silently rejected by GTK4 at startup, logged as theme-parser warnings) with proper `Gtk.Widget.set_cursor()` calls in code. Drag handles and the planning-notes header now show the correct cursor on hover.
+- **Compact-mode row height floor raised** — the order list's compact-mode minimum row height was 20px, below comfortable click-target guidance; raised to 24px.
+- **Empty-state copy unified** — the "Empty section" placeholder now matches the wording and icon of the "Service is empty" placeholder, so both empty states read as one voice instead of two different phrasings.
+- **Drag-handle visibility** — resting opacity raised from 0.18 to 0.3 so the reorder affordance is easier to notice before hovering.
+
+### Internal
+
+- Removed dead `.obs-chip` CSS rule — it was never applied to any widget.
+- `headerbar button.suggested-action` no longer forced into the same fixed 32×32 box as other header buttons, so suggested-action buttons in dialogs keep their natural sizing.
+- Fixed a stale unit test (`test_hymn_lookup.py`) that patched `hymn_lookup.urllib.request.urlopen`, an attribute that hasn't existed since hymn lookups were switched to `curl` via subprocess (for flatpak sandbox compatibility). Now patches `hymn_lookup._fetch_url` directly.
+
+---
+
 ## [0.17.10-dev6] — Test suite for the extracted panels
 
 ### Internal
