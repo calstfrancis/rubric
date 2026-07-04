@@ -4,6 +4,15 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev3] — Services button, attendance/debrief notes
+
+### Added
+
+- **"Services" button in the header bar** — placed right after Undo/Redo, opens the Services window directly to the Past Liturgies library.
+- **Attendance and debrief notes are back** — each expanded service in the Past Liturgies library now shows an attendance count and a debrief notes field, saved directly to that service's `.liturgy` file. This data already round-tripped through save/load but had no UI since the old `PlannerWindow` was removed during the monolith cleanup; this restores it in its intended new home.
+
+---
+
 ## [0.18.1-dev2] — Organize services in the Past Liturgies library
 
 ### Added

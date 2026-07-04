@@ -69,6 +69,13 @@ class MainChrome:
         edit_box.append(self._main.undo_btn); edit_box.append(self._main.redo_btn)
         hdr.pack_start(edit_box)
 
+        # Services library — browse/organize past services (Planner/Element Library/Past Liturgies)
+        services_btn = Gtk.Button(icon_name="folder-documents-symbolic",
+                                   tooltip_text="Services library — browse and organize past services")
+        services_btn.add_css_class("flat")
+        services_btn.connect("clicked", lambda _: self._main.open_archive())
+        hdr.pack_start(services_btn)
+
         # Title widget lives inside a MenuButton so clicking it opens the service info popover
         self._main.title_widget = Adw.WindowTitle(title="Rubric", subtitle="New service")
 

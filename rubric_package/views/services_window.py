@@ -779,6 +779,7 @@ class ServicesWindow(Adw.Window):
         for svc in services:
             self._arch_list.append(self._arch_svc_row(svc))
             if svc["path"] in self._arch_expanded:
+                self._arch_list.append(self._arch_afterservice_row(svc["path"]))
                 try: elems = element_for_service(svc["path"])
                 except Exception: elems = []
                 cur_section = ""
@@ -841,6 +842,70 @@ class ServicesWindow(Adw.Window):
             GLib.idle_add(self._arch_rebuild, self._arch_search)
         row.connect("activate", on_activate)
         return row
+
+    def _arch_afterservice_row(self, path: str) -> Gtk.ListBoxRow:
+        """Attendance + debrief notes — filled in after Sunday, saved to the file."""
+        row = Gtk.ListBoxRow(); row.set_activatable(False)
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+        except Exception as e:
+            lbl = Gtk.Label(label=f"Couldn't read file: {e}")
+            lbl.set_margin_start(28); lbl.set_margin_top(6); lbl.set_margin_bottom(6)
+            row.set_child(lbl); return row
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_start(28); box.set_margin_end(12)
+        box.set_margin_top(6); box.set_margin_bottom(10)
+
+        hdr_lbl = Gtk.Label(label="After service"); hdr_lbl.add_css_class("heading")
+        hdr_lbl.set_xalign(0); box.append(hdr_lbl)
+
+        att_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        att_lbl = Gtk.Label(label="Attendance"); att_lbl.set_xalign(0); att_lbl.set_hexpand(True)
+        att_row.append(att_lbl)
+        att_adj = Gtk.Adjustment(value=data.get("attendance", 0), lower=0, upper=9999, step_increment=1)
+        att_spin = Gtk.SpinButton(adjustment=att_adj, numeric=True)
+        att_spin.set_width_chars(5); att_spin.set_valign(Gtk.Align.CENTER)
+        att_row.append(att_spin)
+        box.append(att_row)
+
+        deb_lbl = Gtk.Label(label="Debrief notes"); deb_lbl.set_xalign(0)
+        deb_lbl.add_css_class("caption"); deb_lbl.add_css_class("dim-label")
+        deb_lbl.set_margin_top(2); box.append(deb_lbl)
+
+        deb_scroll = Gtk.ScrolledWindow()
+        deb_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        deb_scroll.set_min_content_height(64)
+        deb_tv = Gtk.TextView(); deb_tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        deb_tv.add_css_class("card")
+        deb_tv.set_top_margin(6); deb_tv.set_bottom_margin(6)
+        deb_tv.set_left_margin(8); deb_tv.set_right_margin(8)
+        deb_tv.get_buffer().set_text(data.get("debrief", ""), -1)
+        deb_scroll.set_child(deb_tv)
+        box.append(deb_scroll)
+
+        save_btn = Gtk.Button(label="Save notes")
+        save_btn.add_css_class("flat"); save_btn.set_halign(Gtk.Align.END)
+        save_btn.connect("clicked", lambda _b, p=path, spin=att_spin, tv=deb_tv:
+                          self._save_afterservice_notes(p, spin, tv))
+        box.append(save_btn)
+
+        row.set_child(box); return row
+
+    def _save_afterservice_notes(self, path: str, spin: Gtk.SpinButton, tv: Gtk.TextView):
+        try:
+            p = Path(path)
+            data = json.loads(p.read_text(encoding="utf-8"))
+            data["attendance"] = int(spin.get_value())
+            buf = tv.get_buffer(); s, e = buf.get_bounds()
+            data["debrief"] = buf.get_text(s, e, False).strip()
+            p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            if self._main.current_file and str(Path(self._main.current_file)) == str(p):
+                self._main.service_attendance = data["attendance"]
+                self._main.service_debrief = data["debrief"]
+            self._show_toast("Notes saved")
+        except Exception as e:
+            self._show_toast(f"Save failed: {e}")
 
     def _arch_section_label(self, section: str) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row.set_activatable(False)
