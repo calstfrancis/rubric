@@ -21,6 +21,10 @@ from rubric_package.db import (
     service_meta_prune, service_meta_all_tags, service_meta_all_series,
     service_meta_paths_for_tag, service_meta_paths_for_series,
     migrate_from_json,
+    element_index_service, element_instances,
+    element_catalog_set_tags, element_catalog_set_favorite, element_catalog_set_notes,
+    element_catalog_all_tags, element_catalog_keys_for_tag, element_library,
+    element_catalog_find_duplicates, element_catalog_merge,
 )
 
 
@@ -208,6 +212,175 @@ class TestServiceMeta(_TempDB):
         service_meta_update("/b.liturgy", "B", "2026-01-08", [], "Advent 2027", False, "", 2.0)
         paths = service_meta_paths_for_series("Advent 2026")
         self.assertEqual(paths, ["/a.liturgy"])
+
+
+class TestElementCatalog(_TempDB):
+
+    def _items(self, *names):
+        return [{"type": "item", "name": n, "note": f"{n} note", "leader": "", "bulletin_note": ""}
+                for n in names]
+
+    def test_indexing_creates_catalog_entries(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        self.assertEqual(element_catalog_all_tags(), [])
+        rows = element_library()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Welcome")
+        self.assertEqual(rows[0]["name_key"], "welcome")
+
+    def test_name_key_normalizes_case_and_whitespace(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("  WELCOME  "))
+        rows = element_library()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["use_count"], 2)
+
+    def test_set_and_get_tags_round_trip(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_catalog_set_tags("welcome", ["hospitality", "youth"])
+        rows = element_library()
+        self.assertEqual(rows[0]["tags"], ["hospitality", "youth"])
+
+    def test_favorite_toggle(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_catalog_set_favorite("welcome", True)
+        self.assertTrue(element_library()[0]["favorite"])
+        element_catalog_set_favorite("welcome", False)
+        self.assertFalse(element_library()[0]["favorite"])
+
+    def test_all_tags_counts_and_orders_by_frequency(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Prayers of the People"))
+        element_catalog_set_tags("welcome", ["hospitality"])
+        element_catalog_set_tags("prayers of the people", ["hospitality", "prayer"])
+        tags = element_catalog_all_tags()
+        self.assertEqual(tags[0], ("hospitality", 2))
+        self.assertIn(("prayer", 1), tags)
+
+    def test_keys_for_tag_exact_match_only(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Announcements"))
+        element_catalog_set_tags("welcome", ["hospitality"])
+        element_catalog_set_tags("announcements", ["hospitality", "logistics"])
+        keys = element_catalog_keys_for_tag("hospitality")
+        self.assertEqual(set(keys), {"welcome", "announcements"})
+        self.assertEqual(element_catalog_keys_for_tag("logistics"), ["announcements"])
+
+    def test_library_filters_by_query(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Benediction"))
+        rows = element_library(query="wel")
+        self.assertEqual([r["name"] for r in rows], ["Welcome"])
+
+    def test_library_filters_by_tag(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Benediction"))
+        element_catalog_set_tags("welcome", ["hospitality"])
+        rows = element_library(tag="hospitality")
+        self.assertEqual([r["name"] for r in rows], ["Welcome"])
+
+    def test_library_filters_favorites_only(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Benediction"))
+        element_catalog_set_favorite("welcome", True)
+        rows = element_library(favorites_only=True)
+        self.assertEqual([r["name"] for r in rows], ["Welcome"])
+
+    def test_library_sort_alpha(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Benediction"))
+        rows = element_library(sort="alpha")
+        self.assertEqual([r["name"] for r in rows], ["Benediction", "Welcome"])
+
+    def test_library_sort_recent(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-06-01", self._items("Benediction"))
+        rows = element_library(sort="recent")
+        self.assertEqual(rows[0]["name"], "Benediction")
+
+    def test_favorites_sort_first_regardless_of_sort_mode(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-06-01", self._items("Benediction"))
+        element_catalog_set_favorite("welcome", True)
+        rows = element_library(sort="alpha")
+        self.assertEqual(rows[0]["name"], "Welcome")
+
+    def test_element_instances_newest_first(self):
+        element_index_service("/old.liturgy", "Old", "2026-01-01", self._items("Welcome"))
+        element_index_service("/new.liturgy", "New", "2026-06-01", self._items("Welcome"))
+        rows = element_instances("welcome")
+        self.assertEqual([r["service_path"] for r in rows], ["/new.liturgy", "/old.liturgy"])
+
+    def test_notes_round_trip(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_catalog_set_notes("welcome", "Always pair with the announcements slide.")
+        self.assertEqual(element_library()[0]["notes"], "Always pair with the announcements slide.")
+
+    def test_find_duplicates_flags_similar_names(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        pairs = element_catalog_find_duplicates()
+        keys = {pairs[0]["a"]["name_key"], pairs[0]["b"]["name_key"]}
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(keys, {"offertory", "offeratory"})
+        self.assertGreaterEqual(pairs[0]["score"], 0.82)
+
+    def test_find_duplicates_ignores_dissimilar_names(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Benediction"))
+        self.assertEqual(element_catalog_find_duplicates(), [])
+
+    def test_find_duplicates_respects_threshold(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        self.assertEqual(element_catalog_find_duplicates(threshold=0.99), [])
+
+    def test_merge_reassigns_instances_to_keep_key(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        element_catalog_merge("offertory", "offeratory")
+        rows = element_instances("offertory")
+        self.assertEqual({r["service_path"] for r in rows}, {"/a.liturgy", "/b.liturgy"})
+        self.assertEqual(element_instances("offeratory"), [])
+
+    def test_merge_removes_dropped_catalog_entry(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        element_catalog_merge("offertory", "offeratory")
+        keys = {r["name_key"] for r in element_library()}
+        self.assertEqual(keys, {"offertory"})
+
+    def test_merge_unions_tags_and_favorite(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        element_catalog_set_tags("offertory", ["giving"])
+        element_catalog_set_tags("offeratory", ["giving", "music"])
+        element_catalog_set_favorite("offeratory", True)
+        element_catalog_merge("offertory", "offeratory")
+        merged = element_library()[0]
+        self.assertEqual(merged["name_key"], "offertory")
+        self.assertEqual(set(merged["tags"]), {"giving", "music"})
+        self.assertTrue(merged["favorite"])
+
+    def test_merge_keeps_existing_notes_over_dropped_notes(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        element_catalog_set_notes("offertory", "Keep this one.")
+        element_catalog_set_notes("offeratory", "Dropped note.")
+        element_catalog_merge("offertory", "offeratory")
+        self.assertEqual(element_library()[0]["notes"], "Keep this one.")
+
+    def test_merge_uses_dropped_notes_if_keep_has_none(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Offertory"))
+        element_index_service("/b.liturgy", "B", "2026-01-08", self._items("Offeratory"))
+        element_catalog_set_notes("offeratory", "Only note available.")
+        element_catalog_merge("offertory", "offeratory")
+        self.assertEqual(element_library()[0]["notes"], "Only note available.")
+
+    def test_merge_same_key_is_a_noop(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
+        element_catalog_merge("welcome", "welcome")
+        self.assertEqual(len(element_library()), 1)
 
 
 class TestMigrateFromJson(_TempDB):

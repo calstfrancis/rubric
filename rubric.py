@@ -127,7 +127,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.18.1-dev5"
+APP_VERSION = "0.18.1-dev6"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -3022,8 +3022,8 @@ class MainWindow(Adw.ApplicationWindow):
         """Scan repo liturgy folder and index any unindexed or stale services."""
         try:
             from rubric_package.db import (element_index_service as _eidx, element_services as _esvc,
-                service_meta_update as _smeta, service_meta_get as _smeta_get,
-                service_meta_prune as _smeta_prune)
+                service_meta_update as _smeta, service_meta_all_mtimes as _smeta_mtimes,
+                service_meta_prune as _smeta_prune, _open as _db_open)
         except ImportError:
             return
         from rubric_package.utils.typst import notes_preview
@@ -3033,28 +3033,34 @@ class MainWindow(Adw.ApplicationWindow):
             folders.append(liturgy_dir)
         for folder in folders:
             already = {s["service_path"] for s in _esvc(limit=5000)}
+            cached_mtimes = _smeta_mtimes()
             on_disk: set = set()
-            for p in folder.glob("**/*.liturgy"):
-                path_str = str(p); on_disk.add(path_str)
-                try:
-                    mtime = p.stat().st_mtime
-                    cached = _smeta_get(path_str)
-                    if cached is not None and abs(cached["mtime"] - mtime) < 0.01:
-                        if path_str in already:
-                            continue
-                    data = json.loads(p.read_text(encoding="utf-8"))
-                    title = data.get("title", ""); date = data.get("date", "")
-                    if path_str not in already:
-                        _eidx(path_str, title, date, data.get("items", []))
-                    preview = notes_preview(data.get("planning_notes", ""))
-                    debrief_preview = notes_preview(data.get("debrief", ""))
-                    _smeta(path_str, title, date, list(data.get("tags", []) or []),
-                           data.get("series", "") or "", bool(data.get("pinned", False)),
-                           preview, mtime,
-                           attendance=int(data.get("attendance", 0) or 0),
-                           debrief_preview=debrief_preview)
-                except Exception:
-                    pass
+            con = _db_open()
+            try:
+                for p in folder.glob("**/*.liturgy"):
+                    path_str = str(p); on_disk.add(path_str)
+                    try:
+                        mtime = p.stat().st_mtime
+                        cached_mtime = cached_mtimes.get(path_str)
+                        if cached_mtime is not None and abs(cached_mtime - mtime) < 0.01:
+                            if path_str in already:
+                                continue
+                        data = json.loads(p.read_text(encoding="utf-8"))
+                        title = data.get("title", ""); date = data.get("date", "")
+                        if path_str not in already:
+                            _eidx(path_str, title, date, data.get("items", []), _con=con)
+                        preview = notes_preview(data.get("planning_notes", ""))
+                        debrief_preview = notes_preview(data.get("debrief", ""))
+                        _smeta(path_str, title, date, list(data.get("tags", []) or []),
+                               data.get("series", "") or "", bool(data.get("pinned", False)),
+                               preview, mtime,
+                               attendance=int(data.get("attendance", 0) or 0),
+                               debrief_preview=debrief_preview, _con=con)
+                    except Exception:
+                        pass
+                con.commit()
+            finally:
+                con.close()
             _smeta_prune(on_disk)
 
     # ── Recent files ──────────────────────────────────────────────────────────

@@ -4,10 +4,25 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.18.1-dev5] — Past Liturgies library: search, sort, bulk actions
+## [0.18.1-dev6] — Element Library expansion + Past Liturgies library polish
 
 ### Added
 
+- **Element Library reorganized around elements, not services** — "By Element" is now the
+  default view (a "By Service" toggle still shows the old service-grouped view). Each element
+  shows a use-count/last-used badge and expands to every past instance, same as before.
+- **Element tagging, notes, and favorites** — tag any recurring element (e.g. "communion",
+  "youth", "Advent") and jot a curator note ("always pair with the announcements slide") via a
+  per-row "Edit tags & notes…" button; star favorites to pin them to the top of the list
+  regardless of sort order. Notes show as a preview under the element when present.
+- **"Find near-duplicate elements…" dialog** in the Element Library — flags likely-duplicate
+  names (e.g. "Offertory" vs "Offeratory") by text similarity and merges one into the other in
+  a click, combining their tags/favorite/notes and repointing all past instances to the kept
+  name.
+- **Sort and filter controls** in the Element Library — Most used / Recently used / A–Z sort,
+  a favorites-only toggle, and clickable tag-filter chips.
+- **"Element Tags" section** added to the Manage Tags & Series dialog, with the same
+  rename-everywhere behavior already available for service tags/series.
 - **Sort dropdown** in Past Liturgies — Newest first, Oldest first, Attendance high→low, Attendance low→high.
 - **"Has debrief" sidebar filter**, alongside the existing All/Pinned/Untagged.
 - **Attendance stats line** under the list — shows the count and average attendance for whatever's currently filtered/searched.
@@ -22,11 +37,25 @@ All notable changes are documented here, newest first.
 
 - **`notes_preview()` no longer truncates mid-word** — previews now cut on a word boundary and end with "…".
 - **Editing attendance/debrief in Past Liturgies no longer went stale in the library cache** — saving those fields now re-indexes the service immediately, so sort/filter/stats reflect the change right away.
+- **Slow startup on installs with a large Past Liturgies history** — the background library scan was opening a fresh SQLite connection per historical service just to check whether its cache was stale, then another connection or two to re-index it. It now does one query up front to read every cached mtime, and reuses a single connection/transaction for the whole scan.
 
 ### Internal
 
 - `service_meta` gained `attendance` and `debrief_preview` columns (migrated in-place for existing installs) and `service_meta_paths_for_tag`/`service_meta_paths_for_series` lookups, backing the new rename and bulk features.
+- Added `service_meta_all_mtimes()` for a single-query mtime lookup, and `element_index_service`/`service_meta_update` now accept an optional shared connection (`_con`) so bulk scans can batch writes into one transaction instead of one per row.
 - Added `TestServiceMeta` cases for the new columns/lookups and a `TestNotesPreview` class covering the truncation fix.
+- New `element_catalog` table gives each element a stable cross-service identity keyed by a
+  normalized name (`name_key`, backfilled onto existing `element_index` rows on upgrade), with
+  `tags`, `favorite`, and `notes` columns and matching accessors (`element_catalog_set_tags`,
+  `element_catalog_set_favorite`, `element_catalog_set_notes`, `element_catalog_all_tags`,
+  `element_catalog_keys_for_tag`). New `element_library()`/`element_instances()` power the
+  by-element aggregate view and its instance drill-down.
+- Added `TestElementCatalog` covering normalization, tag/favorite round-trips, filtering, and
+  sorting.
+- Added `element_catalog_find_duplicates()` (pairwise `difflib.SequenceMatcher` over
+  normalized names) and `element_catalog_merge()` (reassigns `element_index` rows, unions
+  tags/favorite, keeps existing notes over the dropped entry's) backing the new duplicate
+  finder, plus `TestElementCatalog` cases for both.
 
 ---
 

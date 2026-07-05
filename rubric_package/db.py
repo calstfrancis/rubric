@@ -15,6 +15,7 @@ from __future__ import annotations
 import html as _html
 import json
 import sqlite3
+from difflib import SequenceMatcher
 from pathlib import Path
 
 DB_PATH = Path.home() / ".local/share/rubric" / "rubric.db"
@@ -78,6 +79,16 @@ CREATE TABLE IF NOT EXISTS service_meta (
 
 CREATE INDEX IF NOT EXISTS idx_svcmeta_date   ON service_meta(date DESC);
 CREATE INDEX IF NOT EXISTS idx_svcmeta_series ON service_meta(series);
+
+CREATE TABLE IF NOT EXISTS element_catalog (
+    name_key  TEXT PRIMARY KEY,
+    name      TEXT NOT NULL DEFAULT '',
+    tags      TEXT NOT NULL DEFAULT '',
+    favorite  INTEGER NOT NULL DEFAULT 0,
+    notes     TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_favorite ON element_catalog(favorite DESC);
 """
 
 
@@ -85,7 +96,13 @@ def _open() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(DB_PATH))
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA busy_timeout = 5000")
     return con
+
+
+def _norm_key(name: str) -> str:
+    """Normalize an element name to a stable lookup key (trim/lowercase/collapse whitespace)."""
+    return " ".join((name or "").strip().lower().split())
 
 
 def init_db() -> None:
@@ -96,11 +113,18 @@ def init_db() -> None:
         for stmt in (
             "ALTER TABLE service_meta ADD COLUMN attendance INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE service_meta ADD COLUMN debrief_preview TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE element_index ADD COLUMN name_key TEXT NOT NULL DEFAULT ''",
         ):
             try:
                 con.execute(stmt)
             except sqlite3.OperationalError:
                 pass  # column already exists
+        con.execute("CREATE INDEX IF NOT EXISTS idx_elem_namekey ON element_index(name_key)")
+        con.execute("UPDATE element_index SET name_key = lower(trim(name)) WHERE name_key = ''")
+        con.execute(
+            "INSERT OR IGNORE INTO element_catalog (name_key, name) "
+            "SELECT name_key, name FROM element_index WHERE name_key != '' GROUP BY name_key"
+        )
         con.commit()
     finally:
         con.close()
@@ -289,9 +313,14 @@ def service_meta_update(
     path: str, title: str, date: str, tags: list[str], series: str,
     pinned: bool, notes_preview: str, mtime: float,
     attendance: int = 0, debrief_preview: str = "",
+    _con: sqlite3.Connection | None = None,
 ) -> None:
-    """Upsert a service's organizational metadata, cached from its .liturgy file."""
-    con = _open()
+    """Upsert a service's organizational metadata, cached from its .liturgy file.
+
+    Pass `_con` to reuse an existing connection/transaction (e.g. during a
+    bulk scan) instead of opening and committing a new one per call.
+    """
+    con = _con or _open()
     try:
         con.execute(
             "INSERT OR REPLACE INTO service_meta "
@@ -301,9 +330,11 @@ def service_meta_update(
             (path, title, date, ",".join(tags), series, int(pinned), notes_preview,
              int(attendance), debrief_preview, mtime),
         )
-        con.commit()
+        if _con is None:
+            con.commit()
     finally:
-        con.close()
+        if _con is None:
+            con.close()
 
 
 def service_meta_get(path: str) -> dict | None:
@@ -319,6 +350,18 @@ def service_meta_get(path: str) -> dict | None:
         d["tags"] = [t for t in d["tags"].split(",") if t]
         d["pinned"] = bool(d["pinned"])
         return d
+    finally:
+        con.close()
+
+
+def service_meta_all_mtimes() -> dict[str, float]:
+    """Return {path: mtime} for every indexed service in a single query."""
+    con = _open()
+    try:
+        return {
+            r["path"]: r["mtime"]
+            for r in con.execute("SELECT path, mtime FROM service_meta").fetchall()
+        }
     finally:
         con.close()
 
@@ -405,9 +448,16 @@ def service_meta_paths_for_series(series: str) -> list[str]:
 
 # ── Element library ───────────────────────────────────────────────────────────
 
-def element_index_service(path: str, title: str, date: str, items: list[dict]) -> None:
-    """Replace all indexed elements for a service path."""
-    con = _open()
+def element_index_service(
+    path: str, title: str, date: str, items: list[dict],
+    _con: sqlite3.Connection | None = None,
+) -> None:
+    """Replace all indexed elements for a service path.
+
+    Pass `_con` to reuse an existing connection/transaction (e.g. during a
+    bulk scan) instead of opening and committing a new one per call.
+    """
+    con = _con or _open()
     try:
         con.execute("DELETE FROM element_index WHERE service_path = ?", (path,))
         section = ""
@@ -421,18 +471,24 @@ def element_index_service(path: str, title: str, date: str, items: list[dict]) -
                 name = (item.get("name") or "").strip()
                 if not name:
                     continue
-                rows.append((path, title, date, section, name,
+                rows.append((path, title, date, section, name, _norm_key(name),
                              item.get("leader", ""), note, bul))
         if rows:
             con.executemany(
                 "INSERT INTO element_index "
-                "(service_path, service_title, service_date, section, name, "
-                " leader, note, bulletin_note) VALUES (?,?,?,?,?,?,?,?)",
+                "(service_path, service_title, service_date, section, name, name_key, "
+                " leader, note, bulletin_note) VALUES (?,?,?,?,?,?,?,?,?)",
                 rows,
             )
-        con.commit()
+            con.executemany(
+                "INSERT OR IGNORE INTO element_catalog (name_key, name) VALUES (?, ?)",
+                {(r[5], r[4]) for r in rows},
+            )
+        if _con is None:
+            con.commit()
     finally:
-        con.close()
+        if _con is None:
+            con.close()
 
 
 def element_search(query: str, limit: int = 80) -> list[dict]:
@@ -531,6 +587,188 @@ def element_suggestions(prefix: str, limit: int = 8) -> list[dict]:
             (q, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+# ── Element catalog (cross-service identity, tags, favorites) ─────────────────
+
+def element_catalog_set_tags(name_key: str, tags: list[str]) -> None:
+    """Set the tag list for a catalog element, keyed by its normalized name."""
+    con = _open()
+    try:
+        con.execute(
+            "UPDATE element_catalog SET tags = ? WHERE name_key = ?",
+            (",".join(tags), name_key),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def element_catalog_set_favorite(name_key: str, favorite: bool) -> None:
+    """Mark or unmark a catalog element as a favorite."""
+    con = _open()
+    try:
+        con.execute(
+            "UPDATE element_catalog SET favorite = ? WHERE name_key = ?",
+            (int(favorite), name_key),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def element_catalog_set_notes(name_key: str, notes: str) -> None:
+    """Set the curator notes for a catalog element."""
+    con = _open()
+    try:
+        con.execute(
+            "UPDATE element_catalog SET notes = ? WHERE name_key = ?",
+            (notes, name_key),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def element_catalog_all_tags() -> list[tuple[str, int]]:
+    """Return (tag, count) for every distinct element tag in use, most-used first."""
+    con = _open()
+    try:
+        rows = con.execute("SELECT tags FROM element_catalog WHERE tags != ''").fetchall()
+        counts: dict[str, int] = {}
+        for r in rows:
+            for t in r["tags"].split(","):
+                if t:
+                    counts[t] = counts.get(t, 0) + 1
+        return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+    finally:
+        con.close()
+
+
+def element_catalog_keys_for_tag(tag: str) -> list[str]:
+    """Return name_keys of every catalog element tagged with the given tag (exact match)."""
+    con = _open()
+    try:
+        rows = con.execute("SELECT name_key, tags FROM element_catalog WHERE tags != ''").fetchall()
+        return [r["name_key"] for r in rows if tag in r["tags"].split(",")]
+    finally:
+        con.close()
+
+
+def element_library(
+    query: str = "", tag: str | None = None, favorites_only: bool = False,
+    sort: str = "frequency", limit: int = 300,
+) -> list[dict]:
+    """Return catalog elements aggregated with usage stats, filtered and sorted.
+
+    `sort` is one of "frequency" (use_count desc), "recent" (last_used desc),
+    or "alpha" (name).
+    """
+    con = _open()
+    try:
+        where = []
+        params: list = []
+        if query:
+            where.append("c.name LIKE ?")
+            params.append(f"%{query}%")
+        if tag:
+            where.append("(',' || c.tags || ',') LIKE ?")
+            params.append(f"%,{tag},%")
+        if favorites_only:
+            where.append("c.favorite = 1")
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        order_sql = {
+            "recent": "last_used DESC",
+            "alpha": "c.name COLLATE NOCASE",
+        }.get(sort, "use_count DESC")
+        rows = con.execute(
+            f"SELECT c.name_key, c.name, c.tags, c.favorite, c.notes, "
+            f"COUNT(DISTINCT e.service_path) AS use_count, MAX(e.service_date) AS last_used "
+            f"FROM element_catalog c LEFT JOIN element_index e ON e.name_key = c.name_key "
+            f"{where_sql} "
+            f"GROUP BY c.name_key ORDER BY c.favorite DESC, {order_sql} LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = [t for t in d["tags"].split(",") if t]
+            d["favorite"] = bool(d["favorite"])
+            out.append(d)
+        return out
+    finally:
+        con.close()
+
+
+def element_instances(name_key: str, limit: int = 200) -> list[dict]:
+    """Return every indexed instance of a catalog element, newest first."""
+    con = _open()
+    try:
+        rows = con.execute(
+            "SELECT * FROM element_index WHERE name_key = ? "
+            "ORDER BY service_date DESC, id LIMIT ?",
+            (name_key, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def element_catalog_find_duplicates(threshold: float = 0.82, limit: int = 30) -> list[dict]:
+    """Return likely-duplicate pairs of catalog elements, ranked by similarity.
+
+    Compares every pair of normalized name_keys with difflib's SequenceMatcher
+    and keeps pairs scoring at or above `threshold`. O(n^2) over the catalog,
+    which is fine at the scale of a single church's recurring elements (tens
+    to low hundreds of distinct names).
+    """
+    entries = element_library(limit=100000)
+    pairs = []
+    for i in range(len(entries)):
+        for j in range(i + 1, len(entries)):
+            a, b = entries[i], entries[j]
+            score = SequenceMatcher(None, a["name_key"], b["name_key"]).ratio()
+            if score >= threshold:
+                pairs.append({"a": a, "b": b, "score": score})
+    pairs.sort(key=lambda p: -p["score"])
+    return pairs[:limit]
+
+
+def element_catalog_merge(keep_key: str, drop_key: str) -> None:
+    """Merge one catalog element into another, reassigning all its history.
+
+    Every `element_index` row pointing at `drop_key` is repointed to
+    `keep_key`; tags and favorite status are unioned; `drop_key`'s catalog
+    row is deleted. `keep_key`'s notes are only replaced if it had none.
+    """
+    if keep_key == drop_key:
+        return
+    con = _open()
+    try:
+        keep = con.execute(
+            "SELECT * FROM element_catalog WHERE name_key = ?", (keep_key,)
+        ).fetchone()
+        drop = con.execute(
+            "SELECT * FROM element_catalog WHERE name_key = ?", (drop_key,)
+        ).fetchone()
+        if keep is None or drop is None:
+            return
+        keep_tags = [t for t in keep["tags"].split(",") if t]
+        drop_tags = [t for t in drop["tags"].split(",") if t]
+        merged_tags = keep_tags + [t for t in drop_tags if t not in keep_tags]
+        merged_favorite = int(bool(keep["favorite"]) or bool(drop["favorite"]))
+        merged_notes = keep["notes"] or drop["notes"]
+        con.execute(
+            "UPDATE element_catalog SET tags = ?, favorite = ?, notes = ? WHERE name_key = ?",
+            (",".join(merged_tags), merged_favorite, merged_notes, keep_key),
+        )
+        con.execute(
+            "UPDATE element_index SET name_key = ? WHERE name_key = ?", (keep_key, drop_key)
+        )
+        con.execute("DELETE FROM element_catalog WHERE name_key = ?", (drop_key,))
+        con.commit()
     finally:
         con.close()
 

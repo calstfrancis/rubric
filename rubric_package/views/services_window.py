@@ -32,7 +32,8 @@ class ServicesWindow(Adw.Window):
         self.connect("destroy", self._on_destroy)
         self._planner_folder: "Path | None" = None
         self._lib_search = ""; self._lib_expanded: set = set(); self._lib_selected = None
-        self._lib_rebuilding = False; self._lib_mode = "services"
+        self._lib_rebuilding = False; self._lib_mode = "element"
+        self._lib_sort = "frequency"; self._lib_tag_filter = None; self._lib_fav_only = False
         self._arch_search = ""; self._arch_expanded: set = set()
 
         tv = Adw.ToolbarView()
@@ -453,27 +454,65 @@ class ServicesWindow(Adw.Window):
 
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         top.set_margin_start(12); top.set_margin_end(12); top.set_margin_top(10); top.set_margin_bottom(6)
-        se = Gtk.SearchEntry(); se.set_placeholder_text("Search elements…"); se.set_hexpand(True)
+        self._lib_search_entry = se = Gtk.SearchEntry()
+        se.set_placeholder_text("Search elements…"); se.set_hexpand(True)
         se.connect("search-changed", lambda e: self._lib_rebuild(e.get_text().strip()))
         top.append(se)
 
         mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         mode_box.add_css_class("linked")
+        self._lib_btn_elem = Gtk.ToggleButton(label="By element")
         self._lib_btn_svc  = Gtk.ToggleButton(label="By service")
-        self._lib_btn_freq = Gtk.ToggleButton(label="Most used")
-        self._lib_btn_freq.set_group(self._lib_btn_svc)
-        self._lib_btn_svc.set_active(True)
-        mode_box.append(self._lib_btn_svc); mode_box.append(self._lib_btn_freq)
+        self._lib_btn_svc.set_group(self._lib_btn_elem)
+        self._lib_btn_elem.set_active(True)
+        mode_box.append(self._lib_btn_elem); mode_box.append(self._lib_btn_svc)
         top.append(mode_box)
 
         def on_mode_toggle(btn):
             if not btn.get_active(): return
-            self._lib_mode = "freq" if btn is self._lib_btn_freq else "services"
+            self._lib_mode = "services" if btn is self._lib_btn_svc else "element"
+            self._lib_filter_row.set_visible(self._lib_mode == "element")
             self._lib_rebuild(se.get_text().strip())
+        self._lib_btn_elem.connect("toggled", on_mode_toggle)
         self._lib_btn_svc.connect("toggled", on_mode_toggle)
-        self._lib_btn_freq.connect("toggled", on_mode_toggle)
 
-        box.append(top); box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        box.append(top)
+
+        self._lib_filter_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._lib_filter_row.set_margin_start(12); self._lib_filter_row.set_margin_end(12)
+        self._lib_filter_row.set_margin_bottom(6)
+
+        sort_model = Gtk.StringList.new(["Most used", "Recently used", "A–Z"])
+        self._lib_sort_dd = Gtk.DropDown(model=sort_model)
+        self._lib_sort_dd.set_selected(0)
+
+        def on_sort_changed(dd, _pspec):
+            self._lib_sort = ["frequency", "recent", "alpha"][dd.get_selected()]
+            self._lib_rebuild(se.get_text().strip())
+        self._lib_sort_dd.connect("notify::selected", on_sort_changed)
+        self._lib_filter_row.append(self._lib_sort_dd)
+
+        self._lib_fav_btn = Gtk.ToggleButton(icon_name="starred-symbolic", tooltip_text="Favorites only")
+
+        def on_fav_toggle(btn):
+            self._lib_fav_only = btn.get_active()
+            self._lib_rebuild(se.get_text().strip())
+        self._lib_fav_btn.connect("toggled", on_fav_toggle)
+        self._lib_filter_row.append(self._lib_fav_btn)
+
+        dupes_btn = Gtk.Button(icon_name="edit-find-symbolic", tooltip_text="Find near-duplicate elements…")
+        dupes_btn.add_css_class("flat")
+        dupes_btn.connect("clicked", lambda _b: self._open_duplicates_dialog())
+        self._lib_filter_row.append(dupes_btn)
+
+        tag_scroll = Gtk.ScrolledWindow(); tag_scroll.set_hexpand(True)
+        tag_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        self._lib_tag_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        tag_scroll.set_child(self._lib_tag_box)
+        self._lib_filter_row.append(tag_scroll)
+
+        box.append(self._lib_filter_row)
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         self._lib_insert_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._lib_insert_bar.set_margin_start(12); self._lib_insert_bar.set_margin_end(12)
@@ -502,38 +541,236 @@ class ServicesWindow(Adw.Window):
         while self._lib_list.get_first_child(): self._lib_list.remove(self._lib_list.get_first_child())
         self._lib_selected = None; self._lib_insert_bar.set_visible(False)
         try:
-            from rubric_package.db import (element_search, element_services,
-                                            element_for_service, element_name_stats)
+            from rubric_package.db import (element_services, element_for_service,
+                                            element_library, element_instances)
         except ImportError:
             self._lib_list.append(self._status_row("Database not available"))
             self._lib_rebuilding = False; return
 
-        if self._lib_mode == "freq":
-            rows = element_name_stats(query, limit=120)
+        if self._lib_mode == "element":
+            self._lib_rebuild_tag_chips()
+            rows = element_library(query, tag=self._lib_tag_filter,
+                                    favorites_only=self._lib_fav_only, sort=self._lib_sort)
             if not rows:
-                self._lib_list.append(self._status_row("No elements indexed yet"))
+                self._lib_list.append(self._status_row(
+                    "No elements match" if (query or self._lib_tag_filter or self._lib_fav_only)
+                    else "No services indexed yet — save a service to add it to the library"))
             else:
-                for r in rows: self._lib_list.append(self._lib_freq_row(r))
+                for entry in rows:
+                    self._lib_list.append(self._lib_catalog_row(entry))
+                    if entry["name_key"] in self._lib_expanded:
+                        for elem in element_instances(entry["name_key"]):
+                            self._lib_list.append(self._lib_elem_row(elem, indented=True))
             self._lib_rebuilding = False; return
 
-        if query:
-            rows = element_search(query)
-            if not rows:
-                self._lib_list.append(self._status_row("No matches found"))
-                self._lib_rebuilding = False; return
-            for r in rows: self._lib_list.append(self._lib_elem_row(r))
-        else:
-            services = element_services()
-            if not services:
-                self._lib_list.append(self._status_row(
-                    "No services indexed yet — save a service to add it to the library"))
-                self._lib_rebuilding = False; return
-            for svc in services:
-                self._lib_list.append(self._lib_svc_row(svc))
-                if svc["service_path"] in self._lib_expanded:
-                    for elem in element_for_service(svc["service_path"]):
-                        self._lib_list.append(self._lib_elem_row(elem, indented=True))
+        services = element_services()
+        if not services:
+            self._lib_list.append(self._status_row(
+                "No services indexed yet — save a service to add it to the library"))
+            self._lib_rebuilding = False; return
+        for svc in services:
+            self._lib_list.append(self._lib_svc_row(svc))
+            if svc["service_path"] in self._lib_expanded:
+                for elem in element_for_service(svc["service_path"]):
+                    self._lib_list.append(self._lib_elem_row(elem, indented=True))
         self._lib_rebuilding = False
+
+    def _lib_rebuild_tag_chips(self):
+        while self._lib_tag_box.get_first_child(): self._lib_tag_box.remove(self._lib_tag_box.get_first_child())
+        try:
+            from rubric_package.db import element_catalog_all_tags
+            tags = element_catalog_all_tags()
+        except ImportError:
+            tags = []
+        for name, _count in tags:
+            btn = Gtk.ToggleButton()
+            btn.set_child(self._make_pill(name))
+            btn.add_css_class("flat")
+            btn.set_active(name == self._lib_tag_filter)
+
+            def on_tag_toggle(b, n=name):
+                self._lib_tag_filter = n if b.get_active() else None
+                if b.get_active():
+                    for sib in list(self._lib_tag_box):
+                        if sib is not b:
+                            sib.set_active(False)
+                self._lib_rebuild(self._lib_search)
+            btn.connect("toggled", on_tag_toggle)
+            self._lib_tag_box.append(btn)
+
+    def _usage_badge_box(self, use_count: int, last_used: str) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        badge = Gtk.Label(label=f"{use_count}×")
+        badge.add_css_class("caption"); badge.add_css_class("dim-label")
+        badge.set_valign(Gtk.Align.CENTER)
+        box.append(badge)
+        if last_used:
+            try:
+                from datetime import date as _date
+                ld = _date.fromisoformat(last_used)
+                weeks = ((_date.today() - ld).days) // 7
+                when = f"{weeks}w ago" if weeks > 0 else "this week"
+            except Exception:
+                when = last_used
+            when_lbl = Gtk.Label(label=when)
+            when_lbl.add_css_class("caption"); when_lbl.add_css_class("dim-label")
+            when_lbl.set_valign(Gtk.Align.CENTER)
+            box.append(when_lbl)
+        return box
+
+    def _lib_catalog_row(self, entry: dict) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow(); row._is_catalog = True; row._is_service = False
+        row._name_key = entry["name_key"]
+        expanded = entry["name_key"] in self._lib_expanded
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        outer.set_margin_start(12); outer.set_margin_end(8)
+        outer.set_margin_top(8); outer.set_margin_bottom(8)
+
+        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        top_row.append(Gtk.Label(label="▼" if expanded else "▶", css_classes=["caption", "dim-label"]))
+        name_lbl = Gtk.Label(label=entry.get("name") or "(unnamed)")
+        name_lbl.set_hexpand(True); name_lbl.set_xalign(0)
+        top_row.append(name_lbl)
+        top_row.append(self._usage_badge_box(entry.get("use_count", 0), entry.get("last_used", "") or ""))
+
+        fav_btn = Gtk.ToggleButton(icon_name="starred-symbolic" if entry.get("favorite") else "non-starred-symbolic")
+        fav_btn.add_css_class("flat"); fav_btn.set_active(bool(entry.get("favorite")))
+        fav_btn.set_tooltip_text("Favorite")
+        fav_btn.connect("clicked", lambda _b, nk=entry["name_key"], fav=entry.get("favorite"): self._on_lib_toggle_favorite(nk, not fav))
+        top_row.append(fav_btn)
+
+        tag_btn = Gtk.Button(icon_name="tag-symbolic", tooltip_text="Edit tags & notes…")
+        tag_btn.add_css_class("flat")
+        tag_btn.connect("clicked", lambda _b, e=entry: self._open_edit_element(e))
+        top_row.append(tag_btn)
+        outer.append(top_row)
+
+        if entry.get("tags"):
+            pill_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            pill_row.set_margin_start(20)
+            for t in entry["tags"]:
+                pill_row.append(self._make_pill(t))
+            outer.append(pill_row)
+
+        notes = (entry.get("notes") or "").strip()
+        if notes:
+            preview = notes[:140].replace("\n", " ") + ("…" if len(notes) > 140 else "")
+            notes_lbl = Gtk.Label(label=preview)
+            notes_lbl.set_xalign(0); notes_lbl.set_margin_start(20)
+            notes_lbl.add_css_class("caption"); notes_lbl.add_css_class("dim-label")
+            notes_lbl.set_wrap(True); notes_lbl.set_lines(2); notes_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            outer.append(notes_lbl)
+
+        row.set_child(outer); return row
+
+    def _on_lib_toggle_favorite(self, name_key: str, favorite: bool):
+        try:
+            from rubric_package.db import element_catalog_set_favorite
+            element_catalog_set_favorite(name_key, favorite)
+        except ImportError:
+            return
+        self._lib_rebuild(self._lib_search)
+
+    def _open_edit_element(self, entry: dict):
+        dlg = Adw.MessageDialog(
+            transient_for=self, heading=f'Edit "{entry.get("name","element")}"',
+            body="Tags are comma-separated (e.g. communion, youth, Advent). Notes are a "
+                 "curator reminder — pairing suggestions, prep instructions, etc.")
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        tag_lbl = Gtk.Label(label="Tags"); tag_lbl.set_xalign(0)
+        tag_lbl.add_css_class("caption"); tag_lbl.add_css_class("dim-label")
+        box.append(tag_lbl)
+        tag_entry = Gtk.Entry(); tag_entry.set_text(", ".join(entry.get("tags", [])))
+        box.append(tag_entry)
+
+        notes_lbl = Gtk.Label(label="Notes"); notes_lbl.set_xalign(0)
+        notes_lbl.add_css_class("caption"); notes_lbl.add_css_class("dim-label")
+        notes_lbl.set_margin_top(4); box.append(notes_lbl)
+        notes_scroll = Gtk.ScrolledWindow()
+        notes_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        notes_scroll.set_min_content_height(72)
+        notes_tv = Gtk.TextView(); notes_tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        notes_tv.add_css_class("card")
+        notes_tv.set_top_margin(6); notes_tv.set_bottom_margin(6)
+        notes_tv.set_left_margin(8); notes_tv.set_right_margin(8)
+        notes_tv.get_buffer().set_text(entry.get("notes", "") or "", -1)
+        notes_scroll.set_child(notes_tv)
+        box.append(notes_scroll)
+
+        dlg.set_extra_child(box)
+        dlg.add_response("cancel", "Cancel"); dlg.add_response("apply", "Apply")
+        dlg.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("apply")
+
+        def on_resp(_d, r):
+            if r != "apply": return
+            try:
+                from rubric_package.db import element_catalog_set_tags, element_catalog_set_notes
+                tags = [t.strip() for t in tag_entry.get_text().split(",") if t.strip()]
+                element_catalog_set_tags(entry["name_key"], tags)
+                buf = notes_tv.get_buffer()
+                notes_text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+                element_catalog_set_notes(entry["name_key"], notes_text)
+            except ImportError:
+                return
+            self._lib_rebuild(self._lib_search)
+        dlg.connect("response", on_resp)
+        dlg.present()
+
+    def _open_duplicates_dialog(self):
+        try:
+            from rubric_package.db import element_catalog_find_duplicates
+        except ImportError:
+            self._show_toast("Database not available"); return
+
+        win = Adw.Window(transient_for=self, modal=True)
+        win.set_title("Possible Duplicate Elements")
+        win.set_default_size(460, 480)
+        tv = Adw.ToolbarView(); tv.add_top_bar(Adw.HeaderBar())
+
+        scroll = Gtk.ScrolledWindow(); scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_start(12); outer.set_margin_end(12)
+        outer.set_margin_top(12); outer.set_margin_bottom(12)
+
+        def do_merge(keep_key, drop_key, drop_name, keep_name):
+            from rubric_package.db import element_catalog_merge
+            element_catalog_merge(keep_key, drop_key)
+            self._show_toast(f'Merged "{drop_name}" into "{keep_name}"')
+            rebuild()
+            self._lib_rebuild(self._lib_search)
+
+        def rebuild():
+            while outer.get_first_child(): outer.remove(outer.get_first_child())
+            pairs = element_catalog_find_duplicates()
+            if not pairs:
+                outer.append(Gtk.Label(label="No likely duplicates found.", css_classes=["dim-label"]))
+                return
+            grp = Adw.PreferencesGroup(); outer.append(grp)
+            for pair in pairs:
+                a, b = pair["a"], pair["b"]
+                if (a["use_count"], a["name"].lower()) >= (b["use_count"], b["name"].lower()):
+                    keep, drop = a, b
+                else:
+                    keep, drop = b, a
+                row = Adw.ActionRow(
+                    title=f'{GLib.markup_escape_text(a["name"])}  ↔  {GLib.markup_escape_text(b["name"])}',
+                    subtitle=f'{int(pair["score"] * 100)}% similar · {a["use_count"]}× vs {b["use_count"]}×')
+                merge_btn = Gtk.Button(label=f'Merge into "{keep["name"]}"')
+                merge_btn.add_css_class("flat"); merge_btn.set_valign(Gtk.Align.CENTER)
+                merge_btn.connect(
+                    "clicked",
+                    lambda _b, k=keep["name_key"], d=drop["name_key"], dn=drop["name"], kn=keep["name"]:
+                        do_merge(k, d, dn, kn))
+                row.add_suffix(merge_btn)
+                grp.add(row)
+
+        rebuild()
+        scroll.set_child(outer)
+        tv.set_content(scroll); win.set_content(tv); win.present()
 
     def _lib_svc_row(self, svc: dict) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row._is_service = True; row._service_path = svc["service_path"]
@@ -567,37 +804,6 @@ class ServicesWindow(Adw.Window):
             box.append(svc_lbl)
         row.set_child(box); return row
 
-    def _lib_freq_row(self, r: dict) -> Gtk.ListBoxRow:
-        """Row for the 'Most used' frequency view."""
-        row = Gtk.ListBoxRow(); row._is_service = False; row._element = {}
-        row.set_activatable(False)
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        box.set_margin_start(12); box.set_margin_end(12)
-        box.set_margin_top(8); box.set_margin_bottom(8)
-        name_lbl = Gtk.Label(label=r.get("name", "(unnamed)"))
-        name_lbl.set_hexpand(True); name_lbl.set_xalign(0)
-        box.append(name_lbl)
-        use_count = r.get("use_count", 0)
-        last_used = r.get("last_used", "") or ""
-        badge_text = f"{use_count}×"
-        badge = Gtk.Label(label=badge_text)
-        badge.add_css_class("caption"); badge.add_css_class("dim-label")
-        badge.set_valign(Gtk.Align.CENTER)
-        box.append(badge)
-        if last_used:
-            try:
-                from datetime import date as _date, timedelta
-                ld = _date.fromisoformat(last_used)
-                weeks = ((_date.today() - ld).days) // 7
-                when = f"{weeks}w ago" if weeks > 0 else "this week"
-            except Exception:
-                when = last_used
-            when_lbl = Gtk.Label(label=when)
-            when_lbl.add_css_class("caption"); when_lbl.add_css_class("dim-label")
-            when_lbl.set_valign(Gtk.Align.CENTER)
-            box.append(when_lbl)
-        row.set_child(box); return row
-
     def _on_lib_row_selected(self, _lb, row):
         if self._lib_rebuilding: return
         if row is None: self._lib_selected = None; self._lib_insert_bar.set_visible(False); return
@@ -605,6 +811,11 @@ class ServicesWindow(Adw.Window):
             path = row._service_path
             if path in self._lib_expanded: self._lib_expanded.discard(path)
             else: self._lib_expanded.add(path)
+            self._lib_rebuild(self._lib_search); return
+        if getattr(row, "_is_catalog", False):
+            key = row._name_key
+            if key in self._lib_expanded: self._lib_expanded.discard(key)
+            else: self._lib_expanded.add(key)
             self._lib_rebuild(self._lib_search); return
         elem = getattr(row, "_element", None)
         if not elem or not (elem.get("note") or elem.get("bulletin_note")):
@@ -1221,7 +1432,8 @@ class ServicesWindow(Adw.Window):
 
     def _open_manage_tags_dialog(self):
         try:
-            from rubric_package.db import service_meta_all_tags, service_meta_all_series
+            from rubric_package.db import (service_meta_all_tags, service_meta_all_series,
+                                            element_catalog_all_tags)
         except ImportError:
             self._show_toast("Database not available"); return
 
@@ -1236,7 +1448,7 @@ class ServicesWindow(Adw.Window):
         outer.set_margin_start(12); outer.set_margin_end(12)
         outer.set_margin_top(12); outer.set_margin_bottom(12)
 
-        def add_section(title, items, kind):
+        def add_section(title, items, kind, unit="service(s)"):
             if not items:
                 return
             lbl = Gtk.Label(label=title); lbl.add_css_class("heading"); lbl.set_xalign(0)
@@ -1244,26 +1456,30 @@ class ServicesWindow(Adw.Window):
             outer.append(lbl)
             grp = Adw.PreferencesGroup(); outer.append(grp)
             for name, count in items:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(name), subtitle=f"{count} service(s)")
+                row = Adw.ActionRow(title=GLib.markup_escape_text(name), subtitle=f"{count} {unit}")
                 rename_btn = Gtk.Button(icon_name="document-edit-symbolic", tooltip_text="Rename everywhere")
                 rename_btn.add_css_class("flat"); rename_btn.set_valign(Gtk.Align.CENTER)
                 rename_btn.connect("clicked", lambda _b, n=name, k=kind: self._prompt_rename(win, k, n))
                 row.add_suffix(rename_btn)
                 grp.add(row)
 
+        element_tags = element_catalog_all_tags()
         add_section("Series", service_meta_all_series(), "series")
         add_section("Tags", service_meta_all_tags(), "tag")
-        if not service_meta_all_series() and not service_meta_all_tags():
+        add_section("Element Tags", element_tags, "element_tag", unit="element(s)")
+        if not service_meta_all_series() and not service_meta_all_tags() and not element_tags:
             outer.append(Gtk.Label(label="No series or tags yet.", css_classes=["dim-label"]))
 
         scroll.set_child(outer)
         tv.set_content(scroll); win.set_content(tv); win.present()
 
     def _prompt_rename(self, parent_win, kind: str, old_name: str):
+        noun = {"series": "series", "tag": "tag", "element_tag": "element tag"}[kind]
+        target = "every service" if kind != "element_tag" else "every element"
         dlg = Adw.MessageDialog(
             transient_for=parent_win,
-            heading=f"Rename {'series' if kind == 'series' else 'tag'}",
-            body=f'Renames "{old_name}" across every service that uses it.')
+            heading=f"Rename {noun}",
+            body=f'Renames "{old_name}" across {target} that uses it.')
         entry = Gtk.Entry(); entry.set_text(old_name)
         dlg.set_extra_child(entry)
         dlg.add_response("cancel", "Cancel"); dlg.add_response("rename", "Rename")
@@ -1280,6 +1496,9 @@ class ServicesWindow(Adw.Window):
         dlg.present()
 
     def _rename_everywhere(self, kind: str, old_name: str, new_name: str):
+        if kind == "element_tag":
+            self._rename_element_tag_everywhere(old_name, new_name)
+            return
         from rubric_package.db import service_meta_paths_for_tag, service_meta_paths_for_series
         paths = (service_meta_paths_for_tag(old_name) if kind == "tag"
                  else service_meta_paths_for_series(old_name))
@@ -1316,6 +1535,24 @@ class ServicesWindow(Adw.Window):
         self._show_toast(f'Renamed "{old_name}" to "{new_name}" in {n} service(s)')
         self._populate_arch_filter_list()
         self._arch_rebuild(self._arch_search)
+
+    def _rename_element_tag_everywhere(self, old_name: str, new_name: str):
+        from rubric_package.db import element_catalog_set_tags, element_library
+        matches = {e["name_key"]: e["tags"] for e in element_library(query="", tag=old_name)}
+        n = 0
+        for key, current in matches.items():
+            try:
+                tags = [new_name if t == old_name else t for t in current]
+                seen = []
+                for t in tags:
+                    if t not in seen:
+                        seen.append(t)
+                element_catalog_set_tags(key, seen)
+                n += 1
+            except Exception:
+                pass
+        self._show_toast(f'Renamed "{old_name}" to "{new_name}" in {n} element(s)')
+        self._lib_rebuild(self._lib_search)
 
     # ── Shared helpers ────────────────────────────────────────────────────────
 
