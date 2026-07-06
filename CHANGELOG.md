@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.18.1-dev7] — Element Library content previews
+
+### Added
+
+- **Element rows now show a content preview** — the collapsed "By Element" row displays the
+  first several words of its most recently used instance (falling back to the bulletin note if
+  the planning note is blank), so same-named elements like multiple "Hymn" entries are
+  distinguishable at a glance without expanding. The "Find near-duplicate elements…" dialog
+  shows a shorter preview from each side of a candidate pair for the same reason.
+
+### Internal
+
+- `element_library()` gained a `content_preview` column (a correlated subquery for the
+  newest instance's note/bulletin_note per element) and a `_first_words()` UI helper for
+  word-based (not character-based) truncation.
+- Added `TestElementCatalog` cases for `content_preview` sourcing and its bulletin-note
+  fallback.
+
 ## [0.18.1-dev6] — Element Library expansion + Past Liturgies library polish
 
 ### Added

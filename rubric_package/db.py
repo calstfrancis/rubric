@@ -685,7 +685,10 @@ def element_library(
         }.get(sort, "use_count DESC")
         rows = con.execute(
             f"SELECT c.name_key, c.name, c.tags, c.favorite, c.notes, "
-            f"COUNT(DISTINCT e.service_path) AS use_count, MAX(e.service_date) AS last_used "
+            f"COUNT(DISTINCT e.service_path) AS use_count, MAX(e.service_date) AS last_used, "
+            f"(SELECT COALESCE(NULLIF(e2.note, ''), e2.bulletin_note) FROM element_index e2 "
+            f" WHERE e2.name_key = c.name_key ORDER BY e2.service_date DESC, e2.id DESC LIMIT 1"
+            f") AS content_preview "
             f"FROM element_catalog c LEFT JOIN element_index e ON e.name_key = c.name_key "
             f"{where_sql} "
             f"GROUP BY c.name_key ORDER BY c.favorite DESC, {order_sql} LIMIT ?",

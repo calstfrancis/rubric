@@ -598,6 +598,13 @@ class ServicesWindow(Adw.Window):
             btn.connect("toggled", on_tag_toggle)
             self._lib_tag_box.append(btn)
 
+    def _first_words(self, text: str, n: int = 10) -> str:
+        """First n words of text (stripped, single-line), for telling same-named elements apart."""
+        words = (text or "").replace("\n", " ").split()
+        if not words:
+            return ""
+        return " ".join(words[:n]) + ("…" if len(words) > n else "")
+
     def _usage_badge_box(self, use_count: int, last_used: str) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         badge = Gtk.Label(label=f"{use_count}×")
@@ -644,6 +651,14 @@ class ServicesWindow(Adw.Window):
         tag_btn.connect("clicked", lambda _b, e=entry: self._open_edit_element(e))
         top_row.append(tag_btn)
         outer.append(top_row)
+
+        preview = self._first_words(entry.get("content_preview") or "")
+        if preview:
+            preview_lbl = Gtk.Label(label=preview)
+            preview_lbl.set_xalign(0); preview_lbl.set_margin_start(20)
+            preview_lbl.add_css_class("caption"); preview_lbl.add_css_class("dim-label")
+            preview_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            outer.append(preview_lbl)
 
         if entry.get("tags"):
             pill_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -756,9 +771,14 @@ class ServicesWindow(Adw.Window):
                     keep, drop = a, b
                 else:
                     keep, drop = b, a
+                a_preview = self._first_words(a.get("content_preview") or "", n=6)
+                b_preview = self._first_words(b.get("content_preview") or "", n=6)
+                subtitle = f'{int(pair["score"] * 100)}% similar · {a["use_count"]}× vs {b["use_count"]}×'
+                if a_preview or b_preview:
+                    subtitle += f'\n"{a_preview}"  ↔  "{b_preview}"'
                 row = Adw.ActionRow(
                     title=f'{GLib.markup_escape_text(a["name"])}  ↔  {GLib.markup_escape_text(b["name"])}',
-                    subtitle=f'{int(pair["score"] * 100)}% similar · {a["use_count"]}× vs {b["use_count"]}×')
+                    subtitle=GLib.markup_escape_text(subtitle))
                 merge_btn = Gtk.Button(label=f'Merge into "{keep["name"]}"')
                 merge_btn.add_css_class("flat"); merge_btn.set_valign(Gtk.Align.CENTER)
                 merge_btn.connect(

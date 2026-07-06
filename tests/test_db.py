@@ -228,6 +228,23 @@ class TestElementCatalog(_TempDB):
         self.assertEqual(rows[0]["name"], "Welcome")
         self.assertEqual(rows[0]["name_key"], "welcome")
 
+    def test_content_preview_uses_most_recent_instance(self):
+        element_index_service("/old.liturgy", "Old", "2026-01-01",
+                               [{"type": "item", "name": "Welcome", "note": "Old note text",
+                                 "leader": "", "bulletin_note": ""}])
+        element_index_service("/new.liturgy", "New", "2026-06-01",
+                               [{"type": "item", "name": "Welcome", "note": "New note text",
+                                 "leader": "", "bulletin_note": ""}])
+        rows = element_library()
+        self.assertEqual(rows[0]["content_preview"], "New note text")
+
+    def test_content_preview_falls_back_to_bulletin_note(self):
+        element_index_service("/a.liturgy", "A", "2026-01-01",
+                               [{"type": "item", "name": "Welcome", "note": "",
+                                 "leader": "", "bulletin_note": "Bulletin text only"}])
+        rows = element_library()
+        self.assertEqual(rows[0]["content_preview"], "Bulletin text only")
+
     def test_name_key_normalizes_case_and_whitespace(self):
         element_index_service("/a.liturgy", "A", "2026-01-01", self._items("Welcome"))
         element_index_service("/b.liturgy", "B", "2026-01-08", self._items("  WELCOME  "))
