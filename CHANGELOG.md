@@ -4,43 +4,34 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.18.1-dev7] — Element Library content previews
-
-### Added
-
-- **Element rows now show a content preview** — the collapsed "By Element" row displays the
-  first several words of its most recently used instance (falling back to the bulletin note if
-  the planning note is blank), so same-named elements like multiple "Hymn" entries are
-  distinguishable at a glance without expanding. The "Find near-duplicate elements…" dialog
-  shows a shorter preview from each side of a candidate pair for the same reason.
-
-### Internal
-
-- `element_library()` gained a `content_preview` column (a correlated subquery for the
-  newest instance's note/bulletin_note per element) and a `_first_words()` UI helper for
-  word-based (not character-based) truncation.
-- Added `TestElementCatalog` cases for `content_preview` sourcing and its bulletin-note
-  fallback.
-
-## [0.18.1-dev6] — Element Library expansion + Past Liturgies library polish
+## [0.18.1] "Common Thread" — Element Library becomes a real catalog; Past Liturgies gets organized
 
 ### Added
 
 - **Element Library reorganized around elements, not services** — "By Element" is now the
   default view (a "By Service" toggle still shows the old service-grouped view). Each element
-  shows a use-count/last-used badge and expands to every past instance, same as before.
+  shows a use-count/last-used badge, a content-preview snippet (the first several words of its
+  most recent instance, so same-named elements like multiple "Hymn" entries are distinguishable
+  without expanding), and expands to every past instance.
 - **Element tagging, notes, and favorites** — tag any recurring element (e.g. "communion",
   "youth", "Advent") and jot a curator note ("always pair with the announcements slide") via a
   per-row "Edit tags & notes…" button; star favorites to pin them to the top of the list
-  regardless of sort order. Notes show as a preview under the element when present.
-- **"Find near-duplicate elements…" dialog** in the Element Library — flags likely-duplicate
-  names (e.g. "Offertory" vs "Offeratory") by text similarity and merges one into the other in
-  a click, combining their tags/favorite/notes and repointing all past instances to the kept
-  name.
+  regardless of sort order.
+- **"Find near-duplicate elements…" dialog** — flags likely-duplicate names (e.g. "Offertory"
+  vs "Offeratory") by text similarity, showing a content preview from each side, and merges one
+  into the other in a click, combining their tags/favorite/notes and repointing all past
+  instances to the kept name.
 - **Sort and filter controls** in the Element Library — Most used / Recently used / A–Z sort,
   a favorites-only toggle, and clickable tag-filter chips.
 - **"Element Tags" section** added to the Manage Tags & Series dialog, with the same
   rename-everywhere behavior already available for service tags/series.
+- **Series, tags, and pinning for services** — every service can now have a Series (e.g.
+  "Advent 2026"), free-form Tags (e.g. "communion", "guest preacher"), and a Pinned flag, all
+  editable from the title info popover in the header bar. Stored directly in the `.liturgy`
+  file, alongside the existing planning notes.
+- **Past Liturgies tab reorganized** — a sidebar (All services / Pinned / Untagged, plus
+  per-series and per-tag filters with counts) replaces the old flat list. Each row shows its
+  series/tag pills, a quick pin-toggle star, and a preview snippet of its planning notes.
 - **Sort dropdown** in Past Liturgies — Newest first, Oldest first, Attendance high→low, Attendance low→high.
 - **"Has debrief" sidebar filter**, alongside the existing All/Pinned/Untagged.
 - **Attendance stats line** under the list — shows the count and average attendance for whatever's currently filtered/searched.
@@ -50,74 +41,37 @@ All notable changes are documented here, newest first.
 - **Filter/search indicator** — a "Filtering by …" chip with a Clear button appears above the list whenever a sidebar filter or search query is active, so it's never ambiguous why the list looks the way it does.
 - **Empty-sidebar hint** — a new install shows a note pointing to the title popover for where to set Series/Tags, instead of an unexplained empty sidebar.
 - **Search now matches debrief notes**, not just planning notes/title/date/series/tags.
-
-### Fixed
-
-- **`notes_preview()` no longer truncates mid-word** — previews now cut on a word boundary and end with "…".
-- **Editing attendance/debrief in Past Liturgies no longer went stale in the library cache** — saving those fields now re-indexes the service immediately, so sort/filter/stats reflect the change right away.
-- **Slow startup on installs with a large Past Liturgies history** — the background library scan was opening a fresh SQLite connection per historical service just to check whether its cache was stale, then another connection or two to re-index it. It now does one query up front to read every cached mtime, and reuses a single connection/transaction for the whole scan.
-
-### Internal
-
-- `service_meta` gained `attendance` and `debrief_preview` columns (migrated in-place for existing installs) and `service_meta_paths_for_tag`/`service_meta_paths_for_series` lookups, backing the new rename and bulk features.
-- Added `service_meta_all_mtimes()` for a single-query mtime lookup, and `element_index_service`/`service_meta_update` now accept an optional shared connection (`_con`) so bulk scans can batch writes into one transaction instead of one per row.
-- Added `TestServiceMeta` cases for the new columns/lookups and a `TestNotesPreview` class covering the truncation fix.
-- New `element_catalog` table gives each element a stable cross-service identity keyed by a
-  normalized name (`name_key`, backfilled onto existing `element_index` rows on upgrade), with
-  `tags`, `favorite`, and `notes` columns and matching accessors (`element_catalog_set_tags`,
-  `element_catalog_set_favorite`, `element_catalog_set_notes`, `element_catalog_all_tags`,
-  `element_catalog_keys_for_tag`). New `element_library()`/`element_instances()` power the
-  by-element aggregate view and its instance drill-down.
-- Added `TestElementCatalog` covering normalization, tag/favorite round-trips, filtering, and
-  sorting.
-- Added `element_catalog_find_duplicates()` (pairwise `difflib.SequenceMatcher` over
-  normalized names) and `element_catalog_merge()` (reassigns `element_index` rows, unions
-  tags/favorite, keeps existing notes over the dropped entry's) backing the new duplicate
-  finder, plus `TestElementCatalog` cases for both.
-
----
-
-## [0.18.1-dev4] — Window size persistence
-
-### Added
-
+- **"Services" button in the header bar** — placed right after Undo/Redo, opens the Services window directly to the Past Liturgies library.
+- **Attendance and debrief notes are back** — each expanded service in the Past Liturgies library shows an attendance count and a debrief notes field, saved directly to that service's `.liturgy` file. This data already round-tripped through save/load but had no UI since the old `PlannerWindow` was removed during the monolith cleanup; this restores it in its intended new home.
 - **Window sizes are remembered between sessions** — the main editor window and the Services window now restore their last size (and maximized state) on launch instead of always starting at a fixed default.
 
 ### Changed
 
 - The header bar's Services button now shows the text label "Services" (matching the Preview button's style) instead of an icon-only button.
 
----
+### Fixed
 
-## [0.18.1-dev3] — Services button, attendance/debrief notes
-
-### Added
-
-- **"Services" button in the header bar** — placed right after Undo/Redo, opens the Services window directly to the Past Liturgies library.
-- **Attendance and debrief notes are back** — each expanded service in the Past Liturgies library now shows an attendance count and a debrief notes field, saved directly to that service's `.liturgy` file. This data already round-tripped through save/load but had no UI since the old `PlannerWindow` was removed during the monolith cleanup; this restores it in its intended new home.
-
----
-
-## [0.18.1-dev2] — Organize services in the Past Liturgies library
-
-### Added
-
-- **Series, tags, and pinning for services** — every service can now have a Series (e.g. "Advent 2026"), free-form Tags (e.g. "communion", "guest preacher"), and a Pinned flag, all editable from the title info popover in the header bar. Stored directly in the `.liturgy` file, alongside the existing planning notes.
-- **Past Liturgies tab reorganized** — the tab now has a sidebar (All services / Pinned / Untagged, plus per-series and per-tag filters with counts) instead of a single flat list. Each service row shows its series/tag pills, a quick pin-toggle star, and a preview snippet of its planning notes — the first place those notes are visible outside the editor itself.
-- New `service_meta` cache table backing the library sidebar/search, populated on every save and by the existing background repo scan — rebuildable, not a source of truth (the `.liturgy` file always is).
+- **Preview panel toolbar was unreadable in dark mode** — the `.preview-pane` CSS class (hardcoded light background, meant for the document/page surface) was accidentally applied to the whole preview panel, including the toolbar row. In dark mode, the toolbar's light-theme text and icons rendered white-on-near-white and were effectively invisible. Moved the CSS class to just the inner document stack.
+- **`notes_preview()` no longer truncates mid-word** — previews now cut on a word boundary and end with "…".
+- **Editing attendance/debrief in Past Liturgies no longer went stale in the library cache** — saving those fields now re-indexes the service immediately, so sort/filter/stats reflect the change right away.
+- **Slow startup on installs with a large Past Liturgies history** — the background library scan was opening a fresh SQLite connection per historical service just to check whether its cache was stale, then another connection or two to re-index it. It now does one query up front to read every cached mtime, and reuses a single connection/transaction for the whole scan.
 
 ### Internal
 
-- Added `notes_preview()` helper in `rubric_package/utils/typst.py`, shared between the live-save indexer and the background repo scan (previously duplicated).
-- `tests/test_db.py`: added `TestServiceMeta` (8 cases) covering the new cache table.
-
----
-
-## [0.18.1-dev1] — Fix invisible preview toolbar in dark mode
-
-### Fixed
-
-- **Preview panel toolbar was unreadable in dark mode** — the `.preview-pane` CSS class (hardcoded light `#fafaf8` background, meant for the document/page surface) was accidentally applied to the whole preview panel, including the toolbar row (Bulletin/Manuscript toggle, compile mode button, compile ⟳ button, edit toggle, gear menu, print, popout). In dark mode, the toolbar's light-theme text and icons rendered white-on-near-white and were effectively invisible. Moved the CSS class to just the inner document stack, so the toolbar now follows the normal theme background correctly.
+- New `element_catalog` table gives each element a stable cross-service identity keyed by a
+  normalized name (`name_key`, backfilled onto existing `element_index` rows on upgrade), with
+  `tags`, `favorite`, and `notes` columns and matching accessors (`element_catalog_set_tags`,
+  `element_catalog_set_favorite`, `element_catalog_set_notes`, `element_catalog_all_tags`,
+  `element_catalog_keys_for_tag`). New `element_library()`/`element_instances()` power the
+  by-element aggregate view and its instance drill-down; `element_library()` also carries a
+  `content_preview` column (a correlated subquery for the newest instance's note/bulletin_note).
+- Added `element_catalog_find_duplicates()` (pairwise `difflib.SequenceMatcher` over
+  normalized names) and `element_catalog_merge()` (reassigns `element_index` rows, unions
+  tags/favorite, keeps existing notes over the dropped entry's) backing the duplicate finder.
+- `service_meta` gained `attendance` and `debrief_preview` columns (migrated in-place for existing installs) and `service_meta_paths_for_tag`/`service_meta_paths_for_series` lookups, backing the rename and bulk features.
+- Added `service_meta_all_mtimes()` for a single-query mtime lookup, and `element_index_service`/`service_meta_update` now accept an optional shared connection (`_con`) so bulk scans can batch writes into one transaction instead of one per row.
+- New `service_meta` cache table backing the library sidebar/search, populated on every save and by the existing background repo scan — rebuildable, not a source of truth (the `.liturgy` file always is). Added `notes_preview()` helper in `rubric_package/utils/typst.py`, shared between the live-save indexer and the background repo scan (previously duplicated).
+- `tests/test_db.py` grew a `TestServiceMeta` class and a `TestElementCatalog` class (normalization, tag/favorite round-trips, filtering, sorting, duplicate detection, and merge semantics) — 52 tests total in this file, all passing.
 
 ---
 

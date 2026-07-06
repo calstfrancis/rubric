@@ -1,4 +1,4 @@
-# Rubric v0.18.0 "Clean Lines"
+# Rubric v0.18.1 "Common Thread"
 
 Install via Flatpak:
 
@@ -18,13 +18,15 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**The `rubric.py` monolith split is complete** — every standalone window, panel, and export pipeline has been extracted out of the original `MainWindow` God object into `rubric_package/`. `rubric.py` has gone from 11,363 lines to 4,461 (~61% smaller). This refactor also made a chunk of previously untestable logic unit-testable for the first time (`tests/test_panels.py`, 22 new tests), now wired into CI alongside the rest of the test suite.
+**The Element Library is now a real catalog, not just a service-grouped list.** "By Element" is the default view: every recurring element (Welcome, Prayers of the People, sermons, hymns…) has a stable identity across services, a use-count/last-used badge, and a content-preview snippet showing the first several words of its most recent instance — so two entries both named "Hymn" are distinguishable without expanding either one.
 
-**Autosave failures are no longer silent** — if autosave can't write (disk full, permissions, etc.), you now get a toast telling you, instead of losing work with no warning.
+**Tag, favorite, and annotate elements.** Tag any element (communion, youth, Advent…), star favorites to pin them to the top regardless of sort order, and leave a curator note ("always pair with the announcements slide") via the per-row "Edit tags & notes…" button.
 
-**HELP.md and FAQ.md stay in sync** — both are symlinked from the packaged copy back to the root file, so in-app Help/FAQ content can't drift out of date.
+**Find and merge near-duplicate elements.** A new "Find near-duplicate elements…" dialog flags likely duplicates (e.g. "Offertory" vs "Offeratory") by text similarity, shows a content preview from each side, and merges one into the other in a click — combining tags, favorite status, and notes, and repointing all past instances to the kept name.
 
-**Aesthetic polish pass** — fixed invalid CSS cursor declarations on drag handles and the planning-notes header (correct cursors now show on hover); raised the compact-mode row height floor for better click targets; improved drag-handle visibility at rest; unified empty-state placeholder copy across the service order list.
+**Past Liturgies gets properly organized.** Services can now carry a Series, free-form Tags, and a Pinned flag, all editable from the title popover. The library tab gained a real sidebar (All / Pinned / Untagged, plus per-series and per-tag filters with counts), sort options, bulk actions (tag/series/pin several services at once), and a Manage Tags & Series dialog with rename-everywhere. Attendance and debrief notes are back after going missing in the monolith cleanup.
+
+**Smaller fixes**: window sizes are now remembered between sessions; the preview panel toolbar is no longer unreadable in dark mode; startup on installs with a large service history is noticeably faster (the background library scan no longer opens a fresh database connection per historical file).
 
 ---
 
