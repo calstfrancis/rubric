@@ -30,6 +30,7 @@ rubric_package/bin/
 hymn_cache.json
 autosave.liturgy
 *.liturgy
+!screenshots/demo.liturgy
 
 # Editor / tools
 .vscode/
@@ -60,3 +61,4 @@ build/
 *.rpm
 *.deb
 *.png
+!screenshots/*.png

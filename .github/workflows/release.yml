@@ -19,3 +19,4 @@ jobs:
         with:
           name: "Rubric ${{ github.ref_name }}"
           body_path: RELEASE.md
+          files: screenshots/*.png
