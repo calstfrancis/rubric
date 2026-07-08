@@ -1,0 +1,24 @@
+{
+  "title": "Sunday Worship",
+  "date": "2026-08-16",
+  "items": [
+    {"type": "divider", "title": "Gathering"},
+    {"type": "item", "name": "Prelude", "section": "Gathering", "note": "", "leader": "Music Director", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Welcome & Announcements", "section": "Gathering", "note": "", "leader": "Minister", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Call to Worship", "section": "Gathering", "note": "", "leader": "Worship Leader", "show_in_bulletin": true, "bulletin_note": "", "content_typst": "Leader: This is the day that the Lord has made.\nAll: Let us rejoice and be glad in it."},
+    {"type": "item", "name": "Opening Hymn: Come, Thou Fount", "section": "Gathering", "note": "VU 559", "leader": "", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "divider", "title": "Word"},
+    {"type": "item", "name": "Hebrew Bible Reading", "section": "Word", "note": "Isaiah 55:1-9", "leader": "Reader", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Psalm", "section": "Word", "note": "Psalm 63:1-8", "leader": "Reader", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Gospel Reading", "section": "Word", "note": "Luke 13:1-9", "leader": "Reader", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Sermon: Fruit in Season", "section": "Word", "note": "", "leader": "Minister", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "divider", "title": "Response"},
+    {"type": "item", "name": "Hymn of Response", "section": "Response", "note": "VU 288", "leader": "", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Prayers of the People", "section": "Response", "note": "", "leader": "Worship Leader", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Offering & Dedication", "section": "Response", "note": "", "leader": "", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "divider", "title": "Sending"},
+    {"type": "item", "name": "Closing Hymn", "section": "Sending", "note": "VU 634", "leader": "", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Benediction", "section": "Sending", "note": "", "leader": "Minister", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""},
+    {"type": "item", "name": "Postlude", "section": "Sending", "note": "", "leader": "Music Director", "show_in_bulletin": true, "bulletin_note": "", "content_typst": ""}
+  ]
+}
