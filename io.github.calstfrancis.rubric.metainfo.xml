@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>io.github.calstfrancis.rubric</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
+  <project_license>MIT</project_license>
 
   <name>Rubric</name>
   <summary>Worship service planning with RCL integration</summary>
@@ -30,6 +30,13 @@
   </description>
 
   <launchable type="desktop-id">io.github.calstfrancis.rubric.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/calstfrancis/rubric/main/screenshots/rubric-main.png</image>
+      <caption>Planning a service order in Rubric</caption>
+    </screenshot>
+  </screenshots>
 
   <url type="homepage">https://github.com/calstfrancis/rubric</url>
   <url type="bugtracker">https://github.com/calstfrancis/rubric/issues</url>
