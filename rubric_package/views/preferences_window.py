@@ -16,7 +16,9 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, GLib
 
 from rubric_package.models.config import config, get_palette, SECTIONS
-from rubric_package.utils.helpers import flatpak_git_prefix
+from rubric_package.utils.helpers import flatpak_git_prefix, git_credential_args
+from rubric_package import github_auth, secret_store
+from rubric_package.views import github_signin
 
 _GIT = flatpak_git_prefix()
 
@@ -824,11 +826,42 @@ class PreferencesWindow(Adw.PreferencesWindow):
         setup_row.add_suffix(setup_btn)
         setup_grp.add(setup_row)
 
-        # ── GitHub remote ──────────────────────────────────────────────────
-        remote_grp = Adw.PreferencesGroup(
+        # ── GitHub sign-in ────────────────────────────────────────────────
+        signin_grp = Adw.PreferencesGroup(
             title="Connect to GitHub",
-            description="Paste the URL of your GitHub repository (e.g. https://github.com/yourname/liturgy). "
-                        "Create a free private repository at github.com first."
+            description="Sign in once and Rubric handles repository creation and authentication for you.",
+        )
+        page.add(signin_grp)
+
+        self._signin_row = Adw.ActionRow(title="Sign in with GitHub")
+        self._signin_btn = Gtk.Button(label="Sign in", valign=Gtk.Align.CENTER)
+        self._signin_btn.add_css_class("suggested-action")
+        self._signin_btn.connect("clicked", self._on_github_signin)
+        self._signin_row.add_suffix(self._signin_btn)
+        signin_grp.add(self._signin_row)
+
+        self._connected_row = Adw.ActionRow(title="Connected as")
+        self._disconnect_btn = Gtk.Button(label="Disconnect", valign=Gtk.Align.CENTER)
+        self._disconnect_btn.add_css_class("flat")
+        self._disconnect_btn.connect("clicked", self._on_github_disconnect)
+        self._connected_row.add_suffix(self._disconnect_btn)
+        signin_grp.add(self._connected_row)
+
+        self._repo_name_row = Adw.EntryRow(title="Repository name")
+        signin_grp.add(self._repo_name_row)
+        self._repo_private_row = Adw.SwitchRow(title="Private repository", active=True)
+        signin_grp.add(self._repo_private_row)
+        create_row = Adw.ActionRow(title="Create a new repository on GitHub")
+        self._create_repo_btn = Gtk.Button(label="Create", valign=Gtk.Align.CENTER)
+        self._create_repo_btn.add_css_class("suggested-action")
+        self._create_repo_btn.connect("clicked", self._on_github_create_repo)
+        create_row.add_suffix(self._create_repo_btn)
+        signin_grp.add(create_row)
+
+        # ── Manual fallback ───────────────────────────────────────────────
+        remote_grp = Adw.PreferencesGroup(
+            title="Or connect an existing repository manually",
+            description="Paste the URL of your GitHub repository (e.g. https://github.com/yourname/liturgy).",
         )
         page.add(remote_grp)
 
@@ -838,7 +871,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         connect_row = Adw.ActionRow(title="Save remote URL")
         connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER)
-        connect_btn.add_css_class("suggested-action")
         connect_btn.connect("clicked", self._on_remote_connect)
         connect_row.add_suffix(connect_btn)
         remote_grp.add(connect_row)
@@ -860,15 +892,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
         help_grp = Adw.PreferencesGroup(title="Getting started — new users")
         page.add(help_grp)
         for title, subtitle in [
-            ("1. Create a GitHub account",    "Free at github.com"),
-            ("2. Create a private repository",'Name it something like "liturgy" and tick Private'),
-            ("3. Set up a folder above",       "Browse to an empty folder, then click Set up"),
-            ("4. Paste the repository URL",    "Copy from the green Code button → HTTPS tab on GitHub"),
-            ("5. Click Connect, then Push ⟳",  "Use the ⟳ button in the main toolbar to push files"),
+            ("1. Set up a folder above",       "Browse to an empty folder, then click Set up"),
+            ("2. Sign in with GitHub",         "Click Sign in above and approve in your browser"),
+            ("3. Create a repository",         'Pick a name (e.g. "liturgy") and click Create'),
+            ("4. Click Push ⟳",                "Use the ⟳ button in the main toolbar to push files"),
         ]:
             r = Adw.ActionRow(title=title, subtitle=subtitle)
             r.set_sensitive(False)
             help_grp.add(r)
+
+        self._refresh_github_signin()
 
     def _detect_remote(self) -> str:
         repo = config.github_repo
@@ -882,6 +915,81 @@ class PreferencesWindow(Adw.PreferencesWindow):
             return r.stdout.strip() if r.returncode == 0 else ""
         except Exception:
             return ""
+
+    def _set_remote(self, url: str) -> str | None:
+        """Points the configured folder's origin remote at url. Returns an error string, or None on success."""
+        repo = config.github_repo
+        if not repo:
+            return "Set up a repository folder first."
+        try:
+            chk = subprocess.run(_GIT + ["-C", repo, "remote", "get-url", "origin"],
+                                 capture_output=True, text=True, timeout=5)
+            cmd = _GIT + ["-C", repo, "remote", "set-url" if chk.returncode == 0 else "add", "origin", url]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            return None if r.returncode == 0 else r.stderr.strip()
+        except Exception as e:
+            return str(e)
+
+    def _refresh_github_signin(self):
+        token = secret_store.load_github_token()
+        self._signin_row.set_visible(not token)
+        for w in (self._connected_row, self._repo_name_row, self._repo_private_row):
+            w.set_visible(bool(token))
+        if token:
+            self._connected_row.set_subtitle(f"@{config.github_username}" if config.github_username else "")
+            default_name = Path(config.github_repo).name if config.github_repo else "liturgy"
+            if not self._repo_name_row.get_text():
+                self._repo_name_row.set_text(default_name)
+
+    def _on_github_signin(self, _btn):
+        def on_connected(token, username):
+            config.github_username = username
+            config.save()
+            self._refresh_github_signin()
+        github_signin.present(self, on_connected)
+
+    def _on_github_disconnect(self, _btn):
+        secret_store.delete_github_token()
+        config.github_username = ""
+        config.save()
+        self._refresh_github_signin()
+
+    def _on_github_create_repo(self, _btn):
+        if not config.github_repo:
+            dlg = Adw.MessageDialog(transient_for=self, heading="No folder selected",
+                body="Browse to a folder and click Set up first.")
+            dlg.add_response("ok", "OK"); dlg.present(); return
+        token = secret_store.load_github_token()
+        if not token:
+            return
+        name = self._repo_name_row.get_text().strip() or "liturgy"
+        private = self._repo_private_row.get_active()
+        self._create_repo_btn.set_sensitive(False)
+
+        def run():
+            try:
+                clone_url = github_auth.create_repo(token, name, private)
+            except github_auth.GithubAuthError as e:
+                def fail():
+                    self._create_repo_btn.set_sensitive(True)
+                    dlg = Adw.MessageDialog(transient_for=self, heading="Couldn't create repository", body=str(e))
+                    dlg.add_response("ok", "OK"); dlg.present()
+                GLib.idle_add(fail)
+                return
+            err = self._set_remote(clone_url)
+
+            def finish():
+                self._create_repo_btn.set_sensitive(True)
+                self._remote_entry.set_text(self._detect_remote())
+                if err:
+                    dlg = Adw.MessageDialog(transient_for=self, heading="Repository created, but couldn't connect it", body=err)
+                else:
+                    dlg = Adw.MessageDialog(transient_for=self, heading="Connected to GitHub",
+                        body=f"Repository created and connected:\n{clone_url}\n\n"
+                             "Use the ⟳ Push button in the main toolbar to upload your files.")
+                dlg.add_response("ok", "OK"); dlg.present()
+            GLib.idle_add(finish)
+        threading.Thread(target=run, daemon=True).start()
 
     def _on_repo_browse(self, _btn):
         dlg = Gtk.FileDialog(title="Choose repository folder")
@@ -994,8 +1102,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         def run():
             try:
-                r = subprocess.run(_GIT + ["-C", repo, "pull"],
-                                   capture_output=True, text=True, timeout=60)
+                with git_credential_args(secret_store.load_github_token()) as cred:
+                    r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
+                                       capture_output=True, text=True, timeout=60)
                 def on_done():
                     progress.destroy()
                     if r.returncode != 0:

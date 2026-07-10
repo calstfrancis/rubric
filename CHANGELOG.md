@@ -4,6 +4,19 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.19.0-dev1] — Sign in with GitHub
+
+### Added
+
+- **Sign in with GitHub** — the setup wizard and Preferences → GitHub now lead with a
+  "Sign in with GitHub" button (device-flow OAuth, same approach as Zerkalo) instead of asking
+  for a Personal Access Token. Once signed in, click **Create** to have Rubric create and
+  connect a new repository automatically. The manual "paste a repository URL" + PAT flow is
+  still available as a fallback for anyone who prefers it.
+- The GitHub token is stored in the system keyring (via libsecret), not in a config file.
+
+---
+
 ## [0.18.1] "Common Thread" — Element Library becomes a real catalog; Past Liturgies gets organized
 
 ### Added

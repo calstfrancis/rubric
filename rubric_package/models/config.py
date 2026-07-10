@@ -40,6 +40,7 @@ class Config:
         self.last_seen_version: str = ""
         self.bulletin: dict[str, Any] = self._default_bulletin()
         self.github_repo: str = ""
+        self.github_username: str = ""
         self.first_launch_completed: bool = False
         self.quickstart_dismissed: bool = False
         self.recently_used: list[str] = []
@@ -93,6 +94,7 @@ class Config:
                 saved_bulletin = d.get("bulletin", {})
                 self.bulletin = {**self._default_bulletin(), **saved_bulletin}
                 self.github_repo       = d.get("github_repo", "")
+                self.github_username   = d.get("github_username", "")
                 self.default_template  = d.get("default_template", "")
                 self.templates         = d.get("templates", {})
                 self.first_launch_completed = d.get("first_launch_completed", False)
@@ -146,6 +148,7 @@ class Config:
             "last_seen_version":     self.last_seen_version,
             "bulletin":              self.bulletin,
             "github_repo":           self.github_repo,
+            "github_username":       self.github_username,
             "first_launch_completed": self.first_launch_completed,
             "quickstart_dismissed":  self.quickstart_dismissed,
             "recently_used":         self.recently_used,

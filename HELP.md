@@ -293,9 +293,9 @@ The Element Library and Past Liturgies are complementary: use Element Library wh
 
 ### Setup
 1. Go to **Preferences → GitHub**.
-2. Click **Browse** and choose a local folder for your repository.
-3. Click **Set up** — creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a `.gitignore`, and initialises a git repository.
-4. Paste your GitHub repository URL into the **Remote URL** field and click **Connect**.
+2. Click **Browse** and choose a local folder for your repository, then click **Set up** — creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a `.gitignore`, and initialises a git repository.
+3. Click **Sign in with GitHub** and approve the request in your browser.
+4. Pick a repository name and click **Create** — Rubric creates the repository on GitHub and connects it automatically. Already have one? Use **Or connect an existing repository manually** instead.
 
 ### Syncing
 - **Push** (**Git** button in the status bar or Ctrl+Shift+G) — saves the current service, commits it with an automatic message (`Service: Title – Date`), and pushes to GitHub. A `git pull --rebase` runs first to avoid conflicts. No commit message required.
@@ -308,7 +308,7 @@ When a repository is configured:
 - Compiled PDFs move automatically to `repo/pdf/` (service order) or `repo/bulletins/` (bulletin)
 
 ### Authentication
-GitHub no longer accepts passwords. Use a Personal Access Token (PAT) or SSH keys. Store your PAT with `git credential-store` to avoid re-entering it.
+Signing in with GitHub (above) handles authentication automatically — no separate token to manage. Prefer a Personal Access Token (PAT) or SSH keys instead? Skip sign-in and use the manual connection option; GitHub no longer accepts passwords, so store your PAT with `git credential-store` to avoid re-entering it.
 
 ---
 

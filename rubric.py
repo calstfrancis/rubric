@@ -29,7 +29,11 @@ try:
         format_typst_error,
     )
     from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
-    from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix
+    from rubric_package.utils.helpers import (
+        is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
+    )
+    from rubric_package import github_auth, secret_store
+    from rubric_package.views import github_signin
     from rubric_package.views.element_content import ElementContentWidget
     from rubric_package.views.help_window import HelpWindow
     from rubric_package.views.preferences_window import PreferencesWindow
@@ -127,7 +131,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.18.1"
+APP_VERSION = "0.19.0-dev1"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -2085,36 +2089,139 @@ class MainWindow(Adw.ApplicationWindow):
         lbl3.add_css_class("title-2"); lbl3.set_margin_bottom(2)
         p3.append(lbl3)
         sub3 = Gtk.Label(label="Back up and sync your liturgy files with a private GitHub repository.\n"
-                                "Create a free account at github.com, then paste your repository URL below. You can skip this and connect later in Preferences.")
+                                "Sign in once and Rubric handles the rest. You can skip this and connect later in Preferences.")
         sub3.set_wrap(True); sub3.set_justify(Gtk.Justification.CENTER)
         sub3.add_css_class("dim-label"); sub3.set_margin_bottom(10)
         p3.append(sub3)
 
-        gh_grp = Adw.PreferencesGroup()
-        gh_entry = Adw.EntryRow(title="GitHub repository URL (https://…)")
-        gh_entry.set_text(config.github_repo and self._detect_github_remote() or "")
-        gh_grp.add(gh_entry)
-        connect_row = Adw.ActionRow(title="Save and connect")
-        connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER); connect_btn.add_css_class("suggested-action")
-        connect_row.add_suffix(connect_btn); gh_grp.add(connect_row)
-        p3.append(gh_grp)
         p3_status = Gtk.Label(label="")
         p3_status.add_css_class("caption"); p3_status.add_css_class("dim-label")
         p3_status.set_wrap(True); p3_status.set_margin_top(4)
+
+        # ── Sign in ──
+        signin_grp = Adw.PreferencesGroup()
+        signin_row = Adw.ActionRow(title="Sign in with GitHub")
+        signin_btn = Gtk.Button(label="Sign in", valign=Gtk.Align.CENTER)
+        signin_btn.add_css_class("suggested-action")
+        signin_row.add_suffix(signin_btn)
+        signin_grp.add(signin_row)
+        p3.append(signin_grp)
+
+        # ── Connected state ──
+        connected_grp = Adw.PreferencesGroup()
+        connected_row = Adw.ActionRow(title="Connected as")
+        disconnect_btn = Gtk.Button(label="Disconnect", valign=Gtk.Align.CENTER)
+        disconnect_btn.add_css_class("flat")
+        connected_row.add_suffix(disconnect_btn)
+        connected_grp.add(connected_row)
+
+        name_row = Adw.EntryRow(title="Repository name")
+        connected_grp.add(name_row)
+        private_row = Adw.SwitchRow(title="Private repository", active=True)
+        connected_grp.add(private_row)
+        create_row = Adw.ActionRow(title="Create a new repository on GitHub")
+        create_btn = Gtk.Button(label="Create", valign=Gtk.Align.CENTER)
+        create_btn.add_css_class("suggested-action")
+        create_row.add_suffix(create_btn)
+        connected_grp.add(create_row)
+        p3.append(connected_grp)
+
+        # ── Manual fallback ──
+        manual_grp = Adw.PreferencesGroup(
+            title="Or connect an existing repository manually",
+        )
+        gh_entry = Adw.EntryRow(title="GitHub repository URL (https://…)")
+        gh_entry.set_text(config.github_repo and self._detect_github_remote() or "")
+        manual_grp.add(gh_entry)
+        connect_row = Adw.ActionRow(title="Save and connect")
+        connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER)
+        connect_row.add_suffix(connect_btn); manual_grp.add(connect_row)
+        p3.append(manual_grp)
+
         p3.append(p3_status)
 
-        def _on_connect3(_b):
-            repo = config.github_repo; url = gh_entry.get_text().strip()
-            if not repo: p3_status.set_label("Set up a folder (step 1) first."); return
-            if not url: p3_status.set_label("Paste your GitHub repository URL first."); return
+        def _set_remote(url: str) -> str | None:
+            """Points the chosen folder's origin remote at url. Returns an error string, or None on success."""
+            repo = config.github_repo
+            if not repo:
+                return "Set up a folder (step 1) first."
             try:
-                chk = subprocess.run(_GIT + ["-C",repo,"remote","get-url","origin"], capture_output=True, text=True, timeout=5)
-                cmd = _GIT + ["-C",repo,"remote","set-url" if chk.returncode==0 else "add","origin",url]
+                chk = subprocess.run(_GIT + ["-C", repo, "remote", "get-url", "origin"],
+                                     capture_output=True, text=True, timeout=5)
+                cmd = _GIT + ["-C", repo, "remote", "set-url" if chk.returncode == 0 else "add", "origin", url]
                 r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                if r.returncode != 0: p3_status.set_label(f"Error: {r.stderr.strip()}")
-                else: p3_status.set_label(f"✓ Connected to {url}")
-            except Exception as e: p3_status.set_label(str(e))
+                return None if r.returncode == 0 else r.stderr.strip()
+            except Exception as e:
+                return str(e)
+
+        def _refresh_p3():
+            token = secret_store.load_github_token()
+            signin_grp.set_visible(not token)
+            connected_grp.set_visible(bool(token))
+            if token:
+                connected_row.set_subtitle(f"@{config.github_username}" if config.github_username else "")
+                default_name = Path(config.github_repo).name if config.github_repo else "liturgy"
+                if not name_row.get_text():
+                    name_row.set_text(default_name)
+                remote = self._detect_github_remote()
+                if remote:
+                    p3_status.set_label(f"✓ Connected to {remote}")
+
+        def _on_signin(_b):
+            def on_connected(token, username):
+                config.github_username = username
+                config.save()
+                p3_status.set_label(f"✓ Signed in as @{username}")
+                _refresh_p3()
+            github_signin.present(win, on_connected)
+        signin_btn.connect("clicked", _on_signin)
+
+        def _on_disconnect(_b):
+            secret_store.delete_github_token()
+            config.github_username = ""
+            config.save()
+            p3_status.set_label("Signed out.")
+            _refresh_p3()
+        disconnect_btn.connect("clicked", _on_disconnect)
+
+        def _on_create(_b):
+            if not config.github_repo:
+                p3_status.set_label("Set up a folder (step 1) first."); return
+            token = secret_store.load_github_token()
+            if not token:
+                p3_status.set_label("Sign in with GitHub first."); return
+            name = name_row.get_text().strip() or "liturgy"
+            private = private_row.get_active()
+            create_btn.set_sensitive(False)
+            p3_status.set_label(f"Creating {name}…")
+
+            def run():
+                try:
+                    clone_url = github_auth.create_repo(token, name, private)
+                except github_auth.GithubAuthError as e:
+                    GLib.idle_add(lambda: (p3_status.set_label(f"Couldn't create repository: {e}"),
+                                           create_btn.set_sensitive(True)))
+                    return
+                err = _set_remote(clone_url)
+
+                def finish():
+                    create_btn.set_sensitive(True)
+                    if err:
+                        p3_status.set_label(f"Repository created, but couldn't connect it: {err}")
+                    else:
+                        p3_status.set_label(f"✓ Created and connected: {clone_url}")
+                GLib.idle_add(finish)
+            threading.Thread(target=run, daemon=True).start()
+        create_btn.connect("clicked", _on_create)
+
+        def _on_connect3(_b):
+            url = gh_entry.get_text().strip()
+            if not url: p3_status.set_label("Paste your GitHub repository URL first."); return
+            err = _set_remote(url)
+            p3_status.set_label(f"Error: {err}" if err else f"✓ Connected to {url}")
         connect_btn.connect("clicked", _on_connect3)
+
+        _refresh_p3()
         stack.add_named(p3, "github")
 
         # ── Navigation bar ────────────────────────────────────────────────────
@@ -3951,8 +4058,8 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     self._show_toast(heading, timeout=6)
 
             _AUTH_HELP = (
-                "GitHub requires a Personal Access Token (PAT) — passwords no longer work.\n\n"
-                "To create one:\n"
+                "The easiest fix: open Preferences → GitHub and click Sign in with GitHub.\n\n"
+                "Prefer a Personal Access Token (PAT) instead? Passwords no longer work:\n"
                 "1. Go to github.com → Settings → Developer settings\n"
                 "   → Personal access tokens → Fine-grained tokens\n"
                 "2. Generate a new token with Contents: Read and Write\n"
@@ -3989,43 +4096,44 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     capture_output=True, text=True, timeout=5
                 ).stdout.strip()
 
-                if has_remote:
-                    pull_r = subprocess.run(
-                        _GIT + ["-C", repo, "pull", "--rebase"],
-                        capture_output=True, text=True, timeout=60
-                    )
-                    if pull_r.returncode != 0:
-                        pull_out = (pull_r.stdout + pull_r.stderr).strip()
-                        pull_low = pull_out.lower()
-                        # Abort a broken rebase so the repo isn't left mid-rebase
-                        subprocess.run(_GIT + ["-C", repo, "rebase", "--abort"],
-                                       capture_output=True, timeout=10)
-                        if "permission denied" in pull_low or "authentication" in pull_low:
-                            GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
-                        elif "conflict" in pull_low or "merge conflict" in pull_low:
-                            GLib.idle_add(abort, "Sync conflict",
-                                "Another computer has made changes that conflict with yours.\n\n"
-                                "Open a terminal in your repository folder and run:\n"
-                                "  git status\n"
-                                "to see which files conflict, then resolve them manually.")
-                        elif "no tracking" in pull_low or "no such ref" in pull_low \
-                                or pull_out == "":
-                            pass  # no upstream yet — first push will set it
-                        else:
-                            GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
-                            return
-
-                # ── Push ────────────────────────────────────────────────────
-                push_r = subprocess.run(_GIT + ["-C", repo, "push"],
-                                        capture_output=True, text=True, timeout=30)
-                if push_r.returncode != 0:
-                    err_low = (push_r.stderr or "").lower()
-                    if "no upstream" in err_low or "set-upstream" in err_low or \
-                       "set the upstream" in err_low:
-                        push_r = subprocess.run(
-                            _GIT + ["-C", repo, "push", "--set-upstream", "origin", "HEAD"],
-                            capture_output=True, text=True, timeout=30
+                with git_credential_args(secret_store.load_github_token()) as cred:
+                    if has_remote:
+                        pull_r = subprocess.run(
+                            _GIT + ["-C", repo] + cred + ["pull", "--rebase"],
+                            capture_output=True, text=True, timeout=60
                         )
+                        if pull_r.returncode != 0:
+                            pull_out = (pull_r.stdout + pull_r.stderr).strip()
+                            pull_low = pull_out.lower()
+                            # Abort a broken rebase so the repo isn't left mid-rebase
+                            subprocess.run(_GIT + ["-C", repo, "rebase", "--abort"],
+                                           capture_output=True, timeout=10)
+                            if "permission denied" in pull_low or "authentication" in pull_low:
+                                GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
+                            elif "conflict" in pull_low or "merge conflict" in pull_low:
+                                GLib.idle_add(abort, "Sync conflict",
+                                    "Another computer has made changes that conflict with yours.\n\n"
+                                    "Open a terminal in your repository folder and run:\n"
+                                    "  git status\n"
+                                    "to see which files conflict, then resolve them manually.")
+                            elif "no tracking" in pull_low or "no such ref" in pull_low \
+                                    or pull_out == "":
+                                pass  # no upstream yet — first push will set it
+                            else:
+                                GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
+                                return
+
+                    # ── Push ────────────────────────────────────────────────
+                    push_r = subprocess.run(_GIT + ["-C", repo] + cred + ["push"],
+                                            capture_output=True, text=True, timeout=30)
+                    if push_r.returncode != 0:
+                        err_low = (push_r.stderr or "").lower()
+                        if "no upstream" in err_low or "set-upstream" in err_low or \
+                           "set the upstream" in err_low:
+                            push_r = subprocess.run(
+                                _GIT + ["-C", repo] + cred + ["push", "--set-upstream", "origin", "HEAD"],
+                                capture_output=True, text=True, timeout=30
+                            )
 
                 def finish():
                     push_toast.dismiss()
@@ -4067,8 +4175,9 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
 
         def run():
             try:
-                r = subprocess.run(_GIT + ["-C", repo, "pull"],
-                                   capture_output=True, text=True, timeout=60)
+                with git_credential_args(secret_store.load_github_token()) as cred:
+                    r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
+                                       capture_output=True, text=True, timeout=60)
                 def on_done():
                     pull_toast.dismiss()
                     if r.returncode != 0:

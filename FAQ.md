@@ -168,16 +168,15 @@ The planner reads the `date` and `title` fields stored inside each `.liturgy` fi
 
 **Q: How do I set up GitHub sync?**
 
-1. Create a new (empty) repository on GitHub — private is fine.
-2. Open **Preferences → GitHub** in Rubric.
-3. Click **Browse** and choose or create a local folder for the repository.
-4. Click **Set up** — Rubric creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a `.gitignore`, and runs `git init`.
-5. Paste the GitHub remote URL into the Remote URL field and click **Connect**.
-6. Click the **Git** button in the status bar (or Ctrl+Shift+G) to push for the first time.
+1. Open **Preferences → GitHub** in Rubric.
+2. Click **Browse** and choose or create a local folder for the repository, then click **Set up** — Rubric creates `liturgy/`, `tex/`, `pdf/`, `bulletins/` subfolders, a `.gitignore`, and runs `git init`.
+3. Click **Sign in with GitHub** and approve the request that opens in your browser.
+4. Pick a repository name (private by default) and click **Create** — Rubric creates it on GitHub and connects it for you. Already have a repository? Use the manual **connect an existing repository** option below instead.
+5. Click the **Git** button in the status bar (or Ctrl+Shift+G) to push for the first time.
 
 **Q: The Git button gives an authentication error.**
 
-GitHub no longer accepts passwords over HTTPS. Use a Personal Access Token (PAT) or set up SSH keys. For HTTPS: go to github.com → Settings → Developer settings → Personal access tokens. Use the token as your password when prompted, or store it with `git credential-store`.
+If you've signed in with GitHub in Preferences, this shouldn't happen — try signing in again from **Preferences → GitHub**. If you're using the manual connection option instead, GitHub no longer accepts passwords over HTTPS: use a Personal Access Token (PAT) or set up SSH keys. For HTTPS: go to github.com → Settings → Developer settings → Personal access tokens. Use the token as your password when prompted, or store it with `git credential-store`.
 
 **Q: I'm working on two computers. How do I pull changes from GitHub?**
 
