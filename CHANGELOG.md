@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.19.0-dev1] — Sign in with GitHub
+## [0.19.0] "Open Door" — Sign in with GitHub
 
 ### Added
 
