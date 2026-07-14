@@ -17,6 +17,9 @@ from gi.repository import Gtk, Adw, GLib
 
 from rubric_package.models.config import config, get_palette, SECTIONS
 from rubric_package.utils.helpers import flatpak_git_prefix, git_credential_args
+from rubric_package.utils.git_conflicts import (
+    list_conflicted_files, abort_merge, resolve_conflicts_interactive,
+)
 from rubric_package import github_auth, secret_store
 from rubric_package.views import github_signin
 
@@ -1100,14 +1103,29 @@ class PreferencesWindow(Adw.PreferencesWindow):
             heading="Pulling from GitHub…", body="Please wait.")
         progress.present()
 
+        def on_conflicts_resolved(success: bool):
+            d = Adw.MessageDialog(
+                transient_for=self,
+                heading="Pull complete" if success else "Pull cancelled",
+                body="Conflicts resolved." if success else "No changes were made.")
+            d.add_response("ok", "OK"); d.present()
+
         def run():
             try:
                 with git_credential_args(secret_store.load_github_token()) as cred:
                     r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
                                        capture_output=True, text=True, timeout=60)
+                if r.returncode != 0 and list_conflicted_files(repo):
+                    def start_resolution():
+                        progress.destroy()
+                        resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
+                    GLib.idle_add(start_resolution)
+                    return
+
                 def on_done():
                     progress.destroy()
                     if r.returncode != 0:
+                        abort_merge(repo)
                         err = (r.stderr or r.stdout or "Unknown error").strip()
                         d = Adw.MessageDialog(transient_for=self, heading="Pull failed", body=err[:400])
                         d.add_response("ok", "OK"); d.present()

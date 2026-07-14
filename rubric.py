@@ -32,6 +32,9 @@ try:
     from rubric_package.utils.helpers import (
         is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
     )
+    from rubric_package.utils.git_conflicts import (
+        list_conflicted_files, abort_merge, resolve_conflicts_interactive,
+    )
     from rubric_package import github_auth, secret_store
     from rubric_package.views import github_signin
     from rubric_package.views.element_content import ElementContentWidget
@@ -131,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.19.0"
+APP_VERSION = "0.20.0-dev1"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -4048,82 +4051,32 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         self._toast_overlay.add_toast(push_toast)
         self.push_btn.set_sensitive(False)
 
-        def run():
-            def abort(heading, body=""):
-                push_toast.dismiss()
-                self.push_btn.set_sensitive(True)
-                if body:
-                    self._error(heading, body)
-                else:
-                    self._show_toast(heading, timeout=6)
+        _AUTH_HELP = (
+            "The easiest fix: open Preferences → GitHub and click Sign in with GitHub.\n\n"
+            "Prefer a Personal Access Token (PAT) instead? Passwords no longer work:\n"
+            "1. Go to github.com → Settings → Developer settings\n"
+            "   → Personal access tokens → Fine-grained tokens\n"
+            "2. Generate a new token with Contents: Read and Write\n"
+            "   permission for your repository\n"
+            "3. Copy the token\n\n"
+            "To save it so you're not asked again, run in a terminal:\n"
+            "   git config --global credential.helper store\n"
+            "Then push once — enter your GitHub username and the token\n"
+            "as the password when prompted."
+        )
 
-            _AUTH_HELP = (
-                "The easiest fix: open Preferences → GitHub and click Sign in with GitHub.\n\n"
-                "Prefer a Personal Access Token (PAT) instead? Passwords no longer work:\n"
-                "1. Go to github.com → Settings → Developer settings\n"
-                "   → Personal access tokens → Fine-grained tokens\n"
-                "2. Generate a new token with Contents: Read and Write\n"
-                "   permission for your repository\n"
-                "3. Copy the token\n\n"
-                "To save it so you're not asked again, run in a terminal:\n"
-                "   git config --global credential.helper store\n"
-                "Then push once — enter your GitHub username and the token\n"
-                "as the password when prompted."
-            )
+        def abort(heading, body=""):
+            push_toast.dismiss()
+            self.push_btn.set_sensitive(True)
+            if body:
+                self._error(heading, body)
+            else:
+                self._show_toast(heading, timeout=6)
 
+        def do_push():
+            """Push local commits (assumes local is already up to date with remote)."""
             try:
-                # ── Stage and commit local changes ──────────────────────────
-                add_r = subprocess.run(_GIT + ["-C", repo, "add", "-A"],
-                                       capture_output=True, text=True, timeout=10)
-                if add_r.returncode != 0:
-                    GLib.idle_add(abort, "Sync failed",
-                                  add_r.stderr.strip() or "git add failed")
-                    return
-
-                status_r = subprocess.run(_GIT + ["-C", repo, "status", "--porcelain"],
-                                          capture_output=True, text=True, timeout=5)
-                if status_r.stdout.strip():
-                    commit_r = subprocess.run(_GIT + ["-C", repo, "commit", "-m", msg],
-                                              capture_output=True, text=True, timeout=15)
-                    if commit_r.returncode != 0:
-                        out = (commit_r.stderr or commit_r.stdout or "").strip()
-                        GLib.idle_add(abort, "Sync failed (commit)", out)
-                        return
-
-                # ── Pull remote changes before pushing ──────────────────────
-                has_remote = subprocess.run(
-                    _GIT + ["-C", repo, "remote"],
-                    capture_output=True, text=True, timeout=5
-                ).stdout.strip()
-
                 with git_credential_args(secret_store.load_github_token()) as cred:
-                    if has_remote:
-                        pull_r = subprocess.run(
-                            _GIT + ["-C", repo] + cred + ["pull", "--rebase"],
-                            capture_output=True, text=True, timeout=60
-                        )
-                        if pull_r.returncode != 0:
-                            pull_out = (pull_r.stdout + pull_r.stderr).strip()
-                            pull_low = pull_out.lower()
-                            # Abort a broken rebase so the repo isn't left mid-rebase
-                            subprocess.run(_GIT + ["-C", repo, "rebase", "--abort"],
-                                           capture_output=True, timeout=10)
-                            if "permission denied" in pull_low or "authentication" in pull_low:
-                                GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
-                            elif "conflict" in pull_low or "merge conflict" in pull_low:
-                                GLib.idle_add(abort, "Sync conflict",
-                                    "Another computer has made changes that conflict with yours.\n\n"
-                                    "Open a terminal in your repository folder and run:\n"
-                                    "  git status\n"
-                                    "to see which files conflict, then resolve them manually.")
-                            elif "no tracking" in pull_low or "no such ref" in pull_low \
-                                    or pull_out == "":
-                                pass  # no upstream yet — first push will set it
-                            else:
-                                GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
-                                return
-
-                    # ── Push ────────────────────────────────────────────────
                     push_r = subprocess.run(_GIT + ["-C", repo] + cred + ["push"],
                                             capture_output=True, text=True, timeout=30)
                     if push_r.returncode != 0:
@@ -4156,6 +4109,79 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
 
             except subprocess.TimeoutExpired:
                 GLib.idle_add(abort, "Sync timed out — check your network connection.")
+            except Exception as e:
+                GLib.idle_add(abort, "Sync error", str(e))
+
+        def on_conflicts_resolved(success: bool):
+            nonlocal push_toast
+            if success:
+                push_toast = Adw.Toast.new("Pushing to GitHub…")
+                push_toast.set_timeout(0)
+                self._toast_overlay.add_toast(push_toast)
+                threading.Thread(target=do_push, daemon=True).start()
+            else:
+                self.push_btn.set_sensitive(True)
+                self._show_toast("Sync cancelled — nothing was pushed.", timeout=5)
+
+        def start_conflict_resolution():
+            push_toast.dismiss()
+            resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
+
+        def run():
+            try:
+                # ── Stage and commit local changes ──────────────────────────
+                add_r = subprocess.run(_GIT + ["-C", repo, "add", "-A"],
+                                       capture_output=True, text=True, timeout=10)
+                if add_r.returncode != 0:
+                    GLib.idle_add(abort, "Sync failed",
+                                  add_r.stderr.strip() or "git add failed")
+                    return
+
+                status_r = subprocess.run(_GIT + ["-C", repo, "status", "--porcelain"],
+                                          capture_output=True, text=True, timeout=5)
+                if status_r.stdout.strip():
+                    commit_r = subprocess.run(_GIT + ["-C", repo, "commit", "-m", msg],
+                                              capture_output=True, text=True, timeout=15)
+                    if commit_r.returncode != 0:
+                        out = (commit_r.stderr or commit_r.stdout or "").strip()
+                        GLib.idle_add(abort, "Sync failed (commit)", out)
+                        return
+
+                # ── Pull remote changes before pushing ──────────────────────
+                has_remote = subprocess.run(
+                    _GIT + ["-C", repo, "remote"],
+                    capture_output=True, text=True, timeout=5
+                ).stdout.strip()
+
+                if has_remote:
+                    with git_credential_args(secret_store.load_github_token()) as cred:
+                        pull_r = subprocess.run(
+                            _GIT + ["-C", repo] + cred + ["pull"],
+                            capture_output=True, text=True, timeout=60
+                        )
+                    if pull_r.returncode != 0:
+                        pull_out = (pull_r.stdout + pull_r.stderr).strip()
+                        pull_low = pull_out.lower()
+                        if list_conflicted_files(repo):
+                            # Real conflicts — walk the user through resolving them,
+                            # then push once the merge is committed.
+                            GLib.idle_add(start_conflict_resolution)
+                            return
+                        abort_merge(repo)  # clean up any partial merge state
+                        if "permission denied" in pull_low or "authentication" in pull_low:
+                            GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
+                            return
+                        elif "no tracking" in pull_low or "no such ref" in pull_low \
+                                or pull_out == "":
+                            pass  # no upstream yet — first push will set it
+                        else:
+                            GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
+                            return
+
+                do_push()
+
+            except subprocess.TimeoutExpired:
+                GLib.idle_add(abort, "Sync timed out — check your network connection.")
             except FileNotFoundError:
                 GLib.idle_add(abort, "git not found", "Install git: sudo zypper install git")
             except Exception as e:
@@ -4173,14 +4199,28 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         pull_toast.set_timeout(0)
         self._toast_overlay.add_toast(pull_toast)
 
+        def on_conflicts_resolved(success: bool):
+            if success:
+                self._show_toast("✓ Synced — conflicts resolved", timeout=4)
+            else:
+                self._show_toast("Pull cancelled — nothing was changed.", timeout=5)
+
         def run():
             try:
                 with git_credential_args(secret_store.load_github_token()) as cred:
                     r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
                                        capture_output=True, text=True, timeout=60)
+                if r.returncode != 0 and list_conflicted_files(repo):
+                    def start_resolution():
+                        pull_toast.dismiss()
+                        resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
+                    GLib.idle_add(start_resolution)
+                    return
+
                 def on_done():
                     pull_toast.dismiss()
                     if r.returncode != 0:
+                        abort_merge(repo)  # clean up any partial merge state
                         err = (r.stderr or r.stdout or "Unknown error").strip()
                         self._error("Pull failed", err[:400])
                     else:

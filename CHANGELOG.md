@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.20.0-dev1] — Guided conflict resolution for GitHub sync
+
+### Added
+
+- **No more CLI required to resolve a sync conflict.** If Push or Pull finds changes on
+  another computer that conflict with your local edits, Rubric now walks you through each
+  conflicting file with a plain-language choice — **Keep Mine**, **Keep Theirs**, or **Keep
+  Both** (saves the other computer's version alongside yours, so nothing is lost) — instead of
+  telling you to open a terminal and run `git status`.
+
+### Changed
+
+- Push's pre-push pull now uses a regular merge instead of `pull --rebase`, so "ours"/"theirs"
+  during conflict resolution match what they intuitively mean (yours vs. the other computer's),
+  rather than git's rebase-specific (and reversed) meaning of those terms.
+
+---
+
 ## [0.19.0] "Open Door" — Sign in with GitHub
 
 ### Added
