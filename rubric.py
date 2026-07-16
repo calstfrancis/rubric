@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev2"
+APP_VERSION = "0.20.0-dev3"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist

@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev2] — Guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev3] — Guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -61,6 +61,11 @@ All notable changes are documented here, newest first.
   matches unrelated entries.
 - A single malformed item in a `.liturgy` file (missing its name) no longer aborts loading the
   entire file — that one item is treated as unnamed instead of blocking the rest.
+- Sync conflict resolution no longer crashes if a `git` command hangs (e.g. a stuck credential
+  prompt or lock file) — it now cleanly aborts the merge and reports the problem instead of an
+  unhandled error.
+- Turning off Simple Mode inside an already-open Preferences window now reveals the Snippets
+  page immediately, instead of only after closing and reopening Preferences.
 
 ---
 

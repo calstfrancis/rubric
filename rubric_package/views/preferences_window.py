@@ -48,7 +48,17 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._build_github(); self._build_scripture()
         self._build_dates_page()
         # self._build_typst_files()  # hidden — use Template panel instead
+        if self._simple_row:
+            self._simple_row.connect("notify::active", self._on_simple_mode_toggled)
+        else:
+            self._simple_switch.connect("notify::active", self._on_simple_mode_toggled)
         self.connect("close-request", self._on_close)
+
+    def _on_simple_mode_toggled(self, _widget, _pspec):
+        # Turning Simple Mode off should reveal the Snippets page immediately,
+        # not just after Preferences is closed and reopened.
+        if _SNIP_OK and not self._simple_mode_active() and not hasattr(self, "_snip_page"):
+            self._build_snippets()
 
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)

@@ -112,7 +112,7 @@ def _resolve_next(parent, repo: str, files: list[str], idx: int, on_done: Callab
             return
         try:
             _apply_resolution(repo, rel_path, response)
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             abort_merge(repo)
             err = Adw.MessageDialog(
                 transient_for=parent, heading="Couldn't resolve that conflict",
@@ -128,8 +128,17 @@ def _resolve_next(parent, repo: str, files: list[str], idx: int, on_done: Callab
 
 
 def _finish_merge(parent, repo: str, on_done: Callable[[bool], None]) -> None:
-    r = subprocess.run(_GIT + ["-C", repo, "commit", "--no-edit"],
-                        capture_output=True, text=True, timeout=15)
+    try:
+        r = subprocess.run(_GIT + ["-C", repo, "commit", "--no-edit"],
+                            capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        abort_merge(repo)
+        err = Adw.MessageDialog(
+            transient_for=parent, heading="Couldn't complete sync",
+            body="Git took too long to respond. Syncing was cancelled; nothing was changed.")
+        err.add_response("ok", "OK"); err.present()
+        on_done(False)
+        return
     if r.returncode != 0:
         abort_merge(repo)
         err = Adw.MessageDialog(
