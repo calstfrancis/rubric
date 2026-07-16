@@ -7,6 +7,7 @@ to match Rubric's existing stdlib-only HTTP convention (see bible_api.py).
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -22,6 +23,10 @@ USER_AGENT = "Rubric (https://github.com/calstfrancis/rubric)"
 
 class GithubAuthError(Exception):
     """Raised for any device-flow or GitHub API failure, with a user-facing message."""
+
+
+class GithubAuthCancelled(GithubAuthError):
+    """Raised when the caller signals cancellation via poll_for_access_token's cancel_event."""
 
 
 def _request(url: str, data: dict[str, str] | None = None, token: str | None = None,
@@ -63,14 +68,22 @@ def request_device_code(client_id: str) -> dict[str, Any]:
     )
 
 
-def poll_for_access_token(client_id: str, device: dict[str, Any]) -> str:
+def poll_for_access_token(client_id: str, device: dict[str, Any],
+                           cancel_event: threading.Event | None = None) -> str:
     """Blocks, polling GitHub until the user approves (or denies/expires) the
-    device code. Intended to run on a background thread."""
+    device code. Intended to run on a background thread.
+
+    If cancel_event is given and gets set, stops polling and raises
+    GithubAuthCancelled instead of waiting out the remaining interval."""
     interval = max(int(device.get("interval", 5)), 1)
     deadline = time.monotonic() + int(device.get("expires_in", 900))
 
     while True:
-        time.sleep(interval)
+        if cancel_event is not None:
+            if cancel_event.wait(interval):
+                raise GithubAuthCancelled("Sign-in was cancelled.")
+        else:
+            time.sleep(interval)
         if time.monotonic() > deadline:
             raise GithubAuthError("The sign-in code expired before it was approved. Try again.")
 

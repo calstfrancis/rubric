@@ -61,7 +61,13 @@ def present(parent: Gtk.Window, on_connected: Callable[[str, str], None]) -> Non
     tv.set_content(box)
     dialog.set_content(tv)
 
-    cancel_btn.connect("clicked", lambda _b: dialog.close())
+    cancel_event = threading.Event()
+
+    def _on_cancel_clicked(_b):
+        cancel_event.set()
+        dialog.close()
+
+    cancel_btn.connect("clicked", _on_cancel_clicked)
 
     def _on_code(device: dict) -> bool:
         status_lbl.set_label("Enter this code at github.com to connect your account:")
@@ -91,15 +97,24 @@ def present(parent: Gtk.Window, on_connected: Callable[[str, str], None]) -> Non
         try:
             device = github_auth.request_device_code(github_auth.CLIENT_ID)
         except github_auth.GithubAuthError as e:
-            GLib.idle_add(_on_failed, str(e))
+            if not cancel_event.is_set():
+                GLib.idle_add(_on_failed, str(e))
+            return
+        if cancel_event.is_set():
             return
         GLib.idle_add(_on_code, device)
 
         try:
-            token = github_auth.poll_for_access_token(github_auth.CLIENT_ID, device)
+            token = github_auth.poll_for_access_token(
+                github_auth.CLIENT_ID, device, cancel_event=cancel_event)
             username = github_auth.fetch_username(token)
+        except github_auth.GithubAuthCancelled:
+            return
         except github_auth.GithubAuthError as e:
-            GLib.idle_add(_on_failed, str(e))
+            if not cancel_event.is_set():
+                GLib.idle_add(_on_failed, str(e))
+            return
+        if cancel_event.is_set():
             return
         GLib.idle_add(_on_success, token, username)
 

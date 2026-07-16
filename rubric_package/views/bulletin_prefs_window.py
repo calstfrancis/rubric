@@ -271,8 +271,11 @@ class BulletinPrefsWindow(Adw.Window):
         """Swap content between two announcement rows (for reorder)."""
         if idx_a < 0 or idx_b < 0 or idx_a >= len(self._ann_widgets) or idx_b >= len(self._ann_widgets):
             return
-        tv_a, btn_a, _ = self._ann_widgets[idx_a]
-        tv_b, btn_b, _ = self._ann_widgets[idx_b]
+        tv_a, btn_a, row_a = self._ann_widgets[idx_a]
+        tv_b, btn_b, row_b = self._ann_widgets[idx_b]
+        if not row_a.get_visible() or not row_b.get_visible():
+            # Never swap into a deleted (hidden-but-not-removed) row.
+            return
 
         buf_a = tv_a.get_buffer(); s, e = buf_a.get_bounds(); text_a = buf_a.get_text(s, e, False)
         buf_b = tv_b.get_buffer(); s, e = buf_b.get_bounds(); text_b = buf_b.get_text(s, e, False)
@@ -354,7 +357,14 @@ class BulletinPrefsWindow(Adw.Window):
 
         def on_move(direction, w=widgets):
             idx = next((i for i,x in enumerate(self._ann_widgets) if x is w), -1)
-            self._swap_announcements(idx, idx + direction)
+            if idx < 0:
+                return
+            j = idx + direction
+            # Skip over deleted (hidden) rows to find the next visible neighbour.
+            while 0 <= j < len(self._ann_widgets) and not self._ann_widgets[j][2].get_visible():
+                j += direction
+            if 0 <= j < len(self._ann_widgets):
+                self._swap_announcements(idx, j)
 
         cal.connect("day-selected", on_day_selected)
         clear_date_btn.connect("clicked", on_clear_date)

@@ -564,9 +564,13 @@ class ServicesWindow(Adw.Window):
             self._lib_rebuilding = False; return
 
         services = element_services()
+        if query:
+            q = query.lower()
+            services = [s for s in services if q in (s.get("service_title") or "").lower()]
         if not services:
             self._lib_list.append(self._status_row(
-                "No services indexed yet — save a service to add it to the library"))
+                "No services match" if query
+                else "No services indexed yet — save a service to add it to the library"))
             self._lib_rebuilding = False; return
         for svc in services:
             self._lib_list.append(self._lib_svc_row(svc))

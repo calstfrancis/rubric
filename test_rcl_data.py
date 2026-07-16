@@ -7,7 +7,7 @@ Run with:
 """
 
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import sys
 
@@ -219,6 +219,31 @@ class TestGetLiturgicalInfo(unittest.TestCase):
     def test_year_b_easter_2024(self):
         info = get_liturgical_info(date(2024, 3, 31))
         self.assertEqual(info["year"], "B")
+
+    # ── Regression: Jan–May weekdays used to crash (month + 12 overflow) ──────
+
+    def test_epiphany_season_weekdays_do_not_crash(self):
+        # Previously raised ValueError for most non-Sunday days from
+        # New Year's through early Lent (see rcl_data.py's "previous year's
+        # Ordinary Time" fallback).
+        start = date(2026, 1, 1)
+        for i in range(90):
+            d = start + timedelta(days=i)
+            get_liturgical_info(d)  # must not raise
+
+    def test_january_weekday_no_crash_specific(self):
+        info = get_liturgical_info(date(2026, 1, 13))
+        self.assertIsInstance(info["season"], str)
+
+    # ── Regression: Christmas Day on a Sunday pushed Dec 26-31 into ──────────
+    # ── "Ordinary Time" instead of staying in the Christmas season ──────────
+
+    def test_dec26_31_stays_christmas_when_christmas_day_is_sunday(self):
+        # Dec 25, 2033 is a Sunday
+        self.assertEqual(date(2033, 12, 25).weekday(), 6)
+        for day in range(26, 32):
+            info = get_liturgical_info(date(2033, 12, day))
+            self.assertEqual(info["season"], "Christmas")
 
 
 if __name__ == "__main__":

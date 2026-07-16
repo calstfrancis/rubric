@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev1] — Guided conflict resolution for GitHub sync
+## [0.20.0-dev2] — Guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -19,6 +19,48 @@ All notable changes are documented here, newest first.
 - Push's pre-push pull now uses a regular merge instead of `pull --rebase`, so "ours"/"theirs"
   during conflict resolution match what they intuitively mean (yours vs. the other computer's),
   rather than git's rebase-specific (and reversed) meaning of those terms.
+
+### Fixed
+
+- Fixed a crash looking up liturgical info for most non-Sunday days between New Year's and
+  early Lent (an invalid date was being constructed internally).
+- Fixed Dec 26–31 incorrectly showing as "Ordinary Time" instead of the Christmas season in
+  years where Christmas Day itself falls on a Sunday.
+- Fixed closing the app after a failed save silently discarding the unsaved service — the
+  window now stays open (with the error already shown) instead of closing anyway.
+- Discarding unsaved changes (New/Open/Duplicate, or "Discard" when closing) now clears the
+  crash-recovery autosave file too, so a discarded draft is no longer offered back as
+  "restore unsaved work?" on next launch.
+- Fixed reordering bulletin announcements (move up/down) being able to swap live content into
+  a deleted announcement's slot, silently dropping it from the bulletin.
+- Fixed the Past Liturgies library search box doing nothing while viewing "By service" — it
+  now filters services by title like it already does in "By element" mode.
+- Fixed "Cancel" on the GitHub sign-in dialog not actually stopping the sign-in — if you
+  approved the device code in your browser after clicking Cancel, Rubric would still sign you
+  in and store the token. Cancel now stops the background poll immediately.
+- Fixed hymn lookup (both the API fetch and the manual-title fallback) inserting the result
+  into whichever item happened to be selected once the network reply arrived, instead of the
+  item that was selected when the lookup was started.
+- Fixed a theoretical live-preview PDF cache collision between two simultaneously running
+  Rubric processes (e.g. a real instance alongside an isolated test/screenshot launch).
+- Fixed "Export → HTML" leaking a temporary `.typ` source file on every export instead of
+  cleaning it up after the Typst compile finishes.
+- `~/.cache/rubric/compile-error.log` no longer grows without bound — it's now trimmed to a
+  recent tail once it passes ~1 MB.
+- Moved the hymn-lookup debug dump from a fixed, predictable filename in the shared system
+  temp directory to a private, mode-0600 file under `~/.cache/rubric/`.
+- `config.json` is now written atomically (temp file + rename), and a corrupt or truncated
+  config file (e.g. from a crash mid-write) no longer prevents Rubric from starting at all —
+  it now falls back to defaults instead.
+- Fixed the one-time database migration that backfills `name_key` using different
+  normalization rules (plain SQL `lower()`/`trim()`) than ongoing indexing does — on upgrade,
+  element names with extra internal whitespace or accented letters could silently end up as
+  two separate Element Library catalog entries instead of one.
+- Element Library search/filtering (by name, tag, or note) no longer treats a literal `%` or
+  `_` in your search text or tag name as a SQL wildcard — e.g. a tag named "100%" no longer
+  matches unrelated entries.
+- A single malformed item in a `.liturgy` file (missing its name) no longer aborts loading the
+  entire file — that one item is treated as unnamed instead of blocking the rest.
 
 ---
 

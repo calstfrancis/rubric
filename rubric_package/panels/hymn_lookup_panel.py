@@ -51,6 +51,13 @@ class HymnLookupPanel:
         if hasattr(self._main, "_hymn_manual_box"):
             self._main._hymn_manual_box.set_visible(False)
             self._main._hymn_manual_entry.set_text("")
+        # Capture the target item now, at the moment the lookup is triggered —
+        # not later when the async reply lands, by which point the user may
+        # have selected a different item.
+        start_idx = self._main._selected_index()
+        target_entry = (self._main.service_entries[start_idx]
+                         if 0 <= start_idx < len(self._main.service_entries) else None)
+        self._main._hymn_manual_target = target_entry
         def on_result(title, error):
             if error:
                 self._main.hymn_status.set_label(f"Couldn't fetch — enter the title manually:")
@@ -62,10 +69,12 @@ class HymnLookupPanel:
             short_ref = f"{prefix.upper()} {number}"
             hymn_line = f"{short_ref} — {title}"
             self._main.hymn_status.set_label(hymn_line)
-            idx = self._main._selected_index()
-            if not (0 <= idx < len(self._main.service_entries)): return
-            entry = self._main.service_entries[idx]
-            if not isinstance(entry, ServiceItem): return
+            entry = target_entry
+            if entry is None or not isinstance(entry, ServiceItem):
+                return
+            idx = next((i for i, e in enumerate(self._main.service_entries) if e is entry), -1)
+            if idx < 0:
+                return  # target item was deleted while the lookup was in flight
             self._main._push_undo()
             entry.content_typst = (hymn_line + "\n" + entry.content_typst
                                    if entry.content_typst else hymn_line)
@@ -97,12 +106,12 @@ class HymnLookupPanel:
         self._main.hymn_status.set_label(hymn_line)
         self._main._hymn_manual_box.set_visible(False)
         self._main._hymn_manual_entry.set_text("")
-        idx = self._main._selected_index()
-        if not (0 <= idx < len(self._main.service_entries)):
+        entry = getattr(self._main, "_hymn_manual_target", None)
+        if entry is None or not isinstance(entry, ServiceItem):
             return
-        entry = self._main.service_entries[idx]
-        if not isinstance(entry, ServiceItem):
-            return
+        idx = next((i for i, e in enumerate(self._main.service_entries) if e is entry), -1)
+        if idx < 0:
+            return  # target item was deleted while the manual-entry box was open
         self._main._push_undo()
         entry.content_typst = (hymn_line + "\n" + entry.content_typst
                                if entry.content_typst else hymn_line)

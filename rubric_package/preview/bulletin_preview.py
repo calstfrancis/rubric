@@ -11,6 +11,7 @@ the GTK windows already extracted into rubric_package/views/.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 from pathlib import Path
@@ -470,9 +471,15 @@ class BulletinPreview:
         return False
 
     def _preview_pdf_path(self) -> Path:
-        """Return the stable path used for the live preview PDF (unique per window)."""
+        """Return the stable path used for the live preview PDF (unique per window).
+
+        `id(self._main)` alone is only unique within one process, so it's paired
+        with the pid — two independent Rubric processes (e.g. a real instance
+        plus an isolated test/screenshot launch under dbus-run-session) can
+        otherwise land on the same small object-identity value and clobber
+        each other's preview PDF in the shared cache dir."""
         mode = getattr(self._main, "_preview_mode", "bulletin")
-        win_id = getattr(self._main, "_preview_window_id", id(self._main))
+        win_id = getattr(self._main, "_preview_window_id", None) or f"{os.getpid()}_{id(self._main)}"
         cache = Path(GLib.get_user_cache_dir()) / "rubric"
         cache.mkdir(parents=True, exist_ok=True)
         return cache / f"preview_{mode}_{win_id}.pdf"

@@ -134,7 +134,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev1"
+APP_VERSION = "0.20.0-dev2"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -1931,7 +1931,11 @@ class MainWindow(Adw.ApplicationWindow):
         dlg = Adw.MessageDialog(transient_for=self, heading="Unsaved changes", body="Discard unsaved changes?")
         dlg.add_response("cancel","Cancel"); dlg.add_response("discard","Discard")
         dlg.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
-        dlg.connect("response", lambda d,r: proceed() if r=="discard" else None); dlg.present()
+        def on_resp(d, r):
+            if r == "discard":
+                self._clear_autosave()
+                proceed()
+        dlg.connect("response", on_resp); dlg.present()
 
     # ── Autosave ──────────────────────────────────────────────────────────────
 
@@ -3038,8 +3042,10 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception as e: self._error("Error opening file",str(e))
 
     def save_file(self):
-        if self.current_file: self._write(self.current_file)
-        else: self.save_file_as()
+        if self.current_file: return self._write(self.current_file)
+        else:
+            self.save_file_as()
+            return False
 
     def _suggest_filename(self) -> str:
         """Build a smart filename from the selected date and liturgical info."""
@@ -3090,7 +3096,10 @@ class MainWindow(Adw.ApplicationWindow):
             if getattr(self, "_close_after_save", False):
                 self._close_after_save = False
                 self.destroy()
-        except Exception as e: self._error("Error saving",str(e))
+            return True
+        except Exception as e:
+            self._error("Error saving",str(e))
+            return False
 
     def _index_service(self, path: str, data: dict | None = None):
         """Index service elements and organizational metadata into the library DB
@@ -4507,12 +4516,17 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         def on_resp(d,r):
             if r=="save":
                 if self.current_file:
-                    self.save_file(); self.destroy()
+                    if self.save_file():
+                        self.destroy()
+                    # else: save failed and _write already showed an error;
+                    # keep the window open so the user doesn't lose work
                 else:
                     # save_file_as opens an async dialog; let _write do the destroy
                     self._close_after_save = True
                     self.save_file_as()
-            elif r=="discard": self.destroy()
+            elif r=="discard":
+                self._clear_autosave()
+                self.destroy()
         dlg.connect("response", on_resp); dlg.present(); return True
 
     def open_services(self, start_tab: str = "planner"):

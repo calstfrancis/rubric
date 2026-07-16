@@ -465,14 +465,6 @@ def get_liturgical_info(d: date) -> dict:
             return _result("Advent", f"Advent {week_num}, Year {lec_year}",
                            f"Advent{week_num}")
 
-    # Previous year's Advent 1–4 (for dates before current year's Advent)
-    for week_num in range(1, 5):
-        adv_sun = prev_adv + timedelta(weeks=week_num - 1)
-        if d == adv_sun:
-            prev_year = lectionary_year(d)
-            return _result("Advent", f"Advent {week_num}, Year {prev_year}",
-                           f"Advent{week_num}", prev_year)
-
     # ── Christmas ─────────────────────────────────────────────────────────────
 
     if date(year, 12, 25) <= d <= date(year, 12, 31):
@@ -494,6 +486,16 @@ def get_liturgical_info(d: date) -> dict:
             year_suffix = {"A": "A", "B": "B", "C": "C"}[lec_year]
             return _result("Christmas", f"Christmas 1, Year {lec_year}",
                            f"Christmas1{year_suffix}")
+        # No Sunday falls in Dec 26-31 this year (e.g. Christmas Day itself
+        # was a Sunday, so "Christmas 1" lands on Jan 1) — still Christmastide,
+        # not Ordinary Time.
+        colour_name, colour_hex = COLOURS["Christmas"]
+        return {
+            "season": "Christmas", "week": "Christmastide",
+            "year": lec_year, "colour": colour_name, "colour_hex": colour_hex,
+            "ot": "—", "psalm": "—", "epistle": "—", "gospel": "—",
+            "found": False,
+        }
 
     if date(year, 1, 1) <= d <= date(year, 1, 5):
         # Could be Christmas 2 (2nd Sunday after Christmas)
@@ -581,8 +583,7 @@ def get_liturgical_info(d: date) -> dict:
 
     # Previous year's Ordinary Time (for dates Jan–May before current Lent)
     if prev_trinity <= d < ash_wed:
-        proper = _proper_for_date(date(year - 1, d.month + (12 if d.month < 6 else 0), d.day)
-                                   if d.month < 6 else d)
+        proper = _proper_for_date(d)
         prev_year = lectionary_year(d)
         if proper:
             return _result("Ordinary", f"Ordinary {proper}, Year {prev_year}",

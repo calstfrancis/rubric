@@ -116,7 +116,7 @@ class ServiceItem:
                 content_typst = base
 
         return cls(
-            d["name"],
+            d.get("name", ""),
             d.get("section", ""),
             note,
             d.get("leader", ""),

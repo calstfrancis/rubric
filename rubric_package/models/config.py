@@ -116,7 +116,9 @@ class Config:
                 if not self.templates and d.get("template_items"):
                     self.templates["Default"] = d["template_items"]
                     self.default_template = "Default"
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError, OSError):
+                # A corrupt/truncated/unreadable config.json (e.g. from a crash mid-write)
+                # must not prevent the app from starting — fall back to defaults instead.
                 pass
 
     def add_recent(self, path: str) -> None:
@@ -167,10 +169,15 @@ class Config:
         }
         if self.palette is not None:
             p["palette"] = self.palette
-        CONFIG_PATH.write_text(
+        # Write to a temp file and rename over the real path, so a crash or power
+        # loss mid-write can't leave config.json truncated/corrupt — the rename
+        # is atomic, so readers always see either the old or the new content.
+        tmp_path = CONFIG_PATH.with_suffix(CONFIG_PATH.suffix + ".tmp")
+        tmp_path.write_text(
             json.dumps(p, indent=2, ensure_ascii=False),
             encoding="utf-8"
         )
+        tmp_path.replace(CONFIG_PATH)
 
 
 # Global config instance

@@ -181,15 +181,23 @@ def lookup_hymn(prefix: str, number: int, callback):
 
         title = _extract_hymn_title(html_text)
         if not title or "hymnary" in title.lower() or len(title) <= 2:
+            dbg = None
             try:
-                import tempfile, os
-                dbg = os.path.join(tempfile.gettempdir(), "rubric_hymn_debug.html")
-                with open(dbg, "w", encoding="utf-8") as fh:
+                import os
+                cache_dir = os.path.join(GLib.get_user_cache_dir(), "rubric")
+                os.makedirs(cache_dir, exist_ok=True)
+                dbg = os.path.join(cache_dir, "hymn_debug.html")
+                # O_EXCL-free but user-private (~/.cache/rubric is not shared with
+                # other local users, unlike the system temp dir) — avoids the
+                # symlink/TOCTOU risk of writing a fixed name into /tmp.
+                fd = os.open(dbg, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
                     fh.write(html_text[:8192])
             except Exception:
-                pass
+                dbg = None
+            hint = f" (debug: {dbg})" if dbg else ""
             GLib.idle_add(callback, None,
-                          f"#{number} not found in {hymnal_name} (debug: /tmp/rubric_hymn_debug.html)")
+                          f"#{number} not found in {hymnal_name}{hint}")
             return
 
         if _DB_OK:

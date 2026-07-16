@@ -59,6 +59,9 @@ from rubric_package.utils.typst import (
 _GIT = flatpak_git_prefix()
 
 
+_COMPILE_LOG_MAX_BYTES = 1_000_000  # cap so repeated failed compiles can't grow this forever
+
+
 def _log_compile_error(cmd: list, returncode: int, stderr: str, stdout: str) -> None:
     """Write full typst compile error details to ~/.cache/rubric/compile-error.log."""
     import datetime
@@ -77,6 +80,13 @@ def _log_compile_error(cmd: list, returncode: int, stderr: str, stdout: str) -> 
         "",
     ]
     try:
+        if log_path.exists() and log_path.stat().st_size > _COMPILE_LOG_MAX_BYTES:
+            # Trim to the most recent portion, on an entry boundary, before appending.
+            tail = log_path.read_bytes()[-_COMPILE_LOG_MAX_BYTES // 2:]
+            marker = tail.find(b"\n=== ")
+            if marker >= 0:
+                tail = tail[marker + 1:]
+            log_path.write_bytes(tail)
         with open(log_path, "a", encoding="utf-8") as f:
             f.write('\n'.join(lines) + '\n')
     except OSError:
@@ -193,6 +203,7 @@ class BulletinExporter:
                 GLib.idle_add(self._export_bulletin_html)
                 return
 
+            typ_path = None
             try:
                 with _tf.NamedTemporaryFile(
                     suffix=".typ", delete=False, mode="w", encoding="utf-8",
@@ -203,14 +214,17 @@ class BulletinExporter:
                 cache_dir = Path(GLib.get_user_cache_dir()) / "rubric"
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 html_path = cache_dir / "bulletin.html"
-                result = subprocess.run(
-                    self._main._typst_compile_cmd(
-                        typst, str(typ_path), str(html_path),
-                        extra=["--format", "html"],
-                    ),
-                    capture_output=True, text=True, timeout=60,
-                    encoding="utf-8", errors="replace",
-                )
+                try:
+                    result = subprocess.run(
+                        self._main._typst_compile_cmd(
+                            typst, str(typ_path), str(html_path),
+                            extra=["--format", "html"],
+                        ),
+                        capture_output=True, text=True, timeout=60,
+                        encoding="utf-8", errors="replace",
+                    )
+                finally:
+                    typ_path.unlink(missing_ok=True)
                 if result.returncode == 0 and html_path.exists():
                     GLib.idle_add(
                         lambda: Gtk.show_uri(None, html_path.as_uri(), 0))
@@ -219,6 +233,8 @@ class BulletinExporter:
                 else:
                     GLib.idle_add(self._export_bulletin_html)
             except Exception:
+                if typ_path:
+                    typ_path.unlink(missing_ok=True)
                 GLib.idle_add(self._export_bulletin_html)
 
         threading.Thread(target=run, daemon=True).start()

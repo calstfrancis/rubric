@@ -105,6 +105,14 @@ def _norm_key(name: str) -> str:
     return " ".join((name or "").strip().lower().split())
 
 
+def _like_escape(s: str) -> str:
+    """Escape %, _, and the escape char itself for safe use in a LIKE pattern
+    (pair with `ESCAPE '\\'` in the SQL). Without this, a literal % or _ in
+    user input — e.g. a tag named "100%" — acts as a SQL wildcard instead of
+    a literal character, causing incorrect matches."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def init_db() -> None:
     """Create tables and enable WAL mode. Call once at application startup."""
     con = _open()
@@ -120,7 +128,19 @@ def init_db() -> None:
             except sqlite3.OperationalError:
                 pass  # column already exists
         con.execute("CREATE INDEX IF NOT EXISTS idx_elem_namekey ON element_index(name_key)")
-        con.execute("UPDATE element_index SET name_key = lower(trim(name)) WHERE name_key = ''")
+        # Backfill using the same normalization _norm_key applies going forward
+        # (collapses internal whitespace, Unicode-aware lowercasing) rather than
+        # sqlite's lower()/trim(), which only ASCII-lowercases and trims the ends
+        # — using different rules here used to split legacy elements into
+        # duplicate catalog entries after upgrading.
+        legacy_rows = con.execute(
+            "SELECT id, name FROM element_index WHERE name_key = ''"
+        ).fetchall()
+        if legacy_rows:
+            con.executemany(
+                "UPDATE element_index SET name_key = ? WHERE id = ?",
+                [(_norm_key(r["name"]), r["id"]) for r in legacy_rows],
+            )
         con.execute(
             "INSERT OR IGNORE INTO element_catalog (name_key, name) "
             "SELECT name_key, name FROM element_index WHERE name_key != '' GROUP BY name_key"
@@ -177,10 +197,10 @@ def hymn_search(query: str, limit: int = 30) -> list[dict]:
     """Return cached hymns whose title or key contains query."""
     con = _open()
     try:
-        q = f"%{query}%"
+        q = f"%{_like_escape(query)}%"
         rows = con.execute(
-            "SELECT key, title FROM hymn_cache WHERE title LIKE ? OR key LIKE ? "
-            "ORDER BY key LIMIT ?",
+            "SELECT key, title FROM hymn_cache WHERE title LIKE ? ESCAPE '\\' "
+            "OR key LIKE ? ESCAPE '\\' ORDER BY key LIMIT ?",
             (q, q, limit),
         ).fetchall()
         return [{"key": r["key"], "title": _html.unescape(r["title"])} for r in rows]
@@ -495,10 +515,11 @@ def element_search(query: str, limit: int = 80) -> list[dict]:
     """Return elements whose name or note contains query, newest first."""
     con = _open()
     try:
-        q = f"%{query}%"
+        q = f"%{_like_escape(query)}%"
         rows = con.execute(
             "SELECT * FROM element_index "
-            "WHERE name LIKE ? OR note LIKE ? OR leader LIKE ? "
+            "WHERE name LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\' "
+            "OR leader LIKE ? ESCAPE '\\' "
             "ORDER BY service_date DESC, id LIMIT ?",
             (q, q, q, limit),
         ).fetchall()
@@ -554,11 +575,11 @@ def element_name_stats(query: str = "", limit: int = 100) -> list[dict]:
     con = _open()
     try:
         if query:
-            q = f"%{query}%"
+            q = f"%{_like_escape(query)}%"
             rows = con.execute(
                 "SELECT name, COUNT(DISTINCT service_path) AS use_count, "
                 "MAX(service_date) AS last_used "
-                "FROM element_index WHERE name LIKE ? "
+                "FROM element_index WHERE name LIKE ? ESCAPE '\\' "
                 "GROUP BY name ORDER BY use_count DESC, last_used DESC LIMIT ?",
                 (q, limit),
             ).fetchall()
@@ -579,10 +600,10 @@ def element_suggestions(prefix: str, limit: int = 8) -> list[dict]:
     """Return element names starting with prefix, ranked by cross-service frequency."""
     con = _open()
     try:
-        q = f"{prefix}%"
+        q = f"{_like_escape(prefix)}%"
         rows = con.execute(
             "SELECT name, COUNT(DISTINCT service_path) AS use_count "
-            "FROM element_index WHERE name LIKE ? "
+            "FROM element_index WHERE name LIKE ? ESCAPE '\\' "
             "GROUP BY name ORDER BY use_count DESC LIMIT ?",
             (q, limit),
         ).fetchall()
@@ -671,11 +692,11 @@ def element_library(
         where = []
         params: list = []
         if query:
-            where.append("c.name LIKE ?")
-            params.append(f"%{query}%")
+            where.append("c.name LIKE ? ESCAPE '\\'")
+            params.append(f"%{_like_escape(query)}%")
         if tag:
-            where.append("(',' || c.tags || ',') LIKE ?")
-            params.append(f"%,{tag},%")
+            where.append("(',' || c.tags || ',') LIKE ? ESCAPE '\\'")
+            params.append(f"%,{_like_escape(tag)},%")
         if favorites_only:
             where.append("c.favorite = 1")
         where_sql = f"WHERE {' AND '.join(where)}" if where else ""
