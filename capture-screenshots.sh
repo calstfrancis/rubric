@@ -17,6 +17,7 @@ cd "$SCRIPT_DIR"
 
 DEMO_HOME=$(mktemp -d /tmp/rubric-demo-home.XXXXXX)
 OUT="screenshots/rubric-main.png"
+OUT_DARK="screenshots/rubric-main-dark.png"
 
 cleanup() {
   [[ -n "${APP_PID:-}" ]] && kill "$APP_PID" 2>/dev/null || true
@@ -51,17 +52,63 @@ Xvfb ":$DISPLAY_NUM" -screen 0 1280x800x24 &
 XVFB_PID=$!
 sleep 2
 
-echo "==> Launching Rubric against demo data inside the isolated display"
+# Capture the app once per colour scheme. libadwaita normally resolves
+# light/dark from the desktop's settings portal, which on this machine always
+# reports light. ADW_DISABLE_PORTAL=1 makes libadwaita read the GSettings
+# color-scheme key instead, and GSETTINGS_BACKEND=keyfile feeds it a value we
+# write into the throwaway config — forcing either scheme deterministically.
+# XDG_CONFIG_HOME is redirected into the throwaway home *only for the child* so
+# that keyfile never lands in Cal's real ~/.config; Rubric resolves its own
+# config via Path.home(), so this doesn't change where it reads config.json.
+#
 # GDK_BACKEND=x11 + unsetting WAYLAND_DISPLAY is required: GTK4 prefers Wayland
 # by default, which would otherwise connect to the real desktop session and
 # render there instead of into the isolated Xvfb display.
-env -u WAYLAND_DISPLAY GDK_BACKEND=x11 HOME="$DEMO_HOME" DISPLAY=":$DISPLAY_NUM" python3 rubric.py &
-APP_PID=$!
+capture_scheme() {
+  local scheme="$1" out="$2"
+  mkdir -p "$DEMO_HOME/.config/glib-2.0/settings"
+  cat > "$DEMO_HOME/.config/glib-2.0/settings/keyfile" <<KEYFILE
+[org/gnome/desktop/interface]
+color-scheme='$scheme'
+KEYFILE
 
-echo "==> Waiting for window to render"
-sleep 10
+  echo "==> Launching Rubric ($scheme) against demo data inside the isolated display"
+  env -u WAYLAND_DISPLAY GDK_BACKEND=x11 HOME="$DEMO_HOME" XDG_CONFIG_HOME="$DEMO_HOME/.config" \
+    ADW_DISABLE_PORTAL=1 GSETTINGS_BACKEND=keyfile DISPLAY=":$DISPLAY_NUM" python3 rubric.py &
+  APP_PID=$!
 
-echo "==> Capturing and cropping to the app window"
-DISPLAY=":$DISPLAY_NUM" magick x:root -crop 1000x700+0+0 +repage "$OUT"
+  echo "==> Waiting for window to render"
+  sleep 10
 
-echo "Done. Wrote $OUT"
+  echo "==> Capturing and cropping to the app window -> $out"
+  DISPLAY=":$DISPLAY_NUM" magick x:root -crop 1000x700+0+0 +repage "$out"
+
+  kill "$APP_PID" 2>/dev/null || true
+  wait "$APP_PID" 2>/dev/null || true
+  APP_PID=
+}
+
+capture_scheme default     "$OUT"
+capture_scheme prefer-dark "$OUT_DARK"
+
+echo "Done. Wrote $OUT and $OUT_DARK"
+
+# Publish web-ready copies into the personal website repo, one PNG + WebP per
+# scheme, named as the site expects (<slug>.png/.webp + <slug>-dark.png/.webp).
+# The capture crop already matches the site's image dimensions, so this is a
+# straight convert+copy — no resize. Override the destination with
+# WEBSITE_DIR=/path ./capture-screenshots.sh; if it doesn't exist the export is
+# skipped with a note rather than failing. The website is a separate repo —
+# commit and push it there yourself after reviewing the refreshed images.
+SLUG="rubric"
+WEBSITE_DIR="${WEBSITE_DIR:-$(dirname "$SCRIPT_DIR")/calstfrancis.github.io}"
+if [[ -d "$WEBSITE_DIR" ]]; then
+  echo "==> Publishing web images to $WEBSITE_DIR"
+  cp "$OUT"      "$WEBSITE_DIR/$SLUG.png"
+  cp "$OUT_DARK" "$WEBSITE_DIR/$SLUG-dark.png"
+  magick "$OUT"      -quality 80 "$WEBSITE_DIR/$SLUG.webp"
+  magick "$OUT_DARK" -quality 80 "$WEBSITE_DIR/$SLUG-dark.webp"
+  echo "    wrote $SLUG.{png,webp} and $SLUG-dark.{png,webp}"
+else
+  echo "NOTE: website dir not found ($WEBSITE_DIR) — skipping web export."
+fi
