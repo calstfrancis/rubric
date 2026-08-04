@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev12] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev13] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -84,8 +84,13 @@ All notable changes are documented here, newest first.
 - **The formatting toolbar appears only while you're in the editor.** It sat permanently in the
   spot the design gives the element's name, and a row of B/I/H1/H2/H3 buttons is no use to
   someone reading the service order rather than writing in it.
-- **The lectionary band is half the height it was.** Buttons have a 34px minimum in Adwaita,
-  which was making a strip of reference text twice as tall as the text in it.
+- **The lectionary band is a strip rather than a slab.** Buttons have a 34px minimum in
+  Adwaita, which was making a row of reference text twice as tall as the text in it.
+- **Element rows are single-line height at last — 40px, or 34 in compact view.** They had been
+  58px for one line of text: `row.activatable > box` contributes 10px of padding above and
+  below, which nothing was overriding. Compact view was also *taller* than normal view, because
+  its rules out-specify the element-row ones and were stacking with spacing set in code. Row
+  spacing now lives in one place.
 - **The header bar's title is the service's own title** rather than the file name it happens to
   be saved under, falling back to the file name only for an untitled service. Export sits to
   the right of Preview, and the Preview pill is smaller and lighter.

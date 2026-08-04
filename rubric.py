@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev12"
+APP_VERSION = "0.20.0-dev13"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -718,7 +718,9 @@ class MainWindow(Adw.ApplicationWindow):
 
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         bx.set_margin_start(12); bx.set_margin_end(10)
-        bx.set_margin_top(6); bx.set_margin_bottom(6)
+        # Vertical spacing is CSS-only (see row.elem-row > box): setting it here
+        # as well made widget margins and stylesheet padding stack, and compact
+        # mode ended up taller than normal.
 
         # Type cue: one dot, coloured by kind. Custom per-element icons still
         # apply everywhere else (the bulletin, the palette); the list itself
@@ -5124,10 +5126,10 @@ button.reading-chip {
   background: transparent;
   box-shadow: none;
   border: none;
-  min-height: 22px;
+  min-height: 30px;
   padding: 0 6px;
 }
-.readings-card button { min-height: 22px; padding: 0 4px; }
+.readings-card button { min-height: 30px; padding: 0 4px; }
 button.reading-chip label { font-weight: 400; opacity: 0.62; }
 button.reading-chip:hover label { opacity: 1; }
 button.reading-chip:hover { background: alpha(@window_fg_color, 0.07); }
@@ -5229,8 +5231,17 @@ button.reading-chip label { font-weight: 400; }
 /* Add line: reads as an invitation under the list, not a toolbar */
 .add-btn { opacity: 0.55; padding: 2px 6px; min-height: 0; }
 .add-btn:hover { opacity: 1; }
-/* Single-line element rows */
-.elem-row { min-height: 0; }
+/* Single-line element rows.
+   Selector has to out-specify "row.activatable { min-height: 52px }" near the
+   top of this sheet - a bare ".elem-row" loses to it (0,1,0 against 0,1,1) and
+   every element row was silently 52px tall regardless of its contents. */
+row.elem-row { min-height: 34px; }
+.compact-mode row.elem-row { min-height: 28px; }
+/* The height actually came from "row.activatable > box { padding: 10px 0 }"
+   near the top of this sheet, not from min-height: 20px of padding on top of
+   the row's own margins. Single-line rows set their own spacing. */
+row.elem-row > box { padding-top: 7px; padding-bottom: 7px; margin-top: 0; margin-bottom: 0; }
+.compact-mode row.elem-row > box { padding-top: 4px; padding-bottom: 4px; margin-top: 0; margin-bottom: 0; }
 .elem-title { font-size: 0.98em; }
 .elem-detail { font-size: 0.88em; opacity: 0.55; }
 .elem-who { font-size: 0.88em; opacity: 0.6; }
@@ -5241,7 +5252,7 @@ button.reading-chip label { font-weight: 400; }
 .details-btn { opacity: 0.6; font-size: 0.9em; }
 .details-btn:hover, .details-btn:checked { opacity: 1; }
 .cue-plain { opacity: 0.28; }
-.compact-mode .elem-row > box { margin-top: 2px; margin-bottom: 2px; }
+
 /* Section rule: hairline running to the end of the header row */
 .section-rule { background: alpha(@borders, 0.45); min-height: 1px; }
 /* Divider rows themselves are not list items - no card chrome, no hover */

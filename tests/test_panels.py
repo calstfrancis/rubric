@@ -439,6 +439,26 @@ class TestMainWindowConstruction(unittest.TestCase):
         win._refresh_order_list()
         self.assertIsInstance(win._notebook, Gtk.Notebook)
 
+    def test_element_rows_are_single_line_height(self):
+        """Row height comes from one place, and compact is shorter than normal.
+
+        Two stylesheet bugs lived here. `row.activatable > box` adds 10px of
+        padding top and bottom, which no `.elem-row` rule was overriding — rows
+        were 58px for one line of text. Fixing that with widget margins then
+        made compact mode *taller* than normal, because the compact rules
+        out-specify the elem-row ones and the margins stacked on the padding.
+        Spacing is CSS-only now.
+        """
+        win = self._make_window(use_tabs=False)
+        item = ServiceItem("Prelude", "Gathering", leader="Music Director")
+        win.service_entries = [item]
+        win._refresh_order_list()
+        row = win.order_listbox.get_row_at_index(0)
+        self.assertIsNotNone(row)
+        _, natural = row.measure(Gtk.Orientation.VERTICAL, -1)[:2]
+        self.assertLess(natural, 48, f"single-line row is {natural}px tall")
+        self.assertGreater(natural, 20)
+
     def test_formatting_toolbar_hidden_until_the_editor_has_focus(self):
         """It occupies the spot the mockup gives the element's name, and is no
         use to someone reading the order rather than writing in it."""

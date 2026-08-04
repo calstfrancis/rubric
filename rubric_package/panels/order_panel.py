@@ -40,7 +40,7 @@ class OrderPanel:
         # Single row: ▌Season  |  First Reading · Psalm · Epistle · Gospel  ⌄
         rcl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         rcl_row.set_margin_start(12); rcl_row.set_margin_end(6)
-        rcl_row.set_margin_top(2); rcl_row.set_margin_bottom(2)
+        rcl_row.set_margin_top(5); rcl_row.set_margin_bottom(5)
 
         # Season info (left side, fixed width so reading buttons get the rest)
         season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -49,7 +49,7 @@ class OrderPanel:
         # name and draw func as the old bar so the season-change code that
         # calls queue_draw() on it keeps working.
         self._main._colour_bar = Gtk.DrawingArea()
-        self._main._colour_bar.set_size_request(7, 15)
+        self._main._colour_bar.set_size_request(7, 17)
         self._main._colour_bar.set_valign(Gtk.Align.CENTER)
         self._main._colour_bar.add_css_class("season-swatch")
         self._main._colour_bar.set_draw_func(self._main._draw_colour_bar)
@@ -181,7 +181,7 @@ class OrderPanel:
         self._main.order_listbox = Gtk.ListBox()
         self._main.order_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self._main.order_listbox.add_css_class("order-list")
-        self._main.order_listbox.set_margin_start(12); self._main.order_listbox.set_margin_end(12)
+        self._main.order_listbox.set_margin_start(16); self._main.order_listbox.set_margin_end(16)
         self._main.order_listbox.set_margin_top(8); self._main.order_listbox.set_margin_bottom(8)
         self._main.order_listbox.connect("row-selected", self._main._on_flat_row_selected)
         _list_key = Gtk.EventControllerKey()
