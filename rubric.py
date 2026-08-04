@@ -138,7 +138,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev5"
+APP_VERSION = "0.20.0-dev6"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -399,6 +399,9 @@ class MainWindow(Adw.ApplicationWindow):
         if not simple:
             adv_sec = Gio.Menu()
             adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
+            adv_sec.append("Document template", "win.toggle-template")
+            adv_sec.append("GOST interface font", "win.toggle-gost")
+            adv_sec.append("Developer mode", "win.toggle-dev")
             menu.append_section("Advanced", adv_sec)
 
         menu.append("What's on screen?", "win.ui-help")
@@ -431,6 +434,10 @@ class MainWindow(Adw.ApplicationWindow):
             ("redo",          self.redo,              "<Ctrl><Shift>z"),
             ("preferences",   self.open_preferences,  "<Ctrl>comma"),
             ("ui-help",       self._show_ui_help_popover, None),
+            # Toggles moved off the status bar into the hamburger menu
+            ("toggle-gost",     lambda: self._on_gost_status_clicked(None),    None),
+            ("toggle-dev",      lambda: self._on_dev_status_clicked(None),     None),
+            ("toggle-template", lambda: self._on_preamble_clicked(None),       None),
             ("clear-recent",       self._clear_recent,      None),
             ("tab-rename",         self._tab_rename_action, None),
             ("tab-delete",         self._tab_delete_action, None),
@@ -526,18 +533,23 @@ class MainWindow(Adw.ApplicationWindow):
 
         lbl = Gtk.Label(label="Service Notes")
         lbl.add_css_class("caption"); lbl.add_css_class("dim-label")
-        lbl.set_xalign(0); lbl.set_hexpand(True)
+        lbl.set_xalign(0)
         hdr.append(lbl)
 
+        # Chevron sits next to the label, not flung to the far edge, so the row
+        # reads as one small control rather than a full-width bar.
         arrow_img = Gtk.Image.new_from_icon_name("pan-down-symbolic")
         arrow_img.set_pixel_size(12); arrow_img.set_valign(Gtk.Align.CENTER)
         arrow_img.add_css_class("dim-label")
-        arrow_img.set_margin_end(4)
+        arrow_img.set_margin_start(4)
         hdr.append(arrow_img)
+
+        _hdr_spacer = Gtk.Box(); _hdr_spacer.set_hexpand(True); hdr.append(_hdr_spacer)
 
         popout_btn = Gtk.Button(icon_name="window-new-symbolic",
                                 tooltip_text="Open in pop-out window")
         popout_btn.add_css_class("flat"); popout_btn.add_css_class("circular")
+        popout_btn.add_css_class("notes-popout")
         hdr.append(popout_btn)
 
         outer.append(hdr)
@@ -648,13 +660,8 @@ class MainWindow(Adw.ApplicationWindow):
             row.set_opacity(0.7)
         self._attach_dnd(row, global_idx); return row
 
-    def _section_meta(self, global_idx: int) -> str:
-        """'4 · 12 min' for the section starting at the divider at `global_idx`."""
-        items = []
-        for e in self.service_entries[global_idx + 1:]:
-            if e.is_divider:
-                break
-            items.append(e)
+    def _section_meta_text(self, items) -> str:
+        """'4 · 12 min' — element count and running time for one section."""
         if not items:
             return "empty"
         n = len(items)
@@ -662,6 +669,51 @@ class MainWindow(Adw.ApplicationWindow):
         if mins:
             return f"{n} · {mins} min"
         return f"{n}"
+
+    def _section_meta(self, global_idx: int) -> str:
+        """Section meta for the section starting at the divider at `global_idx`."""
+        items = []
+        for e in self.service_entries[global_idx + 1:]:
+            if e.is_divider:
+                break
+            items.append(e)
+        return self._section_meta_text(items)
+
+    def _make_section_header_strip(self, div, items) -> Gtk.Widget:
+        """The section header used above a tab's element list.
+
+        Same object as the flat list's divider header — colour dot, letterspaced
+        small caps, count and running time — so both views describe a section
+        the same way.
+        """
+        title = div.title if div is not None else "Service"
+        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        bx.add_css_class("divider-header")
+        bx.set_margin_start(16); bx.set_margin_end(16)
+        bx.set_margin_top(10); bx.set_margin_bottom(2)
+
+        dot = Gtk.Label(label="●")
+        dot.add_css_class("section-dot")
+        dot.add_css_class(self._section_dot_class(title))
+        dot.set_valign(Gtk.Align.CENTER)
+        bx.append(dot)
+
+        lbl = Gtk.Label(label=title)
+        lbl.add_css_class("section-title")
+        lbl.set_valign(Gtk.Align.CENTER)
+        bx.append(lbl)
+
+        meta = Gtk.Label(label=self._section_meta_text(items))
+        meta.add_css_class("section-meta")
+        meta.set_valign(Gtk.Align.CENTER)
+        meta.set_margin_start(4)
+        bx.append(meta)
+
+        rule = Gtk.Box(); rule.set_hexpand(True); rule.set_valign(Gtk.Align.CENTER)
+        rule.add_css_class("section-rule"); rule.set_size_request(-1, 1)
+        rule.set_margin_start(8)
+        bx.append(rule)
+        return bx
 
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row._entry = div
@@ -862,19 +914,28 @@ class MainWindow(Adw.ApplicationWindow):
         est_w = max(55, len(text) * 10)
         est_h = 17
         # DrawingArea size request: width = text height + padding, height = text width + padding
-        da.set_size_request(est_h + 10, est_w + 14)
+        da.set_size_request(est_h + 10, est_w + 16)  # +16 leaves room for the dot
 
+        # Section colour, resolved at draw time so it follows light/dark
         def draw(widget, cr, w, h, t=text):
             style = widget.get_style_context()
             color = style.get_color()
-            cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
             layout = widget.create_pango_layout(t)
             fd = Pango.FontDescription.from_string("13")
             layout.set_font_description(fd)
             _ink, log = layout.get_pixel_extents()
             tw, th = log.width, log.height
+
+            # A small dot in the section colour below the label — the one place
+            # a section's colour appears in this view.
+            sec_r, sec_g, sec_b = _hex_to_rgb(_section_colour(t))
+            cr.set_source_rgb(sec_r, sec_g, sec_b)
+            cr.arc(w / 2.0, h - 6, 2.5, 0, 2 * math.pi)
+            cr.fill()
+
+            cr.set_source_rgba(color.red, color.green, color.blue, color.alpha)
             cr.save()
-            cr.translate(w / 2.0, h / 2.0)
+            cr.translate(w / 2.0, (h - 12) / 2.0)
             cr.rotate(-math.pi / 2.0)   # 90 deg CCW => bottom-to-top
             cr.translate(-tw / 2.0, -th / 2.0)
             PangoCairo.show_layout(cr, layout)
@@ -918,18 +979,29 @@ class MainWindow(Adw.ApplicationWindow):
         if not secs: return
         for div, items in secs:
             tab_title = div.title if div else "Service"
+            # Each page opens with the same section header the flat list uses —
+            # colour dot, small caps, count and running time.
+            page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            page.add_css_class("order-ground")
+            page.append(self._make_section_header_strip(div, items))
             scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
             scroll.set_vexpand(True)
-            lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE); lb.add_css_class("boxed-list")
-            lb.set_margin_start(16); lb.set_margin_end(16); lb.set_margin_top(12); lb.set_margin_bottom(12)
+            lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+            lb.add_css_class("order-list"); lb.add_css_class("tab-list")
+            lb.set_valign(Gtk.Align.START)
+            lb.set_margin_start(16); lb.set_margin_end(16); lb.set_margin_top(8); lb.set_margin_bottom(12)
             lb.connect("row-selected", lambda _lb,row,d=div,i=items: self._on_tab_row_selected(row))
             ph = Adw.StatusPage(title="Section is empty",
                 description="Double-click an element in the palette to add it, or drag elements here.",
                 icon_name="rubric-symbolic")
             ph.set_vexpand(True); lb.set_placeholder(ph)
-            for item in items:
+            for pos, item in enumerate(items):
                 g_idx = self.service_entries.index(item)
-                lb.append(self._make_item_row(item, g_idx))
+                row = self._make_item_row(item, g_idx)
+                # One card per section, same as the flat list
+                if pos == 0: row.add_css_class("sec-first")
+                if pos == len(items) - 1: row.add_css_class("sec-last")
+                lb.append(row)
             scroll.set_child(lb); self._tab_listboxes.append((div, lb))
             # Cross-tab drop target on the scroll widget
             tab_drop = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
@@ -951,7 +1023,8 @@ class MainWindow(Adw.ApplicationWindow):
             # Editable tab label with delete button
             page_num_ref = [0]  # will be updated after append_page
             tab_lbl = self._make_tab_label(div, lambda: page_num_ref[0])
-            page_num = self._notebook.append_page(scroll, tab_lbl)
+            page.append(scroll)
+            page_num = self._notebook.append_page(page, tab_lbl)
             page_num_ref[0] = page_num
         # Select appropriate tab and row
         if select_index >= 0 and self.service_entries:
@@ -1611,15 +1684,11 @@ class MainWindow(Adw.ApplicationWindow):
         self._season_colour_hex = cx
         self.season_dot.set_markup(f'<span color="{cx}">●</span>')
         self.season_label.set_markup(f'<span color="{cx}">{GLib.markup_escape_text(info["week"])}</span>')
-        self._colour_bar_rgb = _hex_to_rgb(cx); self._colour_bar.queue_draw(); self._order_season_strip.queue_draw()
-        if hasattr(self, "_season_hdr_css"):
-            r8, g8, b8 = (int(cx.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
-            self._season_hdr_css.load_from_data(
-                f".rubric-main-hdr {{ background-image: linear-gradient("
-                f"to right, rgba({r8},{g8},{b8},0.15) 0%, transparent 70%); }}".encode())
-            if hasattr(self, "_reading_chip_css"):
-                self._reading_chip_css.load_from_data(
-                    f"button.reading-chip {{ background: rgba({r8},{g8},{b8},0.10); }}".encode())
+        # One place, one block. The header-bar gradient tint and the per-season
+        # chip fill both said the same thing as this swatch and made the window
+        # read as washed in colour; the swatch beside the season name is now the
+        # only liturgical-colour cue.
+        self._colour_bar_rgb = _hex_to_rgb(cx); self._colour_bar.queue_draw()
 
         # Stepper
         self._sunday_step_box.set_visible(show_stepper)
@@ -4804,6 +4873,11 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 /* The list sits on a recessed ground so the grouped sections read as cards */
 .order-list { background: transparent; }
 .order-ground { background: alpha(@window_fg_color, 0.035); }
+/* Reading chips: quiet text, not tinted pills. The liturgical colour is said
+   once by the swatch beside the season name and nowhere else. */
+button.reading-chip { background: transparent; box-shadow: none; border: none; }
+button.reading-chip:hover { background: alpha(@window_fg_color, 0.07); }
+button.reading-chip:disabled { background: transparent; opacity: 0.4; }
 /* Reading chip: inserted into service */
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
@@ -4826,12 +4900,19 @@ flowboxchild { background: transparent; padding: 0; }
 /* Vertical section tab strip */
 notebook > header.left { background: transparent; border-right: 1px solid alpha(@borders, 0.4); }
 notebook > header.left tab { padding: 4px 2px; min-height: 0; }
-notebook > header.left tab:checked { background: alpha(@accent_bg_color, 0.15); border-right: 2px solid @accent_color; }
+notebook > header.left tab:checked { background: alpha(@window_fg_color, 0.06); border-right: 2px solid alpha(@window_fg_color, 0.35); }
+/* Tab pages sit on the same recessed ground as the flat list */
+notebook > stack { background: transparent; }
+/* Section list inside a tab: one card, sized to its contents */
+.tab-list { background: transparent; }
 /* Header bar buttons: square, not tall */
 headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; padding: 4px; }
-/* Drag handle: subtle at rest, visible on hover (grab cursor set in code) */
-.order-list row .drag-handle { opacity: 0.3; transition: opacity 120ms; }
-.order-list row:hover .drag-handle { opacity: 0.6; }
+/* Drag handle: invisible until you're over the row it belongs to. A column of
+   grip glyphs down every service was pure noise. */
+.order-list row .drag-handle { opacity: 0; transition: opacity 120ms; }
+.order-list row:hover .drag-handle { opacity: 0.45; }
+/* Element type icons sit back rather than competing with the titles */
+.order-list row image { opacity: 0.55; }
 /* -- Section headers ------------------------------------------------------
    Sections are a typographic rule, not a coloured card: letterspaced small
    caps, a section-colour dot, and the element count + running time at the
@@ -4886,6 +4967,10 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 .metric-pill { background: alpha(@headerbar_shade_color, 0.5); border-radius: 9999px; padding: 1px 7px; }
 /* Planning notes header: pointer cursor + subtle hover */
 .notes-header { border-radius: 4px; }
+/* Pop-out button appears only when you're over the notes header */
+.notes-popout { opacity: 0; transition: opacity 120ms; }
+.notes-header:hover .notes-popout { opacity: 0.7; }
+.notes-popout:hover, .notes-popout:focus { opacity: 1; }
 .notes-header:hover { background: alpha(@accent_bg_color, 0.06); }
 /* Unsaved chip: pulse animation after 30s */
 @keyframes rubric-unsaved-pulse {

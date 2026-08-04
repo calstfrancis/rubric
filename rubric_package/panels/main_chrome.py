@@ -65,12 +65,8 @@ class MainChrome:
         edit_box.append(self._main.undo_btn); edit_box.append(self._main.redo_btn)
         hdr.pack_start(edit_box)
 
-        # Services library — browse/organize past services (Planner/Element Library/Past Liturgies)
-        services_btn = Gtk.Button(tooltip_text="Services library — browse and organize past services")
-        services_btn.set_child(Gtk.Label(label="Services"))
-        services_btn.add_css_class("flat")
-        services_btn.connect("clicked", lambda _: self._main.open_archive())
-        hdr.pack_start(services_btn)
+        # Services library lives in the hamburger ("Services…"); the header
+        # bar keeps only what gets used every session.
 
         # Title widget lives inside a MenuButton so clicking it opens the service info popover
         self._main.title_widget = Adw.WindowTitle(title="Rubric", subtitle="New service")
@@ -246,7 +242,6 @@ class MainChrome:
         self._main._gost_status_btn, self._main._gost_status_lbl = _status_toggle_btn(
             "GOST", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
         self._main._gost_status_btn.connect("clicked", self._main._on_gost_status_clicked)
-        _left_box.append(self._main._gost_status_btn)
 
         self._main._compact_status_btn, self._main._compact_status_lbl = _status_toggle_btn(
             "Compact", "Compact view — reduces spacing between service elements so more fit on screen at once")
@@ -257,7 +252,6 @@ class MainChrome:
             "Dev", "Developer mode — shows a 'Copy Typst source' button in the preview panel for debugging bulletin layout")
         self._main._dev_status_btn.connect("clicked", self._main._on_dev_status_clicked)
         self._main._dev_mode = False
-        _left_box.append(self._main._dev_status_btn)
 
         self._main._typst_edit_btn, self._main._typst_edit_lbl = _status_toggle_btn(
             "Typst", "Switch the content editor to raw Typst source mode")
@@ -270,8 +264,9 @@ class MainChrome:
             "Template", "Document template — set fonts, margins, and layout for generated PDFs")
         self._main._preamble_btn.connect("clicked", self._main._on_preamble_clicked)
         self._main._preamble_active = False
-        _left_box.append(self._main._preamble_btn)
 
+        # GOST, Dev and Template are rare, advanced toggles — they live in the
+        # hamburger menu now rather than sitting in the status bar full time.
         status_bar.append(_left_box)
 
         # Centre: single events popover button (replaces prev/dot/next layout)
@@ -332,7 +327,8 @@ class MainChrome:
         _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self._main.git_push())
         self._main._git_btn = _git_btn
-        _right_box.append(_git_btn)
+        # Git lives under "GitHub Sync" in the hamburger; the status bar keeps
+        # only what reports state (word count, save state) plus Focus.
 
         ver_btn = Gtk.Button(label=f"v{APP_VERSION}")
         ver_btn.add_css_class("flat"); ver_btn.add_css_class("dim-label"); ver_btn.add_css_class("caption")

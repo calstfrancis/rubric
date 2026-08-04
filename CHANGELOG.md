@@ -4,15 +4,16 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev5] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev6] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
-- **The service order now reads as a shape, not a list.** Each section is a letterspaced
-  header carrying a colour dot, its element count, and its running time — so you can see at a
-  glance that Gathering is four elements and twelve minutes without adding up the parts. The
-  elements underneath group into a bordered card per section, the standard GNOME boxed-list
-  pattern, which also makes drag-and-drop targets easier to read.
+- **The service order now reads as a shape, not a list — in both views.** Each section gets a
+  letterspaced header carrying a colour dot, its element count, and its running time, so you
+  can see at a glance that Gathering is four elements and twelve minutes without adding up the
+  parts. Its elements group into a single bordered card sized to their contents. In the tabbed
+  view each tab page opens with that same header, and every vertical tab carries its section's
+  colour as a dot, so the two views now describe a section the same way.
 - **Focus mode keeps the shape of the service in view.** Instead of hiding the order list
   entirely, focus mode collapses it to a slim spine: one tick per element, coloured by
   section and sized by duration, with the current element highlighted. Click any tick to jump
@@ -37,9 +38,18 @@ All notable changes are documented here, newest first.
 - **Section colours are a coherent family** rather than eight unrelated hues, with a second
   set tuned for dark backgrounds. The same goes for the red used for rubrics and leader notes,
   which is now one colour throughout instead of three near-misses.
-- The readings band's full-width coloured bar is now a small swatch beside the season name,
-  and the season strip above the order list is quieter. The readings are reference material and
-  no longer the loudest thing on screen.
+- **The liturgical colour is stated once.** It used to appear four times at once — a
+  full-width bar above the readings, a gradient strip over the order list, a wash tinting the
+  header bar, and a fill behind each reading chip. All that's left is a single clear colour
+  block beside the season name. The readings themselves are plain text now rather than tinted
+  pills; they're reference material, not the loudest thing on screen.
+- **Fewer controls sitting on screen full time.** GOST, Developer mode and Document template
+  moved from the status bar into the hamburger's Advanced section, and Git moved into GitHub
+  Sync where its other commands already live — the status bar now reports state (word count,
+  save state) rather than holding toggles. The Services button left the header bar, since
+  "Services…" was already a menu item. Drag handles and the notes pop-out button appear on
+  hover instead of permanently, and element type icons sit back so they stop competing with
+  the titles they label.
 - Removing an element uses a neutral trash button instead of a permanently-red one, and the
   section-divider delete only appears when you hover the section.
 - Push's pre-push pull now uses a regular merge instead of `pull --rebase`, so "ours"/"theirs"

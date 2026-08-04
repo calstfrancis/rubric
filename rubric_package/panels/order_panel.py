@@ -43,14 +43,13 @@ class OrderPanel:
         rcl_row.set_margin_top(5); rcl_row.set_margin_bottom(5)
 
         # Season info (left side, fixed width so reading buttons get the rest)
-        season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        season_box.set_size_request(160, -1)
+        season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
         # Season colour as a small swatch, not a full-bleed bar. Same widget
         # name and draw func as the old bar so the season-change code that
         # calls queue_draw() on it keeps working.
         self._main._colour_bar = Gtk.DrawingArea()
-        self._main._colour_bar.set_size_request(4, 16)
+        self._main._colour_bar.set_size_request(8, 22)
         self._main._colour_bar.set_valign(Gtk.Align.CENTER)
         self._main._colour_bar.add_css_class("season-swatch")
         self._main._colour_bar.set_draw_func(self._main._draw_colour_bar)
@@ -62,9 +61,7 @@ class OrderPanel:
         self._main.year_badge = Gtk.Label()  # kept for data, not displayed
         rcl_row.append(season_box)
 
-        # Small vertical separator
-        vsep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        vsep.set_margin_start(4); vsep.set_margin_end(4); rcl_row.append(vsep)
+        # No separator: the colour block already marks where the season ends.
 
         # Reading chips — compact pill buttons, right-aligned
         self._main._reading_rows: dict[str, Gtk.Button] = {}
@@ -72,7 +69,8 @@ class OrderPanel:
                                  "epistle": "Epistle",  "gospel": "Gospel"}
         self._main._reading_abbrs  = {"ot": "OT", "psalm": "Ps", "epistle": "Ep", "gospel": "Gos"}
         chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        chips_box.set_hexpand(True); chips_box.set_halign(Gtk.Align.END)
+        chips_box.set_halign(Gtk.Align.START)
+        chips_box.set_margin_start(16)
         for key in ("ot", "psalm", "epistle", "gospel"):
             btn = Gtk.Button(label=self._main._reading_abbrs[key])
             btn.add_css_class("pill"); btn.add_css_class("flat"); btn.add_css_class("reading-chip")
@@ -226,23 +224,12 @@ class OrderPanel:
 
         self._main._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
 
-        # Season colour strip — 5px gradient bar at top of order panel
+        # The liturgical colour is shown once, as the block beside the season
+        # name in the readings row. The gradient strip that used to sit here was
+        # a second cue saying the same thing; the widget is kept (zero height,
+        # unparented) only because the season-change code calls queue_draw on it.
         self._main._order_season_strip = Gtk.DrawingArea()
-        self._main._order_season_strip.set_size_request(-1, 3)
-        def _draw_order_strip(_da, cr, w, _h):
-            import cairo as _cairo
-            r, g, b = self._main._colour_bar_rgb
-            try:
-                pat = _cairo.LinearGradient(0, 0, w, 0)
-                pat.add_color_stop_rgba(0.0, r, g, b, 0.55)
-                pat.add_color_stop_rgba(0.6, r, g, b, 0.32)
-                pat.add_color_stop_rgba(1.0, r, g, b, 0.08)
-                cr.set_source(pat)
-            except Exception:
-                cr.set_source_rgb(r, g, b)
-            cr.paint()
-        self._main._order_season_strip.set_draw_func(_draw_order_strip)
-        order_box.append(self._main._order_season_strip)
+        self._main._order_season_strip.set_size_request(-1, 0)
         order_box.append(self._main._view_stack)
 
         # Time total bar
