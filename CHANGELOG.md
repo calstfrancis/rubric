@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev15] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev16] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -46,6 +46,8 @@ All notable changes are documented here, newest first.
   became a proper radio group that marks the one in effect. Nineteen items down to eighteen in
   simple mode, twenty-seven down to twenty-three otherwise, and grouped so the count matters
   less than it did.
+- **Services moved to the status bar**, beside Focus, and out of the menu — browsing past
+  liturgies and the element library is something you reach for constantly.
 - **Save and push to GitHub is one click again**, as a plain "Git" in the status bar. It saves
   the service, commits it and pushes, which is what Ctrl+Shift+G has always done — it just had
   nowhere visible to be clicked. It appears whenever a repository is configured, rather than
@@ -175,6 +177,18 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **Element content was not being displayed at all.** The editor pane stayed blank however you
+  clicked around, Snippets did nothing, and inserting from the element library silently failed.
+  A tidy-up of dead code removed two lookup tables the editor's own text conversion depends on —
+  they sat between two functions being deleted and went with them — so every attempt to render
+  a document raised an error before drawing anything. Restored, and the conversion now has
+  tests over every kind of block; it had none, which is how this got through.
+- **"Liturgical Calendar" in the menu did nothing.** It was trying to borrow the popover from a
+  button that is no longer on screen, which fails in a way that produced no visible error. It
+  now owns its own, and refreshes the day's observances before opening.
+- **The coloured dot beside each element was invisible.** It was being asked to paint itself in
+  the current text colour, which isn't something GTK's stylesheets resolve; the colours are now
+  set directly.
 - **Seven icons were drawing the missing-icon fallback.** Adwaita has dropped the legacy
   non-symbolic names, so `sidebar-show`, `edit-undo`, `edit-redo` and four others resolved to
   nothing — including the sidebar toggle, the first control in the header bar. All of them now

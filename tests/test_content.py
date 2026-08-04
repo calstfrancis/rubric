@@ -197,5 +197,57 @@ class TestRoundTripStability(unittest.TestCase):
         self.assertEqual(len(blocks), 2)
 
 
+try:
+    import gi
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import Gtk
+    from rubric_package.utils.rich_typst import blocks_to_buffer, buffer_to_blocks
+    _GTK_OK = True
+except Exception:
+    _GTK_OK = False
+
+
+@unittest.skipUnless(_GTK_OK, "GTK4 typelibs not available")
+class TestEditorBufferRoundTrip(unittest.TestCase):
+    """Blocks -> GtkTextBuffer -> blocks, the editor's own conversion.
+
+    This had no test, and a dead-code sweep removed the two lookup tables it
+    depends on: the regex matched from one `def` to the next and the module
+    constants happened to sit between them. Every call raised NameError, the
+    element editor rendered nothing, and nothing in the suite noticed.
+    """
+
+    CASES = {
+        "heading": [make_block("h1", [make_run("Head")])],
+        "bold and plain runs": [make_block("p", [make_run("Leader:", bold=True),
+                                                 make_run(" go")])],
+        "italic": [make_block("p", [make_run("quietly", italic=True)])],
+        "leader note": [make_block("leader", [make_run("stand")])],
+        "bullets": [make_block("bullet", [make_run("one")]),
+                    make_block("bullet", [make_run("two")])],
+        "ordered": [make_block("ordered", [make_run("first")])],
+        "blank line between": [make_block("p", [make_run("a")]),
+                               make_block("p", []),
+                               make_block("p", [make_run("b")])],
+        "every block type": [make_block(t, [make_run(t)]) for t in
+                             ("p", "h1", "h2", "h3", "bullet", "ordered", "leader")],
+    }
+
+    def test_round_trip_is_exact(self):
+        for name, blocks in self.CASES.items():
+            with self.subTest(case=name):
+                buf = Gtk.TextBuffer()
+                blocks_to_buffer(blocks, buf)
+                self.assertEqual(buffer_to_blocks(buf), blocks)
+
+    def test_bullet_marker_is_display_only(self):
+        """The bullet glyph is shown but is not part of the text."""
+        buf = Gtk.TextBuffer()
+        blocks_to_buffer([make_block("bullet", [make_run("one")])], buf)
+        shown = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        self.assertTrue(shown.startswith("\u2022 "))
+        self.assertEqual(buffer_to_blocks(buf)[0]["runs"], [{"text": "one"}])
+
+
 if __name__ == "__main__":
     unittest.main()

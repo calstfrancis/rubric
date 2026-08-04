@@ -259,6 +259,13 @@ class MainChrome:
         self._main._focus_status_btn.connect("clicked", lambda _: self._main._toggle_focus_mode())
         _left_box.append(self._main._focus_status_btn)
 
+        # Services sits with the other status-bar words rather than in the menu:
+        # browsing past liturgies is something you reach for constantly.
+        self._main._services_status_btn, self._main._services_status_lbl = _status_toggle_btn(
+            "Services", "Browse and organise past services, the element library and the planner")
+        self._main._services_status_btn.connect("clicked", lambda _: self._main.open_archive())
+        _left_box.append(self._main._services_status_btn)
+
         self._main._gost_status_btn, self._main._gost_status_lbl = _status_toggle_btn(
             "GOST font", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
         self._main._gost_status_btn.connect("clicked", self._main._on_gost_status_clicked)
@@ -298,11 +305,15 @@ class MainChrome:
         self._main._events_popover_box.set_margin_start(10); self._main._events_popover_box.set_margin_end(10)
         self._main._events_popover_box.set_margin_top(8); self._main._events_popover_box.set_margin_bottom(8)
         self._main._events_popover_box.set_size_request(280, -1)
-        _evpop = Gtk.Popover()
-        _evpop.set_child(self._main._events_popover_box)
+        # The popover is owned by MainWindow._show_liturgical_events, which
+        # anchors it to the hamburger. It is deliberately not handed to a
+        # MenuButton here: that made the box a child of the button's popover,
+        # and moving it out again fails because a popover's child reports its
+        # parent as an internal GtkPopoverContent with no set_child().
+        self._main._events_popover = Gtk.Popover()
+        self._main._events_popover.set_child(self._main._events_popover_box)
         self._main._events_btn = Gtk.MenuButton()
         self._main._events_btn.set_child(self._main._events_btn_lbl)
-        self._main._events_btn.set_popover(_evpop)
         self._main._events_btn.add_css_class("flat")
         self._main._events_btn.set_visible(False)
         # The liturgical-events popover is a lookup, not a status — it moved to

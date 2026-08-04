@@ -465,6 +465,44 @@ class TestMainWindowConstruction(unittest.TestCase):
                 if label:
                     self.assertNotIn("Ctrl", label, f"accel typed into {label!r}")
 
+    def test_every_menu_action_exists(self):
+        """A menu entry pointing at an unregistered action is a dead item."""
+        win = self._make_window(use_tabs=False)
+        app = win.get_application()
+        model = win._menu_btn.get_menu_model()
+
+        def walk(m):
+            for i in range(m.get_n_items()):
+                for link in ("section", "submenu"):
+                    sub = m.get_item_link(i, link)
+                    if sub is not None:
+                        yield from walk(sub)
+                act = m.get_item_attribute_value(i, "action", None)
+                lab = m.get_item_attribute_value(i, "label", None)
+                if act is not None:
+                    yield (lab.get_string() if lab else "?"), act.get_string()
+
+        for label, action in walk(model):
+            scope, _, name = action.partition(".")
+            name = name.split("::")[0]
+            if scope == "win":
+                self.assertIsNotNone(win.lookup_action(name),
+                                     f"{label!r} points at missing win.{name}")
+            elif scope == "app":
+                self.assertIsNotNone(app.lookup_action(name),
+                                     f"{label!r} points at missing app.{name}")
+
+    def test_liturgical_calendar_popover_opens_repeatedly(self):
+        """It did nothing at all: the handler tried to move the content box out
+        of a popover, and a popover's child reports its parent as an internal
+        GtkPopoverContent, which has no set_child(). The popover is owned
+        directly now rather than being borrowed from a MenuButton."""
+        win = self._make_window(use_tabs=False)
+        win._show_liturgical_events()
+        win._events_popover.popdown()
+        win._show_liturgical_events()
+        self.assertIsNotNone(win._events_popover.get_parent())
+
     def test_theme_is_a_stateful_radio(self):
         """Three separate commands can't show which one is in effect."""
         win = self._make_window(use_tabs=False)

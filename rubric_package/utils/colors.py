@@ -147,9 +147,14 @@ def section_css(dark: bool | None = None) -> str:
     red = RUBRIC_RED_DARK if dark else RUBRIC_RED
 
     music = CUE_MUSIC_DARK if dark else CUE_MUSIC
+    # Cue dots are drawn boxes, so they need a background, not a text colour.
+    # "background: currentColor" does not resolve in GTK's CSS the way it does
+    # on the web, which made the dots invisible rather than coloured.
+    grey = SECTION_GRAY_DARK if dark else SECTION_GRAY
     rules = [
-        f".cue-music {{ color: {music}; }}",
-        f".cue-read {{ color: {red}; }}",
+        f".cue-music {{ background: {music}; color: {music}; }}",
+        f".cue-read {{ background: {red}; color: {red}; }}",
+        f".cue-plain {{ background: {grey}; color: {grey}; }}",
         f".rubric-note-editor {{ color: {red}; }}",
         f".rubric-red {{ color: {red}; }}",
         f".section-dot-gray {{ color: {gray}; }}",

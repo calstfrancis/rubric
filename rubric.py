@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev15"
+APP_VERSION = "0.20.0-dev16"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -450,7 +450,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         # -- Library and sync ------------------------------------------------
         lib_sec = Gio.Menu()
-        lib_sec.append("Services\u2026", "win.open-services")
         if config.github_repo:
             lib_sec.append("Push to GitHub", "win.git-push")
             lib_sec.append("Pull from GitHub", "win.git-pull")
@@ -1941,16 +1940,13 @@ class MainWindow(Adw.ApplicationWindow):
         The button that used to carry this lived in the status bar; the content
         is unchanged, it's just reached from the menu now.
         """
-        box = getattr(self, "_events_popover_box", None)
-        if box is None:
+        pop = getattr(self, "_events_popover", None)
+        if pop is None:
             return
-        parent = box.get_parent()
-        if parent is not None:
-            parent.set_child(None)
-        pop = Gtk.Popover()
-        pop.set_child(box)
-        pop.set_parent(getattr(self, "_menu_btn", self))
-        pop.connect("closed", lambda p: (p.set_child(None), p.unparent()))
+        if pop.get_parent() is None:
+            pop.set_parent(getattr(self, "_menu_btn", self))
+        if self.selected_date:
+            self._refresh_observances_row(self._readings_sunday or self.selected_date)
         pop.popup()
 
     def _refresh_observances_row(self, d) -> None:
@@ -5088,6 +5084,13 @@ class LiturgyPlannerApp(Adw.Application):
         super().__init__(application_id="io.github.calstfrancis.rubric", flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.connect("activate", self._on_activate)
         self._first_activate = True
+        # Registered here rather than on first activation: the menu references
+        # app.new-window, and a window built before activation would carry a
+        # dead entry.
+        nw_action = Gio.SimpleAction.new("new-window", None)
+        nw_action.connect("activate", self._new_window)
+        self.add_action(nw_action)
+        self.set_accels_for_action("app.new-window", ["<Ctrl><Shift>n"])
 
     def _new_window(self, *_):
         MainWindow(application=self).present()
@@ -5397,11 +5400,6 @@ button.reading-chip { font-size: 0.9em; }
             _reload_scheme_css()
             sm.connect("notify::dark", _reload_scheme_css)
 
-            # Register app-level "New Window" action
-            nw_action = Gio.SimpleAction.new("new-window", None)
-            nw_action.connect("activate", self._new_window)
-            self.add_action(nw_action)
-            self.set_accels_for_action("app.new-window", ["<Ctrl><Shift>n"])
         MainWindow(application=app).present()
 
 def _force_adwaita_icons():

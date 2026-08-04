@@ -134,6 +134,13 @@ def _insert_tagged(buf, text: str, tags: frozenset[str]) -> None:
 
 # ── typst_to_tags ──────────────────────────────────────────────────────────────
 
+_BLOCK_TAGS = {
+    "h1": TAG_H1, "h2": TAG_H2, "h3": TAG_H3,
+    "bullet": TAG_BULLET, "ordered": TAG_ORDERED, "leader": TAG_LEADER,
+}
+_TAG_BLOCKS = {v: k for k, v in _BLOCK_TAGS.items()}
+
+
 def blocks_to_buffer(blocks, buf) -> None:
     """Fill a GtkTextBuffer from a block list."""
     from rubric_package.models.content import normalise
