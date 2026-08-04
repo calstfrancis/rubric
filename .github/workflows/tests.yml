@@ -28,7 +28,7 @@ jobs:
 
       - name: Run backend/data-layer tests
         run: |
-          python3 -m unittest test_rcl_data test_bible_api -v
+          python3 -m unittest test_rcl_data test_bible_api test_hymn_lookup test_snippets -v
           python3 -m unittest discover -s tests -v
 
   gtk-panels:

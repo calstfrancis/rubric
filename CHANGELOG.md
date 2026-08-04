@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev4] — Interface refresh; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev5] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -48,6 +48,17 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **Saving a service can no longer leave a half-written file.** Services and autosaves were
+  written straight over the existing file, so a crash, a power loss, or a full disk partway
+  through the write would truncate the file and lose the service. Both now write to a temporary
+  file, flush it to disk, and rename it into place — an interrupted save leaves the previous
+  version completely intact. (Preferences have been written this way for a while; services,
+  the thing actually worth protecting, had been missed.)
+- **A successful save is no longer reported as a failure.** Bookkeeping that runs after the
+  file is already written — updating recent files, the Past Liturgies index, the live preview —
+  could raise an "Error saving" dialog even though the service had been saved correctly, and
+  could stop the window from closing when you'd chosen Save on quit. Those steps now report
+  their own problems as a passing message and leave the save reported as what it was.
 - **The content editor is no longer a sheet of white in dark mode.** The syntax-highlighting
   editor kept its own light colour scheme regardless of the system theme; it now follows
   light/dark, as does the bulletin preview pane (which was hardcoded to an off-white page).

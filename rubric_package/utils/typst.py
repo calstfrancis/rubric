@@ -28,7 +28,7 @@ def typst_escape(text: str) -> str:
 
 
 def escape_unmatched_brackets(text: str) -> str:
-    """Escape unmatched ] in Typst content so they don't prematurely close outer blocks.
+    r"""Escape unmatched ] in Typst content so they don't prematurely close outer blocks.
 
     In Typst, a bare ] that isn't closing a matched [ closes the nearest enclosing
     content block (e.g. a #columns(2)[...] block), which causes a compile error or

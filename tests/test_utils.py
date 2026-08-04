@@ -2,8 +2,12 @@
 Tests for rubric_package utilities.
 """
 
+import os
+import tempfile
 import unittest
+import shutil
 import sys
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,7 +21,8 @@ from rubric_package.utils.typst import (
     notes_preview,
 )
 from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
-from rubric_package.utils.helpers import is_hymn_element, HYMN_KEYWORDS
+from rubric_package.utils.helpers import (
+    is_hymn_element, HYMN_KEYWORDS, atomic_write_text)
 from rubric_package.utils.rich_typst import process_inline, TAG_BOLD, TAG_ITALIC
 
 
@@ -399,6 +404,57 @@ class TestProcessInline(unittest.TestCase):
         self.assertEqual(all_text, "before bold after")
         bold_frags = [f for f, t in result if TAG_BOLD in t]
         self.assertEqual(bold_frags, ["bold"])
+
+
+class TestAtomicWriteText(unittest.TestCase):
+    """A half-written service file must never replace a whole one."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.path = self.dir / "service.liturgy"
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+
+    def _strays(self):
+        return [f for f in os.listdir(self.dir) if f != self.path.name]
+
+    def test_writes_content(self):
+        atomic_write_text(self.path, "hello")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "hello")
+
+    def test_replaces_existing_content(self):
+        atomic_write_text(self.path, "old")
+        atomic_write_text(self.path, "new")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "new")
+
+    def test_creates_missing_parent_directories(self):
+        nested = self.dir / "a" / "b" / "autosave.liturgy"
+        atomic_write_text(nested, "nested")
+        self.assertEqual(nested.read_text(encoding="utf-8"), "nested")
+
+    def test_leaves_no_temp_file_behind(self):
+        atomic_write_text(self.path, "hello")
+        self.assertEqual(self._strays(), [])
+
+    def test_failed_write_leaves_original_intact(self):
+        atomic_write_text(self.path, "original")
+        with mock.patch("rubric_package.utils.helpers.os.fsync",
+                        side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                atomic_write_text(self.path, "truncated")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), "original")
+
+    def test_failed_write_cleans_up_temp_file(self):
+        atomic_write_text(self.path, "original")
+        with mock.patch("rubric_package.utils.helpers.os.fsync",
+                        side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                atomic_write_text(self.path, "truncated")
+        self.assertEqual(self._strays(), [])
+
+    def test_unicode_round_trip(self):
+        text = "Kyrie eleison — \u0413\u043e\u0441\u043f\u043e\u0434\u0438, \u043f\u043e\u043c\u0438\u043b\u0443\u0439"
+        atomic_write_text(self.path, text)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), text)
 
 
 if __name__ == "__main__":

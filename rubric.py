@@ -34,6 +34,7 @@ try:
     )
     from rubric_package.utils.helpers import (
         is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
+        atomic_write_text,
     )
     from rubric_package.utils.git_conflicts import (
         list_conflicted_files, abort_merge, resolve_conflicts_interactive,
@@ -137,7 +138,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev4"
+APP_VERSION = "0.20.0-dev5"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -2965,9 +2966,10 @@ class MainWindow(Adw.ApplicationWindow):
     def _do_autosave(self):
         if self.modified and self.service_entries:
             try:
-                AUTOSAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
                 d = self._service_data(); d["_autosave"]=True
-                AUTOSAVE_PATH.write_text(json.dumps(d,indent=2,ensure_ascii=False),encoding="utf-8")
+                # Also atomic — the safety net must not be destroyed by the
+                # same crash that makes you need it.
+                atomic_write_text(AUTOSAVE_PATH, json.dumps(d, indent=2, ensure_ascii=False))
             except Exception as e:
                 toast = Adw.Toast.new(f"Autosave failed: {e}")
                 toast.set_timeout(5)
@@ -3255,23 +3257,49 @@ class MainWindow(Adw.ApplicationWindow):
         self.current_file = path; self._write(path)
 
     def _write(self, path):
+        # Only the write itself decides whether the save succeeded. Everything
+        # after it — recent-files bookkeeping, the library index, the preview
+        # refresh — happens once the service is already safely on disk, so a
+        # failure there must not report "Error saving" or return False. It used
+        # to: a failing library-index write would tell the user their save had
+        # failed when their work was written fine, and (because a False return
+        # cancels close-after-save) would keep the window open on a clean save.
         try:
             data = self._service_data()
-            with open(path,"w",encoding="utf-8") as f: json.dump(data,f,indent=2,ensure_ascii=False)
-            self.modified=False; self._update_title(); self._clear_autosave()
-            self._update_save_state_chip()
-            if getattr(self, "_deferred_save_id", None):
-                GLib.source_remove(self._deferred_save_id); self._deferred_save_id = None
-            config.last_dir=str(Path(path).parent); config.add_recent(path); config.save(); self._rebuild_recent_menu()
-            self._index_service(path, data)
-            self._preview._schedule_preview_update(from_save=True)
-            if getattr(self, "_close_after_save", False):
-                self._close_after_save = False
-                self.destroy()
-            return True
+            # Atomic: never leave the user's service file truncated if the
+            # write dies partway through. See atomic_write_text's docstring.
+            atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False))
         except Exception as e:
-            self._error("Error saving",str(e))
+            self._error("Error saving", str(e))
             return False
+
+        self.modified=False; self._update_title(); self._clear_autosave()
+        self._update_save_state_chip()
+        if getattr(self, "_deferred_save_id", None):
+            GLib.source_remove(self._deferred_save_id); self._deferred_save_id = None
+
+        # Post-save bookkeeping. Each step is independent, so one failing
+        # shouldn't skip the rest; failures are surfaced as a toast rather than
+        # swallowed, since they mean a real feature (recent files, the Past
+        # Liturgies index, the live preview) has quietly stopped working.
+        for what, step in (
+            ("update recent files", lambda: (
+                setattr(config, "last_dir", str(Path(path).parent)),
+                config.add_recent(path), config.save(), self._rebuild_recent_menu())),
+            ("update the services library", lambda: self._index_service(path, data)),
+            ("refresh the preview", lambda: self._preview._schedule_preview_update(from_save=True)),
+        ):
+            try:
+                step()
+            except Exception as e:
+                toast = Adw.Toast.new(f"Saved, but couldn't {what}: {e}")
+                toast.set_timeout(6)
+                self._toast_overlay.add_toast(toast)
+
+        if getattr(self, "_close_after_save", False):
+            self._close_after_save = False
+            self.destroy()
+        return True
 
     def _index_service(self, path: str, data: dict | None = None):
         """Index service elements and organizational metadata into the library DB

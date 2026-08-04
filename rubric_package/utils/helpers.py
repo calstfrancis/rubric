@@ -8,6 +8,34 @@ import tempfile
 from pathlib import Path
 
 
+def atomic_write_text(path: str | Path, text: str, encoding: str = "utf-8") -> None:
+    """Write `text` to `path` so the file is never left half-written.
+
+    A crash, a full disk, or an exception partway through a plain
+    ``open(path, "w")`` truncates the existing file and loses its contents —
+    which for a service file means losing the user's work. Writing to a temp
+    file in the same directory, flushing it to disk, and renaming over the
+    target makes the swap atomic: a reader sees either the complete old file
+    or the complete new one, never a truncated hybrid.
+
+    The temp file goes beside the target, not in /tmp, because ``os.replace``
+    is only atomic within a single filesystem.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
 def flatpak_git_prefix() -> list[str]:
     """Return the git command prefix, routed through the host when sandboxed."""
     return ["flatpak-spawn", "--host", "git"] if Path("/.flatpak-info").exists() else ["git"]
