@@ -13,7 +13,7 @@ from __future__ import annotations
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, Gdk
+from gi.repository import Gtk, Adw, Gdk, Pango
 
 from rubric_package.models.config import config
 from rubric_package.views.element_content import ElementContentWidget
@@ -279,7 +279,42 @@ class OrderPanel:
 
         notes_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        # ── Combined single-line item toolbar (revealed when item is selected) ─
+        # ── Element header ────────────────────────────────────────────────────
+        # The mockup's right pane opens with the element's name and a one-line
+        # summary of who leads it, then the content. The editable fields for all
+        # that live behind "Details" rather than as three rows of form controls
+        # standing between you and the text.
+        elem_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        elem_hdr.set_margin_start(16); elem_hdr.set_margin_end(10)
+        elem_hdr.set_margin_top(12); elem_hdr.set_margin_bottom(6)
+
+        _hdr_text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        _hdr_text.set_hexpand(True)
+        self._main._elem_title_lbl = Gtk.Label()
+        self._main._elem_title_lbl.add_css_class("elem-heading")
+        self._main._elem_title_lbl.set_xalign(0)
+        self._main._elem_title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        _hdr_text.append(self._main._elem_title_lbl)
+        self._main._elem_sub_lbl = Gtk.Label()
+        self._main._elem_sub_lbl.add_css_class("elem-subheading")
+        self._main._elem_sub_lbl.set_xalign(0)
+        self._main._elem_sub_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        _hdr_text.append(self._main._elem_sub_lbl)
+        elem_hdr.append(_hdr_text)
+
+        self._main._details_btn = Gtk.ToggleButton(label="Details")
+        self._main._details_btn.add_css_class("flat")
+        self._main._details_btn.add_css_class("details-btn")
+        self._main._details_btn.set_valign(Gtk.Align.CENTER)
+        self._main._details_btn.set_tooltip_text(
+            "Leader, duration, bulletin options, scripture and hymn lookup")
+        elem_hdr.append(self._main._details_btn)
+
+        self._main._elem_header = elem_hdr
+        elem_hdr.set_visible(False)
+        notes_box.append(elem_hdr)
+
+        # ── Combined single-line item toolbar (revealed via Details) ───────────
         self._main.item_toolbar_revealer = Gtk.Revealer()
         self._main.item_toolbar_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self._main.item_toolbar_revealer.set_transition_duration(150)
@@ -382,6 +417,14 @@ class OrderPanel:
 
         self._main.item_toolbar_revealer.set_child(itb_rows)
         notes_box.append(self._main.item_toolbar_revealer)
+
+        def _on_details_toggled(btn):
+            self._main.item_toolbar_revealer.set_reveal_child(btn.get_active())
+            config.element_details_open = btn.get_active()
+            config.save()
+        self._main._details_btn.set_active(config.element_details_open)
+        self._main.item_toolbar_revealer.set_reveal_child(config.element_details_open)
+        self._main._details_btn.connect("toggled", _on_details_toggled)
         self._main.hymn_revealer = self._main.item_toolbar_revealer
         self._main.leader_revealer = self._main.item_toolbar_revealer
 

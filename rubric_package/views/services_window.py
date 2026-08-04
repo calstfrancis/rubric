@@ -650,7 +650,7 @@ class ServicesWindow(Adw.Window):
         fav_btn.connect("clicked", lambda _b, nk=entry["name_key"], fav=entry.get("favorite"): self._on_lib_toggle_favorite(nk, not fav))
         top_row.append(fav_btn)
 
-        tag_btn = Gtk.Button(icon_name="tag-symbolic", tooltip_text="Edit tags & notes…")
+        tag_btn = Gtk.Button(icon_name="user-bookmarks-symbolic", tooltip_text="Edit tags & notes…")
         tag_btn.add_css_class("flat")
         tag_btn.connect("clicked", lambda _b, e=entry: self._open_edit_element(e))
         top_row.append(tag_btn)

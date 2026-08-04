@@ -163,13 +163,17 @@ class ElementContentWidget(Gtk.Box):
         if _SOURCE_OK:
             self._rich_buf = _GtkSource.Buffer()
             self._rich_view = _GtkSource.View.new_with_buffer(self._rich_buf)
-            # Space drawer: grey dots for spaces, arrows for tabs — leading only
+            # No whitespace marks. Setting types for LEADING doesn't clear the
+            # other locations GtkSourceView enables by default, so the editor was
+            # drawing an interpunct between every word and a return arrow at the
+            # end of every line — over a page of liturgy that's a screenful of
+            # noise on text meant to be read aloud.
             sd = self._rich_view.get_space_drawer()
             sd.set_enable_matrix(True)
-            sd.set_types_for_locations(
-                _GtkSource.SpaceLocationFlags.LEADING,
-                _GtkSource.SpaceTypeFlags.SPACE | _GtkSource.SpaceTypeFlags.TAB,
-            )
+            for _loc in (_GtkSource.SpaceLocationFlags.LEADING,
+                         _GtkSource.SpaceLocationFlags.INSIDE_TEXT,
+                         _GtkSource.SpaceLocationFlags.TRAILING):
+                sd.set_types_for_locations(_loc, _GtkSource.SpaceTypeFlags.NONE)
         else:
             self._rich_view = Gtk.TextView()
             self._rich_buf = self._rich_view.get_buffer()

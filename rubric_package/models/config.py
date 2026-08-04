@@ -60,6 +60,8 @@ class Config:
         self.readings_collapsed: bool = False
         # UI colour scheme: "system" | "light" | "dark"
         self.theme: str = "system"
+        # Element "Details" strip (leader, duration, scripture, hymn) expanded
+        self.element_details_open: bool = False
         self.window_sizes: dict[str, list] = {}
         self.custom_dates: list[dict] = []  # legacy; migrated into all_dates on first run
         self.all_dates: list[dict] = []
@@ -115,6 +117,7 @@ class Config:
                 self.ui_panes          = d.get("ui_panes", {})
                 self.readings_collapsed = d.get("readings_collapsed", False)
                 self.theme             = d.get("theme", "system")
+                self.element_details_open = d.get("element_details_open", False)
                 self.window_sizes      = d.get("window_sizes", {})
                 self.custom_dates      = d.get("custom_dates", [])
                 self.all_dates        = d.get("all_dates", [])
@@ -171,6 +174,7 @@ class Config:
             "ui_panes":              self.ui_panes,
             "readings_collapsed":    self.readings_collapsed,
             "theme":                 self.theme,
+            "element_details_open":  self.element_details_open,
             "window_sizes":          self.window_sizes,
             "custom_dates":          self.custom_dates,
             "all_dates":             self.all_dates,

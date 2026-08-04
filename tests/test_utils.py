@@ -276,10 +276,23 @@ class TestSectionColour(unittest.TestCase):
         self.assertTrue(c1.startswith("#"))
         self.assertTrue(c2.startswith("#"))
 
-    def test_unknown_section_returns_gray(self):
-        """Unknown section returns gray."""
+    def test_unknown_section_gets_a_palette_colour(self):
+        """A section that isn't in the palette still gets a section colour.
+
+        Real services are full of renamed dividers ("Responding", "Prelude &
+        Gathering"); dropping those to grey made a service look half-uncoloured,
+        so an unrecognised name is hashed into the same family instead.
+        """
         result = section_colour("UnknownSection")
-        self.assertEqual(result, "#888780")
+        self.assertIn(result, SECTION_COLORS)
+
+    def test_blank_section_returns_gray(self):
+        """Only a genuinely empty name falls back to the neutral."""
+        self.assertEqual(section_colour("   "), "#888780")
+
+    def test_unknown_section_colour_is_stable(self):
+        """The same name always gets the same colour."""
+        self.assertEqual(section_colour("Responding"), section_colour("Responding"))
 
     def test_returns_color_from_palette(self):
         """Color is selected from palette."""

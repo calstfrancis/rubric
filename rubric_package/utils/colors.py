@@ -98,7 +98,19 @@ def section_colour(section: str, config: Config | None = None,
     try:
         return table[secs.index(section) % len(table)]
     except ValueError:
+        pass
+
+    # Not one of the configured sections — a renamed or ad-hoc divider. Derive a
+    # stable colour from the name rather than dropping to grey: every section in
+    # a service should read as a section, and a real service is full of dividers
+    # that don't happen to match the default palette's wording.
+    name = (section or "").strip()
+    if not name:
         return fallback
+    h = 0
+    for b in name.encode("utf-8"):
+        h = (h * 31 + b) & 0xFFFFFFFF
+    return table[h % len(table)]
 
 
 def rubric_red(dark: bool | None = None) -> str:

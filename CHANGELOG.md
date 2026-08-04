@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev8] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev9] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -52,12 +52,19 @@ All notable changes are documented here, newest first.
   themselves are plain dim text.
 - **Section headers read as one label**: `GATHERING · 12 MIN`, uppercase and letterspaced,
   instead of a title with its count flung to the far side of a hairline rule.
+- **The editor opens with the element, not a form.** The right-hand pane now leads with the
+  element's name and a one-line summary of who leads it and how long it runs. Leader, duration,
+  bulletin options, scripture and hymn lookup moved behind a **Details** toggle that remembers
+  whether you left it open — three rows of form controls used to stand between you and the text
+  you were writing.
 - **Smaller chrome corrections toward the same design:** the service title has no frame around
-  it and spells out "· unsaved" rather than showing a bullet; Preview is the one bordered
-  control in the header; the content editor is the pane itself rather than a card floating in
+  it and spells out "· unsaved" rather than showing a bullet; Preview is a hairline pill rather
+  than a framed button; the content editor is the pane itself rather than a card floating in
   it, with the formatting toolbar dimmed until you reach for it; active status-bar toggles are
-  bold text instead of filled pills, and Focus sits beside Simple; and the pane behind the
-  section cards is recessed enough to actually see in the light theme.
+  bold text instead of filled pills, Focus sits beside Simple, and the word count is plain text
+  rather than a chip; and the pane behind the section cards uses the theme's own window and
+  card surfaces — the pair Adwaita already defines for sidebars — instead of a grey tint
+  computed on top of them.
 - **The Service Notes strip appears only when the service has notes.** An empty one was a
   full-width row spent on nothing; "Service notes…" in the menu opens it when there's nothing
   there yet.
@@ -92,6 +99,18 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **Seven icons were drawing the missing-icon fallback.** Adwaita has dropped the legacy
+  non-symbolic names, so `sidebar-show`, `edit-undo`, `edit-redo` and four others resolved to
+  nothing — including the sidebar toggle, the first control in the header bar. All of them now
+  point at names that exist.
+- **Every section gets a colour, not just the ones named in the palette.** A divider called
+  anything other than the four defaults fell back to grey, so a real service came out
+  half-uncoloured. Unrecognised names are now hashed into the same colour family, consistently
+  for a given name; grey is reserved for a genuinely blank one.
+- **The content editor no longer draws whitespace marks.** It was showing an interpunct between
+  every word and a return arrow at the end of every line — a screenful of noise over text meant
+  to be read aloud. Setting the space drawer for leading whitespace doesn't clear the other
+  locations GtkSourceView enables by default, which is how they got there.
 - **`capture-screenshots.sh` no longer opens windows in a running Rubric.** It isolated the
   display, the home directory and the XDG dirs, but not the session D-Bus bus — so with Rubric
   already open, the throwaway instance handed off to the real one, which opened a new window

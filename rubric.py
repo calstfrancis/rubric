@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev8"
+APP_VERSION = "0.20.0-dev9"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -273,9 +273,9 @@ class MainWindow(Adw.ApplicationWindow):
         simple = config.simple_mode
         if hasattr(self, "_simple_status_lbl"):
             if simple:
-                self._simple_status_lbl.set_markup("<b>SIMPLE</b>")
+                self._simple_status_lbl.set_markup("<b>Simple</b>")
             else:
-                self._simple_status_lbl.set_text("SIMPLE")
+                self._simple_status_lbl.set_text("Simple")
         if hasattr(self, "_simple_status_btn"):
             self._toggle_chip(self._simple_status_btn, simple)
         if hasattr(self, "_dev_status_btn"):
@@ -891,6 +891,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         tl = Gtk.EditableLabel(text=div.title); tl.add_css_class("section-title")
         tl.set_valign(Gtk.Align.CENTER)
+        # An EditableLabel reserves room for its editing state, which opened a
+        # gap between the title and its meta. Hug the text instead.
+        tl.set_halign(Gtk.Align.START); tl.set_hexpand(False)
+        tl.set_max_width_chars(len(div.title) + 1)
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
         bx.append(tl)
 
@@ -1231,6 +1235,26 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_tab_row_selected(self, row):
         self._handle_selection(row)
 
+    def _update_element_header(self, si):
+        """Name the selected element, with a one-line summary beneath it.
+
+        Mirrors the mockup's right pane: "Call to Worship" over
+        "Worship Leader · responsive". Anything absent is simply left out
+        rather than shown as an empty field.
+        """
+        self._elem_title_lbl.set_text(si.name)
+        bits = []
+        if si.leader:
+            bits.append(si.leader)
+        mins = getattr(si, "duration", 0) or 0
+        if mins:
+            bits.append(f"{mins} min")
+        ref = self._scripture_inline_preview(si.name)
+        if ref:
+            bits.append(ref)
+        self._elem_sub_lbl.set_text(" · ".join(bits))
+        self._elem_sub_lbl.set_visible(bool(bits))
+
     def _handle_selection(self, row):
         self._updating_note = True
         self._leader_undo_pushed = False
@@ -1240,8 +1264,11 @@ class MainWindow(Adw.ApplicationWindow):
             except ValueError: self._selected_global_idx = -1
             self._content_widget.set_content(si.content_typst)
             self._content_widget.set_rubric_note(getattr(si, "rubric_note", ""))
-            # Show the combined toolbar
-            self.item_toolbar_revealer.set_reveal_child(True)
+            # The header names the element; the editable fields stay behind
+            # Details, wherever the user last left that toggle.
+            self._elem_header.set_visible(True)
+            self._update_element_header(si)
+            self.item_toolbar_revealer.set_reveal_child(self._details_btn.get_active())
             self.leader_entry.set_text(si.leader)
             # Bulletin heading-only toggle — update label without triggering handler
             _bho = getattr(si, "bulletin_heading_only", False)
@@ -1266,6 +1293,7 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._selected_global_idx = -1
             self._content_widget.set_content("")
+            self._elem_header.set_visible(False)
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
             self.duration_spin.set_value(0)
@@ -2774,7 +2802,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _show_ui_help_popover(self, _btn=None):
         _AREAS = [
-            ("sidebar-show", "Element palette (left panel)",
+            ("sidebar-show-symbolic", "Element palette (left panel)",
              "Drag elements from here into your service order — hymns, prayers, scripture, and more."),
             ("view-list-symbolic", "Service order (centre)",
              "Your running order. Click any row to edit its name, notes, or bulletin text. "
@@ -3699,6 +3727,7 @@ class MainWindow(Adw.ApplicationWindow):
         if who is not None:
             who.set_label(entry_obj.leader or "")
             who.set_visible(bool(entry_obj.leader))
+        self._update_element_header(entry_obj)
         self._mark_modified()
 
     def _on_bulletin_toggled(self, _btn):
@@ -5055,9 +5084,11 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
 /* The list sits on a recessed ground so the grouped sections read as cards */
 .order-list { background: transparent; }
-/* The recessed pane the section cards sit on. Needs to be readable as a
-   different surface from the cards in both schemes, not a 2% hint. */
-.order-ground { background: alpha(@window_fg_color, 0.06); }
+/* The recessed pane the section cards sit on: the theme's own window surface,
+   with the cards on its card surface. Adwaita already defines this pair for
+   sidebars, so using the named colours follows the system palette exactly
+   rather than washing a computed grey over it. */
+.order-ground { background: @window_bg_color; }
 /* Reading chips: quiet text, not tinted pills. The liturgical colour is said
    once by the swatch beside the season name and nowhere else. */
 button.reading-chip { background: transparent; box-shadow: none; border: none; }
@@ -5098,13 +5129,18 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 headerbar .title-btn,
 headerbar .title-btn:hover { background: transparent; box-shadow: none; border: none; }
 headerbar .title-btn:hover label { opacity: 0.75; }
-/* Preview reads as a pill, the one bordered control in the header */
+/* Preview: a hairline pill, matching the mockup. It was reading as a heavy
+   framed button because it drew a full-strength border on top of the flat
+   button's own background. */
 .preview-pill {
-  border: 1px solid alpha(@borders, 0.9);
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid alpha(@borders, 0.55);
   border-radius: 9999px;
   padding: 2px 14px;
   min-width: 0;
 }
+.preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
 /* Editor surface is the pane itself, not a card floating in it */
 .elem-editor { border: none; box-shadow: none; background: transparent; }
 /* Formatting toolbar: quiet until used */
@@ -5149,6 +5185,11 @@ headerbar .title-btn:hover label { opacity: 0.75; }
 .elem-detail { font-size: 0.88em; opacity: 0.55; }
 .elem-who { font-size: 0.88em; opacity: 0.6; }
 .elem-cue { font-size: 0.62em; }
+/* Editor pane header: the element's name, then who leads it */
+.elem-heading { font-size: 1.3em; font-weight: 700; }
+.elem-subheading { font-size: 0.88em; opacity: 0.6; }
+.details-btn { opacity: 0.6; font-size: 0.9em; }
+.details-btn:hover, .details-btn:checked { opacity: 1; }
 .cue-plain { opacity: 0.28; }
 .compact-mode .elem-row > box { margin-top: 2px; margin-bottom: 2px; }
 /* Section rule: hairline running to the end of the header row */
@@ -5167,6 +5208,7 @@ headerbar .title-btn:hover label { opacity: 0.75; }
    and give each section the boxed-list look without restructuring. */
 .order-list row.sec-item {
   background: @card_bg_color;
+  color: @window_fg_color;
   border-left: 1px solid alpha(@borders, 0.55);
   border-right: 1px solid alpha(@borders, 0.55);
 }
@@ -5184,8 +5226,8 @@ headerbar .title-btn:hover label { opacity: 0.75; }
 /* Active status-bar toggle: weight, not a filled pill */
 .mode-btn-active { background: transparent; }
 .mode-btn-active label { font-weight: 700; color: @window_fg_color; }
-/* Metric pill chips (time bar, word count) */
-.metric-pill { background: alpha(@headerbar_shade_color, 0.5); border-radius: 9999px; padding: 1px 7px; }
+/* Metric readouts are plain text - the mockup's status bar has no filled chips */
+.metric-pill { background: transparent; padding: 1px 4px; }
 /* Planning notes header: pointer cursor + subtle hover */
 .notes-header { border-radius: 4px; }
 /* Pop-out button appears only when you're over the notes header */

@@ -35,7 +35,7 @@ class MainChrome:
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         # Palette sidebar toggle — all the way at the left
-        self._main._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show",
+        self._main._sidebar_btn = Gtk.ToggleButton(icon_name="sidebar-show-symbolic",
                                              tooltip_text="Show/hide elements panel")
         self._main._sidebar_btn.set_active(False)
         self._main._sidebar_btn.add_css_class("flat")
@@ -51,10 +51,10 @@ class MainChrome:
         new_btn.connect("clicked", lambda _: self._main.new_service())
         hdr.pack_start(new_btn)
 
-        self._main.undo_btn = Gtk.Button(icon_name="edit-undo", tooltip_text="Undo (Ctrl+Z)")
+        self._main.undo_btn = Gtk.Button(icon_name="edit-undo-symbolic", tooltip_text="Undo (Ctrl+Z)")
         self._main.undo_btn.connect("clicked", lambda _: self._main.undo())
         self._main.undo_btn.set_sensitive(False)
-        self._main.redo_btn = Gtk.Button(icon_name="edit-redo", tooltip_text="Redo (Ctrl+Shift+Z)")
+        self._main.redo_btn = Gtk.Button(icon_name="edit-redo-symbolic", tooltip_text="Redo (Ctrl+Shift+Z)")
         self._main.redo_btn.connect("clicked", lambda _: self._main.redo())
         self._main.redo_btn.set_sensitive(False)
 
@@ -155,11 +155,11 @@ class MainChrome:
 
         # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
         # but not packed into the header. Use keyboard shortcuts or the hamburger menu.
-        self._main.push_btn = Gtk.Button(icon_name="emblem-synchronizing-symbolic",
+        self._main.push_btn = Gtk.Button(icon_name="folder-remote-symbolic",
                                    tooltip_text="Push to GitHub (Ctrl+Shift+G)")
         self._main.push_btn.connect("clicked", lambda _: self._main.git_push())
 
-        self._main.tex_btn = Gtk.Button(icon_name="emblem-documents-symbolic",
+        self._main.tex_btn = Gtk.Button(icon_name="text-x-generic-symbolic",
                                   tooltip_text="Export to Typst (Ctrl+E)")
         self._main.tex_btn.connect("clicked", lambda _: self._main._exporter.quick_export_typst())
 
@@ -201,7 +201,10 @@ class MainChrome:
         hdr.pack_end(self._main._preview_btn)
 
         # Export — the one document action worth an icon, and previously buried
-        _export_btn = Gtk.Button(icon_name="document-save-symbolic",
+        # document-save-symbolic renders as a floppy in this icon theme; the
+        # mockup's glyph is a downward arrow, which is also what "export" means
+        # to anyone who hasn't used a floppy disk.
+        _export_btn = Gtk.Button(icon_name="document-send-symbolic",
                                  tooltip_text="Export as… (bulletin, manuscript, Typst, PDF)")
         _export_btn.add_css_class("flat")
         _export_btn.set_action_name("win.export-as")
@@ -234,7 +237,7 @@ class MainChrome:
         _left_box.set_margin_start(2)
 
         self._main._simple_status_btn, self._main._simple_status_lbl = _status_toggle_btn(
-            "SIMPLE", "Simple mode — hides export, GitHub sync and other advanced options. Good for first-time use.")
+            "Simple", "Simple mode — hides export, GitHub sync and other advanced options. Good for first-time use.")
         self._main._simple_status_btn.connect("clicked", self._main._on_simple_status_clicked)
         _left_box.append(self._main._simple_status_btn)
 
@@ -247,7 +250,7 @@ class MainChrome:
         _left_box.append(self._main._focus_status_btn)
 
         self._main._gost_status_btn, self._main._gost_status_lbl = _status_toggle_btn(
-            "GOST", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
+            "GOST font", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
         self._main._gost_status_btn.connect("clicked", self._main._on_gost_status_clicked)
 
         self._main._compact_status_btn, self._main._compact_status_lbl = _status_toggle_btn(
