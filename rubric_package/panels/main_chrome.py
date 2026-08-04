@@ -42,31 +42,21 @@ class MainChrome:
         self._main._sidebar_btn.connect("toggled", self._main._toggle_palette_sidebar)
         hdr.pack_start(self._main._sidebar_btn)
 
-        # New + Open as a linked pill
-        doc_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        doc_box.add_css_class("linked")
-        for icon, tip, cb in [("document-new", "New service (Ctrl+N)", self._main.new_service),
-                               ("document-open", "Open… (Ctrl+O)", self._main.open_file)]:
-            b = Gtk.Button(icon_name=icon, tooltip_text=tip)
-            b.connect("clicked", lambda _, f=cb: f())
-            doc_box.append(b)
-        hdr.pack_start(doc_box)
+        # Ambo's header set: sidebar | new | [title] | Preview | export | menu.
+        # Open, Undo and Redo keep their shortcuts (Ctrl+O / Ctrl+Z / Ctrl+Shift+Z)
+        # and menu entries; they're no longer icons sitting on the bar.
+        new_btn = Gtk.Button(icon_name="document-new-symbolic",
+                             tooltip_text="New service (Ctrl+N)")
+        new_btn.add_css_class("flat")
+        new_btn.connect("clicked", lambda _: self._main.new_service())
+        hdr.pack_start(new_btn)
 
-        # New Window lives in the hamburger menu (Ctrl+Shift+N) — the header
-        # bar keeps only the controls used every session.
-
-        # Undo + Redo as a linked pill
-        edit_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        edit_box.add_css_class("linked")
         self._main.undo_btn = Gtk.Button(icon_name="edit-undo", tooltip_text="Undo (Ctrl+Z)")
-        self._main.undo_btn.connect("clicked", lambda _: self._main.undo()); self._main.undo_btn.set_sensitive(False)
+        self._main.undo_btn.connect("clicked", lambda _: self._main.undo())
+        self._main.undo_btn.set_sensitive(False)
         self._main.redo_btn = Gtk.Button(icon_name="edit-redo", tooltip_text="Redo (Ctrl+Shift+Z)")
-        self._main.redo_btn.connect("clicked", lambda _: self._main.redo()); self._main.redo_btn.set_sensitive(False)
-        edit_box.append(self._main.undo_btn); edit_box.append(self._main.redo_btn)
-        hdr.pack_start(edit_box)
-
-        # Services library lives in the hamburger ("Services…"); the header
-        # bar keeps only what gets used every session.
+        self._main.redo_btn.connect("clicked", lambda _: self._main.redo())
+        self._main.redo_btn.set_sensitive(False)
 
         # Title widget lives inside a MenuButton so clicking it opens the service info popover
         self._main.title_widget = Adw.WindowTitle(title="Rubric", subtitle="New service")
@@ -208,6 +198,13 @@ class MainChrome:
         self._main._preview_btn.connect("clicked", self._main._preview._toggle_preview_panel)
         hdr.pack_end(self._main._preview_btn)
 
+        # Export — the one document action worth an icon, and previously buried
+        _export_btn = Gtk.Button(icon_name="document-save-symbolic",
+                                 tooltip_text="Export as… (bulletin, manuscript, Typst, PDF)")
+        _export_btn.add_css_class("flat")
+        _export_btn.set_action_name("win.export-as")
+        hdr.pack_end(_export_btn)
+
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
 
         # ── Status bar ────────────────────────────────────────────────────────
@@ -246,7 +243,6 @@ class MainChrome:
         self._main._compact_status_btn, self._main._compact_status_lbl = _status_toggle_btn(
             "Compact", "Compact view — reduces spacing between service elements so more fit on screen at once")
         self._main._compact_status_btn.connect("clicked", self._main._on_compact_status_clicked)
-        _left_box.append(self._main._compact_status_btn)
 
         self._main._dev_status_btn, self._main._dev_status_lbl = _status_toggle_btn(
             "Dev", "Developer mode — shows a 'Copy Typst source' button in the preview panel for debugging bulletin layout")
@@ -286,7 +282,8 @@ class MainChrome:
         self._main._events_btn.set_popover(_evpop)
         self._main._events_btn.add_css_class("flat")
         self._main._events_btn.set_visible(False)
-        status_bar.append(self._main._events_btn)
+        # The liturgical-events popover is a lookup, not a status — it moved to
+        # the hamburger. Ambo's status bar reports state and nothing else.
 
         _right_spacer = Gtk.Box(); _right_spacer.set_hexpand(True)
         status_bar.append(_right_spacer)

@@ -138,7 +138,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev6"
+APP_VERSION = "0.20.0-dev7"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -367,12 +367,21 @@ class MainWindow(Adw.ApplicationWindow):
         except Exception as e:
             self._show_toast(f"Error: {e}", timeout=3)
 
+    def _set_theme(self, choice: str):
+        config.theme = choice
+        config.save()
+        _apply_theme()
+        toast = Adw.Toast.new(f"Theme: {choice.capitalize() if choice != 'system' else 'System'}")
+        toast.set_timeout(2)
+        self._toast_overlay.add_toast(toast)
+
     def _refresh_menu(self):
         simple = config.simple_mode
         menu = Gio.Menu()
 
         # Actions moved off the header bar keep their place here
         save_sec = Gio.Menu()
+        save_sec.append("Open… (Ctrl+O)", "win.open")
         save_sec.append("Save (Ctrl+S)", "win.save")
         save_sec.append("Save as…", "win.save-as")
         save_sec.append("New window (Ctrl+Shift+N)", "app.new-window")
@@ -380,7 +389,13 @@ class MainWindow(Adw.ApplicationWindow):
 
         menu.append("Preferences", "win.preferences")
         menu.append("Bulletin settings…", "win.open-bulletin-prefs")
+        add_sec = Gio.Menu()
+        add_sec.append("Add element (Ctrl+Shift+N)", "win.add-custom")
+        add_sec.append("Add section (Ctrl+D)", "win.add-divider")
+        menu.append_section(None, add_sec)
+
         menu.append("Duplicate service", "win.duplicate")
+        menu.append("Liturgical calendar…", "win.liturgical-events")
         if not simple:
             menu.append("Save order as template…", "win.save-template")
 
@@ -400,9 +415,16 @@ class MainWindow(Adw.ApplicationWindow):
             adv_sec = Gio.Menu()
             adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
             adv_sec.append("Document template", "win.toggle-template")
+            adv_sec.append("Compact view", "win.toggle-compact")
             adv_sec.append("GOST interface font", "win.toggle-gost")
             adv_sec.append("Developer mode", "win.toggle-dev")
             menu.append_section("Advanced", adv_sec)
+
+        theme_sec = Gio.Menu()
+        theme_sec.append("System theme", "win.theme-system")
+        theme_sec.append("Light", "win.theme-light")
+        theme_sec.append("Dark", "win.theme-dark")
+        menu.append_submenu("Appearance", theme_sec)
 
         menu.append("What's on screen?", "win.ui-help")
         menu.append("Help…", "win.open-help")
@@ -436,6 +458,11 @@ class MainWindow(Adw.ApplicationWindow):
             ("ui-help",       self._show_ui_help_popover, None),
             # Toggles moved off the status bar into the hamburger menu
             ("toggle-gost",     lambda: self._on_gost_status_clicked(None),    None),
+            ("toggle-compact",  lambda: self._on_compact_status_clicked(None), None),
+            ("liturgical-events", self._show_liturgical_events, None),
+            ("theme-system",  lambda: self._set_theme("system"), None),
+            ("theme-light",   lambda: self._set_theme("light"),  None),
+            ("theme-dark",    lambda: self._set_theme("dark"),   None),
             ("toggle-dev",      lambda: self._on_dev_status_clicked(None),     None),
             ("toggle-template", lambda: self._on_preamble_clicked(None),       None),
             ("clear-recent",       self._clear_recent,      None),
@@ -630,45 +657,136 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Row factories ─────────────────────────────────────────────────────────
 
-    def _make_item_row(self, si: ServiceItem, global_idx: int) -> Adw.ActionRow:
-        preview = self._note_preview(si.content_typst) or self._scripture_inline_preview(si.name)
-        if si.leader and preview:
-            subtitle_text = f"{si.leader} · {preview}"
-        else:
-            subtitle_text = si.leader or preview
-        row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
-        row.set_subtitle_lines(1); row._entry = si
-        # Section colour is carried by the section header alone — element rows
-        # stay neutral so a long service doesn't read as a stack of stripes.
+    def _make_item_row(self, si: ServiceItem, global_idx: int) -> Gtk.ListBoxRow:
+        """One element, on one line.
+
+        Ambo's row: a type cue, the title, a dim detail (hymn number or
+        scripture reference), and the leader pushed to the right edge. The old
+        two-line ActionRow stacked the leader and a content preview under the
+        title, which doubled the height of every service and buried the titles.
+        """
+        row = Gtk.ListBoxRow()
+        row._entry = si
         row.add_css_class("sec-item")
-        # User-assigned icon takes priority; fall back to auto type icon
+        row.add_css_class("elem-row")
+
+        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        bx.set_margin_start(12); bx.set_margin_end(10)
+        bx.set_margin_top(6); bx.set_margin_bottom(6)
+
+        # Type cue: the element's icon where it has one, a dot where it doesn't
         user_icon = getattr(si, "icon", "")
         _ico_name = user_icon or _item_type_icon(si.name)
         if _ico_name:
-            _ico = Gtk.Image(icon_name=_ico_name, pixel_size=14)
-            _ico.add_css_class("dim-label"); _ico.set_valign(Gtk.Align.CENTER)
-            _ico.set_margin_start(2)
-            row.add_prefix(_ico)
-        handle = Gtk.Label(label="⠿")
+            cue = Gtk.Image(icon_name=_ico_name, pixel_size=14)
+        else:
+            cue = Gtk.Label(label="\u25cf")
+            cue.add_css_class("elem-cue")
+        cue.add_css_class("dim-label")
+        cue.set_valign(Gtk.Align.CENTER)
+        bx.append(cue)
+
+        title = Gtk.Label(label=si.name)
+        title.add_css_class("elem-title")
+        title.set_xalign(0)
+        title.set_ellipsize(Pango.EllipsizeMode.END)
+        bx.append(title)
+
+        # Dim detail after the title — a reference, not prose. A hymn number or
+        # scripture citation earns its place here; the opening line of the
+        # content doesn't, which is what made the old subtitle so noisy.
+        detail = self._scripture_inline_preview(si.name) or ""
+        if not detail:
+            note = (self._note_preview(si.content_typst) or "").strip()
+            if note and len(note) <= 22:
+                detail = note
+        if detail:
+            dl = Gtk.Label(label=detail)
+            dl.add_css_class("elem-detail")
+            dl.set_xalign(0)
+            dl.set_ellipsize(Pango.EllipsizeMode.END)
+            bx.append(dl)
+
+        spacer = Gtk.Box(); spacer.set_hexpand(True); bx.append(spacer)
+
+        who = Gtk.Label(label=si.leader or "")
+        who.add_css_class("elem-who")
+        who.set_ellipsize(Pango.EllipsizeMode.END)
+        who.set_visible(bool(si.leader))
+        row._who_lbl = who
+        bx.append(who)
+
+        handle = Gtk.Label(label="\u283f")
         handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
         handle.set_cursor(Gdk.Cursor.new_from_name("grab"))
-        row.add_suffix(handle)
+        bx.append(handle)
+
+        row.set_child(bx)
+
+        # Right-click: the reorder/remove actions that used to sit in a button
+        # bar under the list. Selecting first means the actions (which work on
+        # the selection) apply to the row you actually clicked.
+        ctx = Gtk.GestureClick(); ctx.set_button(3)
+        def _on_ctx(_g, _n, x, y, r=row):
+            lb = r.get_parent()
+            if isinstance(lb, Gtk.ListBox):
+                lb.select_row(r)
+            menu = Gio.Menu()
+            menu.append("Move up (Ctrl+\u2191)", "win.move-up")
+            menu.append("Move down (Ctrl+\u2193)", "win.move-down")
+            rm_sec = Gio.Menu()
+            rm_sec.append("Remove (Delete)", "win.remove-item")
+            menu.append_section(None, rm_sec)
+            pop = Gtk.PopoverMenu.new_from_model(menu)
+            pop.set_parent(r)
+            pop.set_pointing_to(Gdk.Rectangle(x=int(x), y=int(y), width=1, height=1))
+            pop.connect("closed", lambda p: p.unparent())
+            pop.popup()
+        ctx.connect("pressed", _on_ctx)
+        row.add_controller(ctx)
+
         if not si.show_in_bulletin:
             row.set_opacity(0.45)
         elif getattr(si, "bulletin_heading_only", False):
             row.set_opacity(0.7)
         self._attach_dnd(row, global_idx); return row
 
+    def _make_add_bar(self, with_section: bool) -> Gtk.Widget:
+        """A quiet '+ Add element' line under a list.
+
+        Kept outside the ListBox on purpose: the drag-and-drop code addresses
+        rows by index and assumes row N is service_entries[N], so an extra
+        non-entry row inside the list would break reordering.
+        """
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        bar.add_css_class("add-bar")
+        bar.set_margin_start(16); bar.set_margin_end(16)
+        bar.set_margin_top(2); bar.set_margin_bottom(10)
+
+        add_el = Gtk.Button(label="+  Add element")
+        add_el.add_css_class("flat"); add_el.add_css_class("add-btn")
+        add_el.set_tooltip_text("Add a custom element (Ctrl+Shift+N)")
+        add_el.connect("clicked", lambda _: self.add_custom())
+        bar.append(add_el)
+
+        if with_section:
+            add_sec = Gtk.Button(label="+  Add section")
+            add_sec.add_css_class("flat"); add_sec.add_css_class("add-btn")
+            add_sec.set_tooltip_text("Add a section divider (Ctrl+D)")
+            add_sec.connect("clicked", lambda _: self.add_divider())
+            bar.append(add_sec)
+        return bar
+
     def _section_meta_text(self, items) -> str:
-        """'4 · 12 min' — element count and running time for one section."""
+        """Running time for a section, or its element count if nothing is timed."""
         if not items:
             return "empty"
-        n = len(items)
         mins = sum(getattr(e, "duration", 0) or 0 for e in items)
         if mins:
-            return f"{n} · {mins} min"
-        return f"{n}"
+            return f"{mins} min"
+        n = len(items)
+        return f"{n} element" + ("" if n == 1 else "s")
 
     def _section_meta(self, global_idx: int) -> str:
         """Section meta for the section starting at the divider at `global_idx`."""
@@ -703,16 +821,12 @@ class MainWindow(Adw.ApplicationWindow):
         lbl.set_valign(Gtk.Align.CENTER)
         bx.append(lbl)
 
-        meta = Gtk.Label(label=self._section_meta_text(items))
+        meta = Gtk.Label(label="\u00b7 " + self._section_meta_text(items))
         meta.add_css_class("section-meta")
         meta.set_valign(Gtk.Align.CENTER)
-        meta.set_margin_start(4)
         bx.append(meta)
 
-        rule = Gtk.Box(); rule.set_hexpand(True); rule.set_valign(Gtk.Align.CENTER)
-        rule.add_css_class("section-rule"); rule.set_size_request(-1, 1)
-        rule.set_margin_start(8)
-        bx.append(rule)
+        spacer = Gtk.Box(); spacer.set_hexpand(True); bx.append(spacer)
         return bx
 
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
@@ -1002,7 +1116,11 @@ class MainWindow(Adw.ApplicationWindow):
                 if pos == 0: row.add_css_class("sec-first")
                 if pos == len(items) - 1: row.add_css_class("sec-last")
                 lb.append(row)
-            scroll.set_child(lb); self._tab_listboxes.append((div, lb))
+            _page_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            _page_inner.set_valign(Gtk.Align.START)   # hug the card, don't fill
+            _page_inner.append(lb)
+            _page_inner.append(self._make_add_bar(with_section=False))
+            scroll.set_child(_page_inner); self._tab_listboxes.append((div, lb))
             # Cross-tab drop target on the scroll widget
             tab_drop = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
             def on_cross_drop(_t, value, _x, _y, sec_div=div, sec_items=list(items)):
@@ -1463,11 +1581,8 @@ class MainWindow(Adw.ApplicationWindow):
         if not isinstance(entry, ServiceItem):
             return
         entry.content_typst = content
-        row = self._find_row_for_index(idx)
-        if isinstance(row, Adw.ActionRow):
-            preview = self._note_preview(content) or self._scripture_inline_preview(entry.name)
-            sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
-            row.set_subtitle(sub)
+        # Rows are single-line now and show the leader, not a content preview,
+        # so editing content no longer changes anything on the row itself.
         self._mark_modified()
         self._detect_scripture_ref(content)
         self._update_word_count()
@@ -1716,6 +1831,24 @@ class MainWindow(Adw.ApplicationWindow):
         # Update observances row
         self._refresh_observances_row(self._readings_sunday or d)
 
+    def _show_liturgical_events(self):
+        """Show the day's observances, anchored to the hamburger.
+
+        The button that used to carry this lived in the status bar; the content
+        is unchanged, it's just reached from the menu now.
+        """
+        box = getattr(self, "_events_popover_box", None)
+        if box is None:
+            return
+        parent = box.get_parent()
+        if parent is not None:
+            parent.set_child(None)
+        pop = Gtk.Popover()
+        pop.set_child(box)
+        pop.set_parent(getattr(self, "_menu_btn", self))
+        pop.connect("closed", lambda p: (p.set_child(None), p.unparent()))
+        pop.popup()
+
     def _refresh_observances_row(self, d) -> None:
         """Rebuild the events popover button and content for date d."""
         btn = getattr(self, "_events_btn", None)
@@ -1919,7 +2052,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self._order_hpaned.set_position(44)
                 self._refresh_focus_spine()
                 self._view_stack.set_visible_child_name("spine")
-                self._order_btn_bar.set_visible(False)
             self._apply_focus_measure(True)
             idx = self._selected_index()
             if 0 <= idx < len(self.service_entries):
@@ -1932,7 +2064,6 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._focus_banner.set_reveal_child(False)
             self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
-            self._order_btn_bar.set_visible(True)
             self._apply_focus_measure(False)
             self._order_hpaned.set_shrink_start_child(False)
             self._order_hpaned.set_position(getattr(self, "_pre_focus_order_pos", 260))
@@ -3513,10 +3644,14 @@ class MainWindow(Adw.ApplicationWindow):
             self._push_undo()
             self._leader_undo_pushed = True
         entry_obj.leader = entry.get_text()
+        # The leader is the row's right-hand column now. Update that one label in
+        # place — rebuilding the list on every keystroke would steal focus from
+        # the entry being typed into.
         row = self._find_row_for_index(idx)
-        if isinstance(row, Adw.ActionRow):
-            row.set_subtitle(entry_obj.leader if entry_obj.leader
-                             else self._note_preview(entry_obj.content_typst))
+        who = getattr(row, "_who_lbl", None)
+        if who is not None:
+            who.set_label(entry_obj.leader or "")
+            who.set_visible(bool(entry_obj.leader))
         self._mark_modified()
 
     def _on_bulletin_toggled(self, _btn):
@@ -4851,6 +4986,7 @@ class LiturgyPlannerApp(Adw.Application):
             except Exception:
                 pass
             _ensure_gost_font()
+            _apply_theme()
             css = Gtk.CssProvider()
             css.load_from_data(b"""
 /* Default (non-compact): give rows comfortable breathing room */
@@ -4931,6 +5067,16 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 .order-list row.divider-row:hover .section-remove { opacity: 0.55; }
 .section-remove:hover, .section-remove:focus { opacity: 1; }
 .section-dot { font-size: 0.7em; }
+/* Add line: reads as an invitation under the list, not a toolbar */
+.add-btn { opacity: 0.55; padding: 2px 6px; min-height: 0; }
+.add-btn:hover { opacity: 1; }
+/* Single-line element rows */
+.elem-row { min-height: 0; }
+.elem-title { font-size: 0.98em; }
+.elem-detail { font-size: 0.88em; opacity: 0.55; }
+.elem-who { font-size: 0.88em; opacity: 0.6; }
+.elem-cue { font-size: 0.55em; opacity: 0.5; }
+.compact-mode .elem-row > box { margin-top: 2px; margin-bottom: 2px; }
 /* Section rule: hairline running to the end of the header row */
 .section-rule { background: alpha(@borders, 0.45); min-height: 1px; }
 /* Divider rows themselves are not list items - no card chrome, no hover */
@@ -4984,7 +5130,10 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 /* Readings band: reference material, so it stays quiet - a small season
    swatch instead of a full-bleed coloured bar */
 .season-swatch { border-radius: 3px; }
-.readings-card { background: transparent; }
+.readings-card {
+  background: transparent;
+  border-bottom: 1px solid alpha(@borders, 0.6);
+}
 button.reading-chip { font-size: 0.9em; }
 /* Cover art thumbnail: rounded corners */
 .cover-thumb { border-radius: 4px; }
@@ -5036,6 +5185,22 @@ button.reading-chip { font-size: 0.9em; }
             self.add_action(nw_action)
             self.set_accels_for_action("app.new-window", ["<Ctrl><Shift>n"])
         MainWindow(application=app).present()
+
+def _apply_theme():
+    """Drive libadwaita's colour scheme from the stored System/Light/Dark choice.
+
+    libadwaita apps don't follow GTK or KDE themes (Breeze and friends have no
+    effect); left to itself the app takes light/dark from the desktop's
+    appearance portal. This gives an explicit override for when that isn't what
+    you want, without faking anything — no palettes are swapped, the scheme is
+    just forced and every named colour follows.
+    """
+    sm = Adw.StyleManager.get_default()
+    sm.set_color_scheme({
+        "light": Adw.ColorScheme.FORCE_LIGHT,
+        "dark":  Adw.ColorScheme.FORCE_DARK,
+    }.get(config.theme, Adw.ColorScheme.DEFAULT))
+
 
 def _ensure_gost_font():
     """Copy the bundled GOST Type B font to the user font dir and refresh fc cache."""

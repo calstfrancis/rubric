@@ -366,6 +366,7 @@ class TestOrderPanelConstruction(unittest.TestCase):
         # a bare MagicMock() fails PyGObject's type check on append().
         main._build_quickstart_banner.return_value = Gtk.Box()
         main._build_planning_notes_area.return_value = Gtk.Box()
+        main._make_add_bar.return_value = Gtk.Box()
         return main
 
     def test_build_order_panel_returns_box_and_wires_key_widgets(self):

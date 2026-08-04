@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev6] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev7] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -19,6 +19,11 @@ All notable changes are documented here, newest first.
   section and sized by duration, with the current element highlighted. Click any tick to jump
   there. The editor is now held to a reading measure and centred, so text you'll read aloud is
   set like text rather than stretched across the pane.
+- **A System / Light / Dark theme choice**, under Appearance in the menu. Rubric previously
+  had no colour-scheme handling at all, so it simply followed the desktop's appearance setting
+  with no way to override it — and because it's a libadwaita app, GTK and KDE themes like
+  Breeze never applied to it and never will. This is the supported way to force the scheme;
+  your choice is remembered between sessions.
 - **The lectionary readings fold away.** A chevron at the end of the readings row collapses it
   to just the season label, for anyone who plans from the lectionary elsewhere. The choice is
   remembered between sessions.
@@ -30,9 +35,17 @@ All notable changes are documented here, newest first.
 
 ### Changed
 
-- **The header bar is down to the controls you use every session.** New Window, Save, and
-  Quick Help moved into the hamburger menu (all three keep their keyboard shortcuts, and the
-  status bar's save-state chip is what tells you whether you need Save).
+- **The header bar is down to the controls you use every session:** the sidebar toggle, New,
+  the service title, Export, Preview, and the menu. Open, Undo, Redo, New Window, Save and
+  Quick Help all moved into the hamburger and all keep their keyboard shortcuts. Export gains
+  an icon, having previously been buried in a submenu.
+- **Element rows are one line instead of two.** A cue, the title, a dim reference where there
+  is one (a hymn number, a scripture citation), and the leader at the right edge. The old rows
+  stacked the leader and the opening line of the content underneath each title, which doubled
+  the height of every service and buried the titles themselves. The content preview is gone;
+  short references still show.
+- **The readings row is a flat band across the top**, not a floating card with rounded corners
+  and margins.
 - **Section colour appears once, on the section header, instead of as a stripe down the side
   of every element row** — a long service no longer reads as a stack of coloured bars.
 - **Section colours are a coherent family** rather than eight unrelated hues, with a second
@@ -50,8 +63,14 @@ All notable changes are documented here, newest first.
   "Services…" was already a menu item. Drag handles and the notes pop-out button appear on
   hover instead of permanently, and element type icons sit back so they stop competing with
   the titles they label.
-- Removing an element uses a neutral trash button instead of a permanently-red one, and the
-  section-divider delete only appears when you hover the section.
+- **The Element / Section / move / remove bar under the list is gone.** Reordering and
+  removing live on each row's right-click menu, which acts on the row you actually clicked
+  rather than on whatever happened to be selected. Adding is a quiet "+ Add element" line
+  under the list, in the section you're looking at — plus "+ Add section" in the flat list,
+  and both in the menu. Every action keeps its keyboard shortcut.
+- The liturgical-events button left the status bar for the menu as "Liturgical calendar…" — it
+  was a lookup rather than a status. Compact view joined the other view toggles in Advanced.
+- The section-divider delete only appears when you hover the section.
 - Push's pre-push pull now uses a regular merge instead of `pull --rebase`, so "ours"/"theirs"
   during conflict resolution match what they intuitively mean (yours vs. the other computer's),
   rather than git's rebase-specific (and reversed) meaning of those terms.

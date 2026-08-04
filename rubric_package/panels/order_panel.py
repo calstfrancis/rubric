@@ -31,16 +31,16 @@ class OrderPanel:
 
         # ── Readings card (date-dependent, shown when date is set) ────────────
         self._main.readings_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self._main.readings_card.set_margin_start(12); self._main.readings_card.set_margin_end(12)
-        self._main.readings_card.set_margin_top(6); self._main.readings_card.set_margin_bottom(6)
-        self._main.readings_card.add_css_class("card")
+        # A flat full-width band with a hairline under it, not a floating card.
+        # The readings are a strip of reference material across the top of the
+        # window, not an object sitting on it.
         self._main.readings_card.add_css_class("readings-card")
         self._main.readings_card.set_visible(False)
 
         # Single row: ▌Season  |  First Reading · Psalm · Epistle · Gospel  ⌄
         rcl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        rcl_row.set_margin_start(8); rcl_row.set_margin_end(4)
-        rcl_row.set_margin_top(5); rcl_row.set_margin_bottom(5)
+        rcl_row.set_margin_start(12); rcl_row.set_margin_end(6)
+        rcl_row.set_margin_top(6); rcl_row.set_margin_bottom(6)
 
         # Season info (left side, fixed width so reading buttons get the rest)
         season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -198,7 +198,11 @@ class OrderPanel:
         _new_svc_btn.connect("clicked", lambda _: self._main._seed_lectionary_service_today())
         placeholder.set_child(_new_svc_btn)
         self._main.order_listbox.set_placeholder(placeholder)
-        self._main._flat_scroll.set_child(self._main.order_listbox)
+        _flat_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        _flat_inner.set_valign(Gtk.Align.START)   # hug the list, don't fill
+        _flat_inner.append(self._main.order_listbox)
+        _flat_inner.append(self._main._make_add_bar(with_section=True))
+        self._main._flat_scroll.set_child(_flat_inner)
         self._main._view_stack.add_named(self._main._flat_scroll, "list")
 
         self._main._notebook = Gtk.Notebook()
@@ -242,28 +246,11 @@ class OrderPanel:
         self._main._time_bar.set_visible(False)
         order_box.append(self._main._time_bar)
 
-        # Order pane button bar
-        bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        bb.set_margin_start(8); bb.set_margin_end(8); bb.set_margin_top(4); bb.set_margin_bottom(8)
-        add_elem_btn = Gtk.Button(label="Element", tooltip_text="Add custom element (Ctrl+Shift+N)")
-        add_elem_btn.add_css_class("flat")
-        add_elem_btn.connect("clicked", lambda _: self._main.add_custom()); bb.append(add_elem_btn)
-        add_sec_btn = Gtk.Button(label="Section", tooltip_text="Add section divider (Ctrl+D)")
-        add_sec_btn.add_css_class("flat")
-        add_sec_btn.connect("clicked", lambda _: self._main.add_divider()); bb.append(add_sec_btn)
-        sp = Gtk.Box(); sp.set_hexpand(True); bb.append(sp)
-        for icon, tip, cb in [("go-up-symbolic","Move up (Ctrl+↑)",self._main.move_up),
-                               ("go-down-symbolic","Move down (Ctrl+↓)",self._main.move_down)]:
-            b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.add_css_class("flat")
-            b.connect("clicked", lambda _, f=cb: f()); bb.append(b)
-        # Flat, not destructive-action: a permanently-red button in the corner of
-        # every service reads as an alarm rather than as "remove this element".
-        rm = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Remove selected (Delete)")
-        rm.add_css_class("flat"); rm.connect("clicked", lambda _: self._main.remove_item()); bb.append(rm)
-        order_box.append(bb)
-        # Hidden in focus mode — the pane narrows to the spine, which has no
-        # room for a button bar (and nothing in it applies while writing).
-        self._main._order_btn_bar = bb
+        # The Element/Section/move/remove bar is gone. Adding is a quiet line
+        # under the list; reordering and removing live on the row's right-click
+        # menu, and every action keeps its keyboard shortcut and menu entry.
+        self._main._order_btn_bar = Gtk.Box()
+        self._main._order_btn_bar.set_visible(False)
         self._main._order_box = order_box
         self._main._order_hpaned.set_start_child(order_box)
 
