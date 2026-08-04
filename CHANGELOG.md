@@ -4,10 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev3] — Guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev4] — Interface refresh; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
+- **The service order now reads as a shape, not a list.** Each section is a letterspaced
+  header carrying a colour dot, its element count, and its running time — so you can see at a
+  glance that Gathering is four elements and twelve minutes without adding up the parts. The
+  elements underneath group into a bordered card per section, the standard GNOME boxed-list
+  pattern, which also makes drag-and-drop targets easier to read.
+- **Focus mode keeps the shape of the service in view.** Instead of hiding the order list
+  entirely, focus mode collapses it to a slim spine: one tick per element, coloured by
+  section and sized by duration, with the current element highlighted. Click any tick to jump
+  there. The editor is now held to a reading measure and centred, so text you'll read aloud is
+  set like text rather than stretched across the pane.
+- **The lectionary readings fold away.** A chevron at the end of the readings row collapses it
+  to just the season label, for anyone who plans from the lectionary elsewhere. The choice is
+  remembered between sessions.
 - **No more CLI required to resolve a sync conflict.** If Push or Pull finds changes on
   another computer that conflict with your local edits, Rubric now walks you through each
   conflicting file with a plain-language choice — **Keep Mine**, **Keep Theirs**, or **Keep
@@ -16,12 +29,33 @@ All notable changes are documented here, newest first.
 
 ### Changed
 
+- **The header bar is down to the controls you use every session.** New Window, Save, and
+  Quick Help moved into the hamburger menu (all three keep their keyboard shortcuts, and the
+  status bar's save-state chip is what tells you whether you need Save).
+- **Section colour appears once, on the section header, instead of as a stripe down the side
+  of every element row** — a long service no longer reads as a stack of coloured bars.
+- **Section colours are a coherent family** rather than eight unrelated hues, with a second
+  set tuned for dark backgrounds. The same goes for the red used for rubrics and leader notes,
+  which is now one colour throughout instead of three near-misses.
+- The readings band's full-width coloured bar is now a small swatch beside the season name,
+  and the season strip above the order list is quieter. The readings are reference material and
+  no longer the loudest thing on screen.
+- Removing an element uses a neutral trash button instead of a permanently-red one, and the
+  section-divider delete only appears when you hover the section.
 - Push's pre-push pull now uses a regular merge instead of `pull --rebase`, so "ours"/"theirs"
   during conflict resolution match what they intuitively mean (yours vs. the other computer's),
   rather than git's rebase-specific (and reversed) meaning of those terms.
 
 ### Fixed
 
+- **The content editor is no longer a sheet of white in dark mode.** The syntax-highlighting
+  editor kept its own light colour scheme regardless of the system theme; it now follows
+  light/dark, as does the bulletin preview pane (which was hardcoded to an off-white page).
+- Section colours, the rubric red, and the running-time colours are no longer hardcoded in the
+  stylesheet — they're generated per colour scheme and regenerate when you switch themes.
+- Corrected the licence shown in the About dialog, the Help window, and the README, all of
+  which claimed GPL-3.0. Rubric's `LICENSE` file has always been MIT, and `pyproject.toml`
+  and the AppStream metainfo both already said MIT — only these three spots disagreed.
 - Fixed a crash looking up liturgical info for most non-Sunday days between New Year's and
   early Lent (an invalid date was being constructed internally).
 - Fixed Dec 26–31 incorrectly showing as "Ordinary Time" instead of the Christmas season in

@@ -142,7 +142,7 @@ Please open an issue before starting significant work.
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)
 
 ---
 

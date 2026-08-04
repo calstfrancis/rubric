@@ -28,7 +28,10 @@ try:
         strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
         format_typst_error,
     )
-    from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
+    from rubric_package.utils.colors import (
+        section_colour, hex_to_rgb, SECTION_COLORS, SECTION_COLORS_DARK,
+        rubric_red, time_colours,
+    )
     from rubric_package.utils.helpers import (
         is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
     )
@@ -134,7 +137,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev3"
+APP_VERSION = "0.20.0-dev4"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -366,12 +369,19 @@ class MainWindow(Adw.ApplicationWindow):
     def _refresh_menu(self):
         simple = config.simple_mode
         menu = Gio.Menu()
+
+        # Actions moved off the header bar keep their place here
+        save_sec = Gio.Menu()
+        save_sec.append("Save (Ctrl+S)", "win.save")
+        save_sec.append("Save as…", "win.save-as")
+        save_sec.append("New window (Ctrl+Shift+N)", "app.new-window")
+        menu.append_section(None, save_sec)
+
         menu.append("Preferences", "win.preferences")
         menu.append("Bulletin settings…", "win.open-bulletin-prefs")
         menu.append("Duplicate service", "win.duplicate")
         if not simple:
             menu.append("Save order as template…", "win.save-template")
-        menu.append("Save as…", "win.save-as")
 
         file_sec = Gio.Menu()
         file_sec.append("Export as…", "win.export-as")
@@ -390,6 +400,7 @@ class MainWindow(Adw.ApplicationWindow):
             adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
             menu.append_section("Advanced", adv_sec)
 
+        menu.append("What's on screen?", "win.ui-help")
         menu.append("Help…", "win.open-help")
         menu.append("Welcome wizard…", "win.show-wizard")
         menu.append_submenu("Recent files", self._recent_sec)
@@ -418,6 +429,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("undo",          self.undo,              "<Ctrl>z"),
             ("redo",          self.redo,              "<Ctrl><Shift>z"),
             ("preferences",   self.open_preferences,  "<Ctrl>comma"),
+            ("ui-help",       self._show_ui_help_popover, None),
             ("clear-recent",       self._clear_recent,      None),
             ("tab-rename",         self._tab_rename_action, None),
             ("tab-delete",         self._tab_delete_action, None),
@@ -613,12 +625,9 @@ class MainWindow(Adw.ApplicationWindow):
             subtitle_text = si.leader or preview
         row = Adw.ActionRow(title=GLib.markup_escape_text(si.name), subtitle=GLib.markup_escape_text(subtitle_text))
         row.set_subtitle_lines(1); row._entry = si
-        colour = _section_colour(si.section)
-        try:
-            _cidx = SECTION_COLORS.index(colour)
-            row.add_css_class(f"section-c{_cidx}")
-        except ValueError:
-            row.add_css_class("section-gray")
+        # Section colour is carried by the section header alone — element rows
+        # stay neutral so a long service doesn't read as a stack of stripes.
+        row.add_css_class("sec-item")
         # User-assigned icon takes priority; fall back to auto type icon
         user_icon = getattr(si, "icon", "")
         _ico_name = user_icon or _item_type_icon(si.name)
@@ -638,31 +647,76 @@ class MainWindow(Adw.ApplicationWindow):
             row.set_opacity(0.7)
         self._attach_dnd(row, global_idx); return row
 
+    def _section_meta(self, global_idx: int) -> str:
+        """'4 · 12 min' for the section starting at the divider at `global_idx`."""
+        items = []
+        for e in self.service_entries[global_idx + 1:]:
+            if e.is_divider:
+                break
+            items.append(e)
+        if not items:
+            return "empty"
+        n = len(items)
+        mins = sum(getattr(e, "duration", 0) or 0 for e in items)
+        if mins:
+            return f"{n} · {mins} min"
+        return f"{n}"
+
     def _make_divider_row(self, div: SectionDivider, global_idx: int) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow(); row._entry = div
+        row.add_css_class("divider-row")
+        row.set_selectable(False)
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         bx.set_margin_top(2); bx.set_margin_bottom(2)
+        bx.set_margin_start(2); bx.set_margin_end(2)
         bx.add_css_class("divider-header")
-        colour = _section_colour(div.title)
-        # Left accent stripe in section colour
-        r, g, b = _hex_to_rgb(colour)
-        stripe = Gtk.DrawingArea(); stripe.set_size_request(6, -1)
-        def _draw_stripe(_da, cr, _w, _h, _r=r, _g=g, _b=b):
-            cr.set_source_rgb(_r, _g, _b); cr.paint()
-        stripe.set_draw_func(_draw_stripe)
-        stripe.set_valign(Gtk.Align.FILL)
-        bx.append(stripe)
+
         handle = Gtk.Label(label="⠿")
         handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
         handle.set_valign(Gtk.Align.CENTER)
         handle.set_cursor(Gdk.Cursor.new_from_name("grab"))
         bx.append(handle)
-        tl = Gtk.EditableLabel(text=div.title); tl.set_hexpand(True); tl.add_css_class("heading")
+
+        # Section colour: a single dot, the one place it appears
+        dot = Gtk.Label(label="●")
+        dot.add_css_class("section-dot")
+        dot.add_css_class(self._section_dot_class(div.title))
+        dot.set_valign(Gtk.Align.CENTER)
+        bx.append(dot)
+
+        tl = Gtk.EditableLabel(text=div.title); tl.add_css_class("section-title")
+        tl.set_valign(Gtk.Align.CENTER)
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
         bx.append(tl)
-        db = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text="Remove divider", valign=Gtk.Align.CENTER)
-        db.add_css_class("flat"); db.connect("clicked", lambda _,i=global_idx: self._remove_at(i)); bx.append(db)
+
+        # Element count and running time — previously nowhere in the UI
+        meta = Gtk.Label(label=self._section_meta(global_idx))
+        row._meta_lbl = meta
+        meta.add_css_class("section-meta")
+        meta.set_valign(Gtk.Align.CENTER)
+        meta.set_margin_start(4)
+        bx.append(meta)
+
+        # Hairline rule filling the rest of the row
+        rule = Gtk.Box(); rule.set_hexpand(True); rule.set_valign(Gtk.Align.CENTER)
+        rule.add_css_class("section-rule")
+        rule.set_size_request(-1, 1)
+        rule.set_margin_start(8); rule.set_margin_end(4)
+        bx.append(rule)
+
+        db = Gtk.Button(icon_name="edit-delete-symbolic", tooltip_text="Remove section divider",
+                        valign=Gtk.Align.CENTER)
+        db.add_css_class("flat"); db.add_css_class("section-remove")
+        db.connect("clicked", lambda _,i=global_idx: self._remove_at(i)); bx.append(db)
         row.set_child(bx); self._attach_dnd(row, global_idx); return row
+
+    def _section_dot_class(self, section: str) -> str:
+        """CSS class carrying this section's colour dot, per current scheme."""
+        colour = _section_colour(section)
+        for table in (SECTION_COLORS, SECTION_COLORS_DARK):
+            if colour in table:
+                return f"section-dot-c{table.index(colour)}"
+        return "section-dot-gray"
 
     def _make_row(self, entry, global_idx):
         return self._make_divider_row(entry, global_idx) if entry.is_divider else self._make_item_row(entry, global_idx)
@@ -708,10 +762,90 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _refresh_flat(self, select_index=-1):
         self._clear_flat()
-        for i,e in enumerate(self.service_entries): self.order_listbox.append(self._make_row(e,i))
+        entries = self.service_entries
+        for i, e in enumerate(entries):
+            row = self._make_row(e, i)
+            if not e.is_divider:
+                # Position within the section, so CSS can round the group's
+                # ends into a boxed list without splitting the ListBox.
+                first = i == 0 or entries[i - 1].is_divider
+                last = i == len(entries) - 1 or entries[i + 1].is_divider
+                if first: row.add_css_class("sec-first")
+                if last: row.add_css_class("sec-last")
+            self.order_listbox.append(row)
         if select_index >= 0 and self.service_entries:
             r = self.order_listbox.get_row_at_index(min(select_index, len(self.service_entries)-1))
             if r: self.order_listbox.select_row(r)
+
+    def _refresh_section_metas(self):
+        """Re-stamp the 'N · M min' label on every section header in place."""
+        if not hasattr(self, "order_listbox"):
+            return
+        i = 0
+        while True:
+            row = self.order_listbox.get_row_at_index(i)
+            if row is None:
+                break
+            lbl = getattr(row, "_meta_lbl", None)
+            if lbl is not None:
+                lbl.set_label(self._section_meta(i))
+            i += 1
+
+    # ── Focus-mode spine ──────────────────────────────────────────────────────
+
+    def _refresh_focus_spine(self):
+        """Rebuild the focus-mode spine: one tick per entry, section-coloured."""
+        if not hasattr(self, "_spine_box"):
+            return
+        child = self._spine_box.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            self._spine_box.remove(child)
+            child = nxt
+
+        sel = self._selected_index()
+        current_section = None
+        for i, e in enumerate(self.service_entries):
+            if e.is_divider:
+                current_section = e.title
+                tick = Gtk.Button()
+                tick.add_css_class("flat"); tick.add_css_class("spine-divider")
+                tick.add_css_class(self._section_dot_class(e.title))
+                tick.set_child(Gtk.Label(label="●"))
+                tick.set_tooltip_text(e.title)
+            else:
+                tick = Gtk.Button()
+                tick.add_css_class("flat"); tick.add_css_class("spine-tick")
+                tick.add_css_class(self._section_dot_class(
+                    getattr(e, "section", None) or current_section or ""))
+                bar = Gtk.Box()
+                # Height tracks duration so a long sermon reads as a long tick
+                mins = getattr(e, "duration", 0) or 0
+                bar.set_size_request(20, max(4, min(26, 4 + mins)))
+                bar.add_css_class("spine-bar")
+                tick.set_child(bar)
+                label = getattr(e, "name", "")
+                if mins:
+                    label = f"{label} — {mins} min"
+                tick.set_tooltip_text(label)
+                if i == sel:
+                    tick.add_css_class("spine-current")
+            tick.connect("clicked", lambda _b, idx=i: self._spine_goto(idx))
+            self._spine_box.append(tick)
+
+    def _spine_goto(self, idx: int):
+        row = self.order_listbox.get_row_at_index(idx)
+        if row is not None:
+            self.order_listbox.select_row(row)
+
+    def _on_colour_scheme_changed(self):
+        """Light/dark switched — restamp everything carrying a resolved colour."""
+        if not hasattr(self, "order_listbox"):
+            return
+        # Liturgical season colours are fixed by the church year, not by the
+        # theme, so only the section dots need restamping.
+        sel = self._selected_index()
+        self._refresh_order_list(select_index=sel)
 
     def _make_tab_label(self, div: SectionDivider | None, page_idx_fn) -> Gtk.Widget:
         """Tab label: rotated DrawingArea so text reads bottom-to-top with correct layout size."""
@@ -840,10 +974,18 @@ class MainWindow(Adw.ApplicationWindow):
         self._tab_listboxes.clear()
 
     def _refresh_order_list(self, select_index=-1):
+        # The flat list is always rebuilt even in focus mode — the spine and the
+        # selection model both read from it — but focus mode keeps the spine on
+        # screen rather than snapping back to the full list.
+        focus = getattr(self, "_focus_mode", False)
         if config.use_tabs:
-            self._view_stack.set_visible_child_name("tabs"); self._refresh_tabs(select_index)
+            if not focus: self._view_stack.set_visible_child_name("tabs")
+            self._refresh_tabs(select_index)
         else:
-            self._view_stack.set_visible_child_name("list"); self._refresh_flat(select_index)
+            if not focus: self._view_stack.set_visible_child_name("list")
+            self._refresh_flat(select_index)
+        if focus:
+            self._refresh_focus_spine()
         self._update_time_total()
 
     def _apply_tab_mode(self):
@@ -858,6 +1000,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_flat_row_selected(self, _lb, row):
         self._handle_selection(row)
+        if getattr(self, "_focus_mode", False):
+            self._refresh_focus_spine()
 
     def _on_tab_row_selected(self, row):
         self._handle_selection(row)
@@ -958,10 +1102,9 @@ class MainWindow(Adw.ApplicationWindow):
             ins = idx+1; self.service_entries.insert(ins, entry); self._refresh_order_list(select_index=ins)
         else:
             self.service_entries.append(entry)
-            if config.use_tabs: self._refresh_order_list(len(self.service_entries)-1)
-            else:
-                row = self._make_row(entry, len(self.service_entries)-1)
-                self.order_listbox.append(row); self.order_listbox.select_row(row)
+            # Full refresh rather than a bare append: the new row changes which
+            # row is last in its section, and so which corners are rounded.
+            self._refresh_order_list(select_index=len(self.service_entries)-1)
         self._mark_modified()
 
     def _move_entry(self, from_idx, to_idx):
@@ -1695,8 +1838,19 @@ class MainWindow(Adw.ApplicationWindow):
             self._palette_paned.set_shrink_start_child(True)
             self._palette_paned.set_position(0)
             self._sidebar_btn.set_active(False)
+            # The order list collapses to the spine rather than disappearing —
+            # you keep the shape of the service while writing one element.
             self._order_hpaned.set_shrink_start_child(True)
-            self._order_hpaned.set_position(0)
+            if config.use_tabs:
+                # Tabs view owns its own selection model; the spine reads the
+                # flat list, so in tabs mode focus collapses the pane as before.
+                self._order_hpaned.set_position(0)
+            else:
+                self._order_hpaned.set_position(44)
+                self._refresh_focus_spine()
+                self._view_stack.set_visible_child_name("spine")
+                self._order_btn_bar.set_visible(False)
+            self._apply_focus_measure(True)
             idx = self._selected_index()
             if 0 <= idx < len(self.service_entries):
                 entry = self.service_entries[idx]
@@ -1707,6 +1861,9 @@ class MainWindow(Adw.ApplicationWindow):
             self._focus_banner.set_reveal_child(True)
         else:
             self._focus_banner.set_reveal_child(False)
+            self._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
+            self._order_btn_bar.set_visible(True)
+            self._apply_focus_measure(False)
             self._order_hpaned.set_shrink_start_child(False)
             self._order_hpaned.set_position(getattr(self, "_pre_focus_order_pos", 260))
             if getattr(self, "_pre_focus_sidebar_visible", True):
@@ -1715,6 +1872,18 @@ class MainWindow(Adw.ApplicationWindow):
                 self._sidebar_btn.set_active(True)
             else:
                 self._palette_paned.set_position(0)
+
+    def _apply_focus_measure(self, active: bool):
+        """Centre the editor at a reading measure in focus mode.
+
+        Text you will read aloud gets set like text, not stretched across a
+        wide pane. GTK CSS has no max-width, so the column is held by the
+        TextView's own left/right margins, recomputed as the pane resizes.
+        """
+        widget = getattr(self, "_content_widget", None)
+        if widget is None or not hasattr(widget, "set_reading_measure"):
+            return
+        widget.set_reading_measure(active)
 
     def _copy_as_text(self):
         """Format service as clean plain text and copy to clipboard."""
@@ -2410,7 +2579,10 @@ class MainWindow(Adw.ApplicationWindow):
         more_btn.connect("clicked", lambda _: (pop.popdown(), self.open_help("help")))
         outer.append(more_btn)
         pop.set_child(outer)
-        pop.set_parent(self._help_header_btn)
+        # Anchored to the hamburger, which is where the item now lives; the old
+        # header help button is kept as a fallback anchor.
+        anchor = getattr(self, "_menu_btn", None) or self._help_header_btn
+        pop.set_parent(anchor)
         pop.popup()
 
     # ── First-launch wizard ───────────────────────────────────────────────────
@@ -3302,12 +3474,14 @@ class MainWindow(Adw.ApplicationWindow):
             total = sum(e.duration for e in timed)
             self._time_bar.set_visible(True)
             TARGET = 75
+            over_col, ok_col = time_colours()
             if total > TARGET:
                 self._time_bar.set_markup(
-                    f'<span color="#B91C1C">~{total} min total</span>'
-                    f'<span color="#B91C1C" size="small">  ({total - TARGET} over)</span>')
+                    f'<span color="{over_col}">~{total} min total</span>'
+                    f'<span color="{over_col}" size="small">  ({total - TARGET} over)</span>')
             else:
-                self._time_bar.set_markup(f'<span color="#15803D">~{total} min total</span>')
+                self._time_bar.set_markup(f'<span color="{ok_col}">~{total} min total</span>')
+        self._refresh_section_metas()
         self._update_word_count()
 
     def _update_word_count(self):
@@ -4435,7 +4609,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         about.set_version(APP_VERSION)
         about.set_comments("Worship service planning with RCL integration\nfor United Church of Canada ministry.")
         about.set_developers(["Cal St Francis https://calstfrancis.github.io"])
-        about.set_license_type(Gtk.License.GPL_3_0)
+        about.set_license_type(Gtk.License.MIT_X11)
         about.set_website("https://github.com/calstfrancis/rubric")
         about.set_issue_url("https://github.com/calstfrancis/rubric/issues")
         about.present()
@@ -4597,8 +4771,11 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .toolbar button.flat { min-height: 0; padding-top: 1px; padding-bottom: 1px; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
-/* Selected service order row: left accent bar */
+/* Selected service order row */
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
+/* The list sits on a recessed ground so the grouped sections read as cards */
+.order-list { background: transparent; }
+.order-ground { background: alpha(@window_fg_color, 0.035); }
 /* Reading chip: inserted into service */
 button.success { color: @success_color; }
 /* Suggestion strip flowbox children: no selection highlight */
@@ -4614,8 +4791,10 @@ flowboxchild { background: transparent; padding: 0; }
 .sugg-pill button:first-child { border-right: none; border-radius: 9999px 0 0 9999px; }
 .sugg-pill button:last-child { border-left: none; border-radius: 0 9999px 9999px 0; }
 .sugg-pill button:only-child { border-radius: 9999px; }
-/* Rubric note editor: reddish tint */
-.rubric-note-editor { background: alpha(red, 0.04); color: @error_color; font-style: italic; }
+/* Rubric note editor: rubricated - red italic, as in a printed missal.
+   The colour itself comes from utils.colors.section_css() so it tracks the
+   colour scheme; only the tint and italics are static here. */
+.rubric-note-editor { background: alpha(@accent_bg_color, 0.03); font-style: italic; }
 /* Vertical section tab strip */
 notebook > header.left { background: transparent; border-right: 1px solid alpha(@borders, 0.4); }
 notebook > header.left tab { padding: 4px 2px; min-height: 0; }
@@ -4625,18 +4804,54 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 /* Drag handle: subtle at rest, visible on hover (grab cursor set in code) */
 .order-list row .drag-handle { opacity: 0.3; transition: opacity 120ms; }
 .order-list row:hover .drag-handle { opacity: 0.6; }
-/* Section divider - full-width coloured header row */
-.divider-header { background: alpha(@headerbar_shade_color, 0.06); min-height: 28px; }
-/* Section colour left borders on element rows */
-.section-c0 { border-left: 3px solid #1D9E75; }
-.section-c1 { border-left: 3px solid #534AB7; }
-.section-c2 { border-left: 3px solid #993C1D; }
-.section-c3 { border-left: 3px solid #185FA5; }
-.section-c4 { border-left: 3px solid #B45309; }
-.section-c5 { border-left: 3px solid #6B21A8; }
-.section-c6 { border-left: 3px solid #15803D; }
-.section-c7 { border-left: 3px solid #B91C1C; }
-.section-gray { border-left: 3px solid #888780; }
+/* -- Section headers ------------------------------------------------------
+   Sections are a typographic rule, not a coloured card: letterspaced small
+   caps, a section-colour dot, and the element count + running time at the
+   end. Section colour lives here and on nothing else, so element rows stay
+   quiet and the service's shape is the thing that reads first. */
+.divider-header { background: transparent; min-height: 26px; }
+.section-title {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.section-meta { font-size: 0.78em; opacity: 0.55; }
+/* Section delete: near-invisible at rest, legible on hover */
+.section-remove { opacity: 0; transition: opacity 120ms; min-height: 0; padding: 2px; }
+.order-list row.divider-row:hover .section-remove { opacity: 0.55; }
+.section-remove:hover, .section-remove:focus { opacity: 1; }
+.section-dot { font-size: 0.7em; }
+/* Section rule: hairline running to the end of the header row */
+.section-rule { background: alpha(@borders, 0.45); min-height: 1px; }
+/* Divider rows themselves are not list items - no card chrome, no hover */
+.order-list row.divider-row {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  margin-top: 6px;
+}
+.order-list row.divider-row:first-child { margin-top: 0; }
+/* -- Grouped element rows -------------------------------------------------
+   The list stays one ListBox (the drag-and-drop index model depends on it),
+   but rows carry their position within a section so CSS can round the ends
+   and give each section the boxed-list look without restructuring. */
+.order-list row.sec-item {
+  background: @card_bg_color;
+  border-left: 1px solid alpha(@borders, 0.55);
+  border-right: 1px solid alpha(@borders, 0.55);
+}
+.order-list row.sec-first {
+  border-top: 1px solid alpha(@borders, 0.55);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+.order-list row.sec-last {
+  border-bottom: 1px solid alpha(@borders, 0.55);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+.order-list row.sec-item:not(.sec-first) { border-top: 1px solid alpha(@borders, 0.3); }
 /* Active mode toggle chips */
 .mode-btn-active { background: alpha(@accent_bg_color, 0.18); border-radius: 9999px; }
 /* Metric pill chips (time bar, word count) */
@@ -4650,14 +4865,58 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
   50%       { opacity: 0.35; }
 }
 .unsaved-pulse { animation: rubric-unsaved-pulse 1.6s ease-in-out infinite; }
-/* Preview pane: warm off-white page background */
-.preview-pane { background-color: #fafaf8; }
+/* Preview pane: the page sits on the theme's card ground, so it is legible
+   in dark mode instead of a hardcoded sheet of white */
+.preview-pane { background-color: @card_bg_color; }
+/* Readings band: reference material, so it stays quiet - a small season
+   swatch instead of a full-bleed coloured bar */
+.season-swatch { border-radius: 3px; }
+.readings-card { background: transparent; }
+button.reading-chip { font-size: 0.9em; }
 /* Cover art thumbnail: rounded corners */
 .cover-thumb { border-radius: 4px; }
+/* -- Focus-mode spine ------------------------------------------------------
+   One tick per service element, coloured by section, sized by duration. The
+   whole service stays navigable in 44px while you write one element. */
+.focus-spine button { min-height: 0; min-width: 0; padding: 1px; }
+.spine-bar { background: currentColor; border-radius: 2px; opacity: 0.4; }
+.spine-tick:hover .spine-bar { opacity: 0.85; }
+.spine-current .spine-bar { opacity: 1; }
+.spine-current {
+  background: alpha(@accent_bg_color, 0.30);
+  border-radius: 4px;
+  outline: 1px solid alpha(@accent_color, 0.6);
+  outline-offset: -1px;
+}
+.spine-divider label { font-size: 0.6em; }
+/* Separate the spine from the editor */
+.focus-spine { border-right: 1px solid alpha(@borders, 0.5); }
 """)
             Gtk.StyleContext.add_provider_for_display(
                 Gdk.Display.get_default(), css,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+            # Scheme-dependent colours (section accents, rubric red) live in a
+            # second provider that is regenerated whenever light/dark changes,
+            # so no palette colour is ever a literal in the static sheet above.
+            self._scheme_css = Gtk.CssProvider()
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), self._scheme_css,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            sm = Adw.StyleManager.get_default()
+
+            def _reload_scheme_css(*_):
+                from rubric_package.utils.colors import section_css
+                self._scheme_css.load_from_data(section_css().encode())
+                # Rows and section headers carry their colour as Pango markup,
+                # which CSS can't reach — rebuild them against the new scheme.
+                for w in self.get_windows():
+                    if hasattr(w, "_on_colour_scheme_changed"):
+                        w._on_colour_scheme_changed()
+
+            _reload_scheme_css()
+            sm.connect("notify::dark", _reload_scheme_css)
+
             # Register app-level "New Window" action
             nw_action = Gio.SimpleAction.new("new-window", None)
             nw_action.connect("activate", self._new_window)

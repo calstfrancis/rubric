@@ -33,22 +33,30 @@ class OrderPanel:
         self._main.readings_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._main.readings_card.set_margin_start(12); self._main.readings_card.set_margin_end(12)
         self._main.readings_card.set_margin_top(6); self._main.readings_card.set_margin_bottom(6)
-        self._main.readings_card.add_css_class("card"); self._main.readings_card.set_visible(False)
+        self._main.readings_card.add_css_class("card")
+        self._main.readings_card.add_css_class("readings-card")
+        self._main.readings_card.set_visible(False)
 
-        self._main._colour_bar = Gtk.DrawingArea()
-        self._main._colour_bar.set_size_request(-1, 8)
-        self._main._colour_bar.set_draw_func(self._main._draw_colour_bar)
-        self._main.readings_card.append(self._main._colour_bar)
-
-        # Single row: ● Season  Year  |  First Reading · Psalm · Epistle · Gospel
+        # Single row: ▌Season  |  First Reading · Psalm · Epistle · Gospel  ⌄
         rcl_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        rcl_row.set_margin_start(8); rcl_row.set_margin_end(8)
+        rcl_row.set_margin_start(8); rcl_row.set_margin_end(4)
         rcl_row.set_margin_top(5); rcl_row.set_margin_bottom(5)
 
         # Season info (left side, fixed width so reading buttons get the rest)
-        season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        season_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         season_box.set_size_request(160, -1)
-        self._main.season_dot = Gtk.Label(label="●"); self._main.season_dot.add_css_class("caption"); season_box.append(self._main.season_dot)
+
+        # Season colour as a small swatch, not a full-bleed bar. Same widget
+        # name and draw func as the old bar so the season-change code that
+        # calls queue_draw() on it keeps working.
+        self._main._colour_bar = Gtk.DrawingArea()
+        self._main._colour_bar.set_size_request(4, 16)
+        self._main._colour_bar.set_valign(Gtk.Align.CENTER)
+        self._main._colour_bar.add_css_class("season-swatch")
+        self._main._colour_bar.set_draw_func(self._main._draw_colour_bar)
+        season_box.append(self._main._colour_bar)
+
+        self._main.season_dot = Gtk.Label()  # kept for data, not displayed
         self._main.season_label = Gtk.Label(); self._main.season_label.set_xalign(0)
         self._main.season_label.add_css_class("caption"); season_box.append(self._main.season_label)
         self._main.year_badge = Gtk.Label()  # kept for data, not displayed
@@ -73,7 +81,40 @@ class OrderPanel:
             btn.connect("clicked", lambda _b, k=key: self._main._on_reading_clicked(k))
             chips_box.append(btn)
             self._main._reading_rows[key] = btn
-        rcl_row.append(chips_box)
+
+        # The readings are reference material, so they fold away for anyone who
+        # plans from the lectionary elsewhere. Collapsed state persists.
+        chips_rev = Gtk.Revealer()
+        chips_rev.set_transition_type(Gtk.RevealerTransitionType.SLIDE_RIGHT)
+        chips_rev.set_transition_duration(150)
+        chips_rev.set_child(chips_box)
+        chips_rev.set_hexpand(True)
+        chips_rev.set_reveal_child(not config.readings_collapsed)
+        self._main._readings_revealer = chips_rev
+        rcl_row.append(chips_rev)
+
+        collapse_btn = Gtk.Button(valign=Gtk.Align.CENTER)
+        collapse_btn.add_css_class("flat")
+        collapse_icon = Gtk.Image(icon_name=(
+            "pan-end-symbolic" if config.readings_collapsed else "pan-down-symbolic"))
+        collapse_btn.set_child(collapse_icon)
+
+        def _toggle_readings(_btn):
+            shown = not chips_rev.get_reveal_child()
+            chips_rev.set_reveal_child(shown)
+            collapse_icon.set_from_icon_name(
+                "pan-down-symbolic" if shown else "pan-end-symbolic")
+            collapse_btn.set_tooltip_text(
+                "Hide the lectionary readings" if shown else "Show the lectionary readings")
+            config.readings_collapsed = not shown
+            config.save()
+
+        collapse_btn.set_tooltip_text(
+            "Show the lectionary readings" if config.readings_collapsed
+            else "Hide the lectionary readings")
+        collapse_btn.connect("clicked", _toggle_readings)
+        rcl_row.append(collapse_btn)
+
         self._main.readings_card.append(rcl_row)
 
         # Observances now shown in the status bar centre — no in-card row needed
@@ -136,12 +177,13 @@ class OrderPanel:
 
         self._main._flat_scroll = Gtk.ScrolledWindow()
         self._main._flat_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self._main._flat_scroll.set_margin_start(12); self._main._flat_scroll.set_margin_end(12)
-        self._main._flat_scroll.set_margin_top(8); self._main._flat_scroll.set_margin_bottom(6)
+        # Recessed ground so the grouped section cards lift off it in both themes
+        self._main._flat_scroll.add_css_class("order-ground")
         self._main.order_listbox = Gtk.ListBox()
         self._main.order_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self._main.order_listbox.add_css_class("boxed-list")
         self._main.order_listbox.add_css_class("order-list")
+        self._main.order_listbox.set_margin_start(12); self._main.order_listbox.set_margin_end(12)
+        self._main.order_listbox.set_margin_top(8); self._main.order_listbox.set_margin_bottom(8)
         self._main.order_listbox.connect("row-selected", self._main._on_flat_row_selected)
         _list_key = Gtk.EventControllerKey()
         _list_key.connect("key-pressed", lambda ctrl, keyval, *_:
@@ -169,19 +211,32 @@ class OrderPanel:
         self._main._notebook.set_margin_top(8); self._main._notebook.set_margin_bottom(6)
         self._main._view_stack.add_named(self._main._notebook, "tabs")
 
+        # ── Focus-mode spine ──────────────────────────────────────────────────
+        # In focus mode the order list collapses to a navigational spine: one
+        # tick per entry, coloured by section, sized by duration, current
+        # position highlighted. The whole service stays legible in ~44px.
+        self._main._spine_scroll = Gtk.ScrolledWindow()
+        self._main._spine_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._main._spine_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self._main._spine_box.set_margin_top(10); self._main._spine_box.set_margin_bottom(10)
+        self._main._spine_box.set_margin_start(8); self._main._spine_box.set_margin_end(8)
+        self._main._spine_box.add_css_class("focus-spine")
+        self._main._spine_scroll.set_child(self._main._spine_box)
+        self._main._view_stack.add_named(self._main._spine_scroll, "spine")
+
         self._main._view_stack.set_visible_child_name("tabs" if config.use_tabs else "list")
 
         # Season colour strip — 5px gradient bar at top of order panel
         self._main._order_season_strip = Gtk.DrawingArea()
-        self._main._order_season_strip.set_size_request(-1, 5)
+        self._main._order_season_strip.set_size_request(-1, 3)
         def _draw_order_strip(_da, cr, w, _h):
             import cairo as _cairo
             r, g, b = self._main._colour_bar_rgb
             try:
                 pat = _cairo.LinearGradient(0, 0, w, 0)
-                pat.add_color_stop_rgba(0.0, r, g, b, 0.9)
-                pat.add_color_stop_rgba(0.6, r, g, b, 0.65)
-                pat.add_color_stop_rgba(1.0, r, g, b, 0.2)
+                pat.add_color_stop_rgba(0.0, r, g, b, 0.55)
+                pat.add_color_stop_rgba(0.6, r, g, b, 0.32)
+                pat.add_color_stop_rgba(1.0, r, g, b, 0.08)
                 cr.set_source(pat)
             except Exception:
                 cr.set_source_rgb(r, g, b)
@@ -214,9 +269,14 @@ class OrderPanel:
                                ("go-down-symbolic","Move down (Ctrl+↓)",self._main.move_down)]:
             b = Gtk.Button(icon_name=icon, tooltip_text=tip); b.add_css_class("flat")
             b.connect("clicked", lambda _, f=cb: f()); bb.append(b)
-        rm = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text="Remove selected (Delete)")
-        rm.add_css_class("destructive-action"); rm.connect("clicked", lambda _: self._main.remove_item()); bb.append(rm)
+        # Flat, not destructive-action: a permanently-red button in the corner of
+        # every service reads as an alarm rather than as "remove this element".
+        rm = Gtk.Button(icon_name="user-trash-symbolic", tooltip_text="Remove selected (Delete)")
+        rm.add_css_class("flat"); rm.connect("clicked", lambda _: self._main.remove_item()); bb.append(rm)
         order_box.append(bb)
+        # Hidden in focus mode — the pane narrows to the spine, which has no
+        # room for a button bar (and nothing in it applies while writing).
+        self._main._order_btn_bar = bb
         self._main._order_box = order_box
         self._main._order_hpaned.set_start_child(order_box)
 

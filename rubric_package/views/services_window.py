@@ -1064,11 +1064,13 @@ class ServicesWindow(Adw.Window):
             self._arch_stats_lbl.set_text(f"{n} service{'s' if n != 1 else ''}")
 
     def _stable_tag_color(self, name: str) -> str:
-        from rubric_package.utils.colors import SECTION_COLORS
+        from rubric_package.utils.colors import (
+            SECTION_COLORS, SECTION_COLORS_DARK, is_dark_scheme)
+        table = SECTION_COLORS_DARK if is_dark_scheme() else SECTION_COLORS
         h = 0
         for b in name.encode("utf-8"):
             h = (h * 31 + b) & 0xFFFFFFFF
-        return SECTION_COLORS[h % len(SECTION_COLORS)]
+        return table[h % len(table)]
 
     def _make_pill(self, text: str) -> Gtk.Widget:
         color = self._stable_tag_color(text)

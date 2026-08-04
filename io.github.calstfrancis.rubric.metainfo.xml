@@ -218,7 +218,7 @@
         </ul>
       </description>
     </release>
-    <release version="0.16.0-rc5" date="2026-06-10">
+    <release type="development" version="0.16.0-rc5" date="2026-06-10">
       <description>
         <p>UX polish across the service editor.</p>
         <ul>
@@ -231,7 +231,7 @@
         </ul>
       </description>
     </release>
-    <release version="0.16.0-rc4" date="2026-06-10">
+    <release type="development" version="0.16.0-rc4" date="2026-06-10">
       <description>
         <p>Hymn UI redesign and compact mode fix.</p>
         <ul>

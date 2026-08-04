@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import gi
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, Gdk
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Gdk, Adw
 
 try:
     gi.require_version("GtkSource", "5")
@@ -207,11 +208,17 @@ class ElementContentWidget(Gtk.Box):
         self._typst_buf.connect("changed", self._on_typst_buf_changed)
         typst_sw.set_child(self._typst_view)
 
+        # Adw.Clamp holds the editor to a reading measure and centres it. It
+        # sits at an effectively unlimited width until focus mode narrows it.
+        self._rich_clamp = Adw.Clamp(maximum_size=self._WIDE_PX, child=rich_sw)
+        self._typst_clamp = Adw.Clamp(maximum_size=self._WIDE_PX, child=typst_sw)
+        self._rich_clamp.set_vexpand(True); self._typst_clamp.set_vexpand(True)
+
         self._editor_stack = Gtk.Stack()
         self._editor_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self._editor_stack.set_transition_duration(100)
-        self._editor_stack.add_named(rich_sw, "rich")
-        self._editor_stack.add_named(typst_sw, "typst")
+        self._editor_stack.add_named(self._rich_clamp, "rich")
+        self._editor_stack.add_named(self._typst_clamp, "typst")
         self._typst_mode = False
         self._typst_updating = False
 
@@ -231,23 +238,77 @@ class ElementContentWidget(Gtk.Box):
         key_ctrl.connect("key-pressed", self._on_key_pressed)
         self._rich_view.add_controller(key_ctrl)
 
-        # Update tag colours when the system theme changes
+        self._refresh_source_scheme()
+
+        # Update tag colours and editor scheme when the system theme changes
         try:
-            from gi.repository import Adw
             Adw.StyleManager.get_default().connect(
-                "notify::dark", lambda *_: self._refresh_tag_colors())
+                "notify::dark", lambda *_: self._refresh_theme())
         except Exception:
             pass
 
-    def _refresh_tag_colors(self) -> None:
-        """Update leader-note tag colours to match the current system theme."""
+    # ── Reading measure (focus mode) ──────────────────────────────────────────
+
+    _MEASURE_PX = 680   # ~72 characters at the default UI font
+    _WIDE_PX = 10000    # effectively unclamped
+
+    def set_reading_measure(self, active: bool) -> None:
+        """Hold the editor column to a reading measure, centred in the pane."""
+        size = self._MEASURE_PX if active else self._WIDE_PX
+        for clamp in (getattr(self, "_rich_clamp", None), getattr(self, "_typst_clamp", None)):
+            if clamp is not None:
+                clamp.set_maximum_size(size)
+                clamp.set_tightening_threshold(size)
+
+    def _refresh_theme(self) -> None:
+        self._refresh_tag_colors()
+        self._refresh_source_scheme()
+
+    def _refresh_source_scheme(self) -> None:
+        """Follow the system colour scheme in the GtkSourceView editors.
+
+        Without this the source buffers keep GtkSourceView's own default
+        scheme, which is light — so the editor stayed a sheet of white on a
+        dark window regardless of the theme.
+        """
+        if not _SOURCE_OK:
+            return
+        try:
+            import gi
+            gi.require_version("GtkSource", "5")
+            from gi.repository import GtkSource as _GS
+
+            dark = self._is_dark()
+            mgr = _GS.StyleSchemeManager.get_default()
+            if dark:
+                scheme = (mgr.get_scheme("Adwaita-dark") or mgr.get_scheme("solarized-dark")
+                          or mgr.get_scheme("classic-dark") or mgr.get_scheme("oblivion"))
+            else:
+                scheme = mgr.get_scheme("Adwaita") or mgr.get_scheme("classic")
+            if not scheme:
+                return
+            for buf in (getattr(self, "_rich_buf", None), getattr(self, "_typst_buf", None)):
+                if buf is not None and hasattr(buf, "set_style_scheme"):
+                    buf.set_style_scheme(scheme)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _is_dark() -> bool:
         try:
             from gi.repository import Adw
-            dark = Adw.StyleManager.get_default().get_dark()
+            return bool(Adw.StyleManager.get_default().get_dark())
         except Exception:
-            dark = False
+            return False
+
+    def _refresh_tag_colors(self) -> None:
+        """Update leader-note tag colours to match the current system theme."""
+        from rubric_package.utils.colors import rubric_red
+
+        dark = self._is_dark()
+        # Leader notes are rubrics — they get the app's red, not a bespoke one.
         bg = "#2d1515" if dark else "#fff0f0"
-        fg = "#fca5a5" if dark else "#b91c1c"
+        fg = rubric_red(dark)
         tag = self._rich_buf.get_tag_table().lookup("leader-note")
         if tag:
             tag.set_property("background", bg)

@@ -52,12 +52,8 @@ class MainChrome:
             doc_box.append(b)
         hdr.pack_start(doc_box)
 
-        # New Window button
-        nw_btn = Gtk.Button(icon_name="window-new-symbolic",
-                            tooltip_text="New window (Ctrl+Shift+N)")
-        nw_btn.add_css_class("flat")
-        nw_btn.set_action_name("app.new-window")
-        hdr.pack_start(nw_btn)
+        # New Window lives in the hamburger menu (Ctrl+Shift+N) — the header
+        # bar keeps only the controls used every session.
 
         # Undo + Redo as a linked pill
         edit_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -167,8 +163,8 @@ class MainChrome:
         hdr.pack_start(self._main._cover_thumb)
         self._main._refresh_cover_thumb()
 
-        sb = Gtk.Button(icon_name="document-save", tooltip_text="Save (Ctrl+S)")
-        sb.add_css_class("flat"); sb.connect("clicked", lambda _: self._main.save_file()); hdr.pack_end(sb)
+        # Save is Ctrl+S and a menu item; the status bar's save-state chip is
+        # what tells you whether you need it, so the header button is redundant.
 
         # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
         # but not packed into the header. Use keyboard shortcuts or the hamburger menu.
@@ -192,12 +188,13 @@ class MainChrome:
         hdr.pack_end(self._main._menu_btn)
         self._main._refresh_menu()
 
+        # Quick help moved into the hamburger menu ("What's on screen?"). The
+        # button object stays because the welcome wizard points a tour at it.
         _help_btn = Gtk.Button(icon_name="help-contents-symbolic",
                                tooltip_text="Quick help — what each part of the screen does")
         _help_btn.add_css_class("flat")
         _help_btn.connect("clicked", self._main._show_ui_help_popover)
         self._main._help_header_btn = _help_btn
-        hdr.pack_end(_help_btn)
 
         self._main._preview_visible = False
         self._main._preview_scroll_poll_id = None

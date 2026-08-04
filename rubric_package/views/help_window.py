@@ -115,7 +115,7 @@ class HelpWindow(Adw.Window):
         box.append(Gtk.Label(label=f"Version {self._app_version}", css_classes=["dim-label"]))
         box.append(Gtk.Label(label="Worship service planning for United Church of Canada ministry",
                              css_classes=["body"]))
-        box.append(Gtk.Label(label="© Cal St Francis · GPL-3.0",
+        box.append(Gtk.Label(label="© Cal St Francis · MIT",
                              css_classes=["caption", "dim-label"]))
         gh_btn = Gtk.Button(label="GitHub — calstfrancis/rubric")
         gh_btn.add_css_class("flat"); gh_btn.set_halign(Gtk.Align.CENTER)
