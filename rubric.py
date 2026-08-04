@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev17"
+APP_VERSION = "0.20.0"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -5297,13 +5297,17 @@ row.elem-row > box { padding-top: 7px; padding-bottom: 7px; margin-top: 0; margi
 .elem-title { font-size: 0.98em; }
 .elem-detail { font-size: 0.88em; opacity: 0.55; }
 .elem-who { font-size: 0.88em; opacity: 0.6; }
-.elem-cue { font-size: 0.62em; }
+/* The cue is a drawn 9px box, so it needs a radius to be a circle. A large
+   absolute value, not 50%: a percentage did not round a box this small in
+   GTK's renderer and they came out square. Its colour is set per kind by
+   utils/colors.section_css(). */
+.elem-cue { border-radius: 9999px; }
 /* Editor pane header: the element's name, then who leads it */
 .elem-heading { font-size: 1.3em; font-weight: 700; }
 .elem-subheading { font-size: 0.88em; opacity: 0.6; }
 .details-btn { opacity: 0.6; font-size: 0.9em; }
 .details-btn:hover, .details-btn:checked { opacity: 1; }
-.cue-plain { opacity: 0.28; }
+
 
 /* Section rule: hairline running to the end of the header row */
 .section-rule { background: alpha(@borders, 0.45); min-height: 1px; }

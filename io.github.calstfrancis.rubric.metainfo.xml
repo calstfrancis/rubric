@@ -48,6 +48,18 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.20.0" date="2026-08-04">
+      <description>
+        <p>0.20.0 "Plain Chant" - content becomes a document instead of markup, and the interface is rebuilt around it.</p>
+        <ul>
+          <li>Element content is stored as the document itself - paragraphs, headings, lists, leader notes, bold and italic - and Typst is generated only when something is printed, so markup can no longer appear in what you are writing. Existing services migrate the first time they are opened and saved.</li>
+          <li>Services and autosaves are written atomically, so a crash or a full disk can no longer leave a half-written file. A successful save is no longer reported as a failure when unrelated bookkeeping fails.</li>
+          <li>The service order reads as a shape: section headers carry a colour dot, element count and running time, with elements grouped into a card per section and set on one line each. The element palette and the preview panel follow the same design.</li>
+          <li>The window was rebuilt around four distinct surfaces, states the liturgical colour once rather than four times over, and reorganises the menu along GNOME's guidelines. Adds a System/Light/Dark theme choice, an interface font setting, and Services and save-to-GitHub as plain words in the status bar.</li>
+          <li>Sync conflicts are resolved in the app, with a plain-language choice per file, instead of sending you to a terminal.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.19.0" date="2026-07-11">
       <description>
         <p>0.19.0 "Open Door" — Sign in with GitHub.</p>

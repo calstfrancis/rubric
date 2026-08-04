@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev17] — Content becomes a document instead of markup; the interface rebuilt; crash-safe saving
+## [0.20.0] "Plain Chant" — Content becomes a document instead of markup; the interface rebuilt; crash-safe saving
 
 ### Added
 
