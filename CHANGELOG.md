@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev11] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev12] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -75,10 +75,20 @@ All notable changes are documented here, newest first.
   bulletin options, scripture and hymn lookup moved behind a **Details** toggle that remembers
   whether you left it open — three rows of form controls used to stand between you and the text
   you were writing.
-- **The header bar and status bar are distinct surfaces again**, darker than the content with
-  a clear line under and over them. They had been sharing the content's colour because the
-  toolbars were left in libadwaita's flat style; they now use the raised style, which is what
-  draws the separator too.
+- **The header bar and status bar are distinct surfaces again**, a step darker than the content
+  with a clear line under and over them. Two things were wrong: the toolbars were left in
+  libadwaita's flat style (which is what draws the separator), and Adwaita's own header-bar
+  colour is pure white in the light scheme, so raising them alone changed nothing. The window
+  now uses a deliberate ladder — cards and editor on the view surface, the order pane one step
+  down, the chrome one step below that — so it reads as a frame around the content.
+- **The formatting toolbar appears only while you're in the editor.** It sat permanently in the
+  spot the design gives the element's name, and a row of B/I/H1/H2/H3 buttons is no use to
+  someone reading the service order rather than writing in it.
+- **The lectionary band is half the height it was.** Buttons have a 34px minimum in Adwaita,
+  which was making a strip of reference text twice as tall as the text in it.
+- **The header bar's title is the service's own title** rather than the file name it happens to
+  be saved under, falling back to the file name only for an untitled service. Export sits to
+  the right of Preview, and the Preview pill is smaller and lighter.
 - **Less in the chrome.** The window's minimise/maximise/close buttons are gone (the window
   manager's own decorations, Ctrl+W and Alt+F4 all still close it). The bulletin cover
   thumbnail no longer sits in the header bar — it previewed a setting rather than doing

@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev11"
+APP_VERSION = "0.20.0-dev12"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -2349,8 +2349,12 @@ class MainWindow(Adw.ApplicationWindow):
         # what lets the status bar stay quiet.
         base = self.selected_date.strftime("%-d %B %Y") if self.selected_date else svc
         subtitle = base + (" · unsaved" if self.modified else "")
+        # The service's own title, as in the mockup — "Ordinary 15", not the
+        # file name it happens to be saved under. Falls back to the file name
+        # only when the service hasn't been given a title.
         self.title_widget.set_title(
-            Path(self.current_file).stem if self.current_file else svc)
+            svc if svc != "New service"
+            else (Path(self.current_file).stem if self.current_file else svc))
         self.title_widget.set_subtitle(subtitle)
         self.set_title(f"{svc} — Rubric" if svc != "New service" else "Rubric")
 
@@ -5101,11 +5105,29 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
      sidebar    - the pane the order sits on    (@sidebar_bg_color)
      card       - the section cards on top      (@card_bg_color)
    window_bg vs card_bg was a 2% difference in Adwaita light, i.e. invisible. */
-.order-ground { background: @sidebar_bg_color; }
+/* Surface ladder, matching the mockup's relationships rather than copying its
+   hexes. Lightest to darkest: cards, editor and readings on the view surface;
+   the order pane one step down; the header and status bars one step below that,
+   so the chrome reads as a frame around the content instead of merging into it.
+   Adwaita's own headerbar colour is pure white in the light scheme, which is
+   why raising the toolbars added a separator but no tint. */
+.order-ground { background: @secondary_sidebar_bg_color; }
 .editor-ground { background: @view_bg_color; }
+.rubric-main-hdr { background: @sidebar_bg_color; }
+.rubric-statusbar { background: @sidebar_bg_color; }
 /* Reading chips: quiet text, not tinted pills. The liturgical colour is said
    once by the swatch beside the season name and nowhere else. */
-button.reading-chip { background: transparent; box-shadow: none; border: none; }
+/* The readings band is a strip of reference material, so it stays about as tall
+   as its own text. Buttons are 34px minimum in Adwaita, which was making the
+   band twice the height of the row it contains. */
+button.reading-chip {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  min-height: 22px;
+  padding: 0 6px;
+}
+.readings-card button { min-height: 22px; padding: 0 4px; }
 button.reading-chip label { font-weight: 400; opacity: 0.62; }
 button.reading-chip:hover label { opacity: 1; }
 button.reading-chip:hover { background: alpha(@window_fg_color, 0.07); }
@@ -5151,8 +5173,10 @@ headerbar .title-btn:hover label { opacity: 0.75; }
   box-shadow: none;
   border: 1px solid alpha(@borders, 0.55);
   border-radius: 9999px;
-  padding: 2px 14px;
+  padding: 0 11px;
+  min-height: 26px;
   min-width: 0;
+  font-size: 0.92em;
 }
 .preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
 /* Bolding, matching the mockup. GTK sets button labels bold by default, which

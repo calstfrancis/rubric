@@ -203,8 +203,6 @@ class MainChrome:
         self._main._preview_btn.add_css_class("flat")
         self._main._preview_btn.add_css_class("preview-pill")
         self._main._preview_btn.connect("clicked", self._main._preview._toggle_preview_panel)
-        hdr.pack_end(self._main._preview_btn)
-
         # Export — the one document action worth an icon, and previously buried
         # document-save-symbolic is a downward arrow over a line in the runtime's
         # icon theme — the mockup's glyph exactly. (It falls back to a floppy on
@@ -214,6 +212,8 @@ class MainChrome:
         _export_btn.add_css_class("flat")
         _export_btn.set_action_name("win.export-as")
         hdr.pack_end(_export_btn)
+        hdr.pack_end(self._main._preview_btn)
+
 
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
         tv.set_top_bar_style(Adw.ToolbarStyle.RAISED_BORDER)
@@ -221,6 +221,7 @@ class MainChrome:
         # ── Status bar ────────────────────────────────────────────────────────
         status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         status_bar.add_css_class("toolbar")
+        status_bar.add_css_class("rubric-statusbar")
 
         def _status_toggle_btn(label_text, tooltip):
             lbl = Gtk.Label(); lbl.add_css_class("caption"); lbl.set_use_markup(True)

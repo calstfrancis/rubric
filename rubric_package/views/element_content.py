@@ -107,8 +107,29 @@ class ElementContentWidget(Gtk.Box):
             self._toolbar.append(w)
 
         header.append(self._toolbar)
-        self.append(header)
-        self.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # The formatting toolbar appears only while you're actually in the
+        # editor. It sits where the mockup puts the element's name, and a row of
+        # B/I/H1/H2/H3 buttons is no use to someone reading the service order.
+        #
+        # The controller watches "contains-focus" rather than "is-focus", so
+        # clicking a toolbar button — which moves focus off the text view and
+        # onto the button — doesn't make the toolbar vanish underneath the click.
+        _hdr_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        _hdr_box.append(header)
+        _hdr_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        self._toolbar_rev = Gtk.Revealer()
+        self._toolbar_rev.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._toolbar_rev.set_transition_duration(120)
+        self._toolbar_rev.set_child(_hdr_box)
+        self._toolbar_rev.set_reveal_child(False)
+        self.append(self._toolbar_rev)
+
+        _focus = Gtk.EventControllerFocus()
+        _focus.connect("notify::contains-focus",
+                       lambda c, _p: self._toolbar_rev.set_reveal_child(c.get_contains_focus()))
+        self.add_controller(_focus)
 
         # Notice banner: shown when typst→rich conversion loses some markup
         self._notice_rev = Gtk.Revealer()

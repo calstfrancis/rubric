@@ -439,6 +439,13 @@ class TestMainWindowConstruction(unittest.TestCase):
         win._refresh_order_list()
         self.assertIsInstance(win._notebook, Gtk.Notebook)
 
+    def test_formatting_toolbar_hidden_until_the_editor_has_focus(self):
+        """It occupies the spot the mockup gives the element's name, and is no
+        use to someone reading the order rather than writing in it."""
+        win = self._make_window(use_tabs=False)
+        rev = win._content_widget._toolbar_rev
+        self.assertFalse(rev.get_reveal_child())
+
     def test_header_bar_hides_window_controls(self):
         """Adw.HeaderBar splits these into start/end; the single-setter name
         that GtkHeaderBar uses does not exist and raises at construction."""
