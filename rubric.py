@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev10"
+APP_VERSION = "0.20.0-dev11"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -303,10 +303,15 @@ class MainWindow(Adw.ApplicationWindow):
                 self._gost_status_lbl.set_text("GOST")
         if hasattr(self, "_gost_status_btn"):
             self._toggle_chip(self._gost_status_btn, config.gost_mode)
+        # One provider drives every font override. GOST wins if it's on;
+        # otherwise an explicit UI font applies; otherwise the system font.
         if config.gost_mode:
-            self._gost_css.load_from_data(b"* { font-family: 'GOST type B'; }")
+            css = "* { font-family: 'GOST type B'; }"
+        elif config.ui_font.strip():
+            css = _ui_font_css(config.ui_font)
         else:
-            self._gost_css.load_from_data(b"")
+            css = ""
+        self._gost_css.load_from_data(css.encode())
 
     def _toggle_chip(self, btn: Gtk.Widget, active: bool) -> None:
         """Mark a status-bar toggle active.
@@ -5067,6 +5072,7 @@ class LiturgyPlannerApp(Adw.Application):
                 pass
             _ensure_gost_font()
             _apply_theme()
+            _force_adwaita_icons()
             css = Gtk.CssProvider()
             css.load_from_data(b"""
 /* Default (non-compact): give rows comfortable breathing room */
@@ -5149,6 +5155,18 @@ headerbar .title-btn:hover label { opacity: 0.75; }
   min-width: 0;
 }
 .preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
+/* Bolding, matching the mockup. GTK sets button labels bold by default, which
+   made Preview, the formatting toolbar and the Details toggle all shout. In the
+   mockup the only bold things are the service title, section headers, element
+   titles and whichever status toggles are active. */
+.preview-pill label,
+.fmt-toolbar button label,
+.details-btn label,
+.add-btn label,
+button.reading-chip label { font-weight: 400; }
+/* Element palette search: part of the list, not a piece of chrome */
+.palette-search { background: transparent; box-shadow: none; border: none; }
+.palette-search:focus-within { background: alpha(@window_fg_color, 0.05); }
 /* Editor surface is the pane itself, not a card floating in it */
 .elem-editor { border: none; box-shadow: none; background: transparent; }
 /* Formatting toolbar: quiet until used */
@@ -5310,6 +5328,42 @@ button.reading-chip { font-size: 0.9em; }
             self.add_action(nw_action)
             self.set_accels_for_action("app.new-window", ["<Ctrl><Shift>n"])
         MainWindow(application=app).present()
+
+def _force_adwaita_icons():
+    """Draw Rubric's icons from Adwaita whatever the desktop's icon theme is.
+
+    Symbolic icon *names* are shared across themes but the drawings are not:
+    under KDE this app was resolving them from breeze-dark, where
+    ``document-save-symbolic`` is a sharp floppy disk rather than a download
+    arrow and ``sidebar-show-symbolic`` is a small hard-edged rectangle. Those
+    are fine icons — they are simply a different family from the one a
+    libadwaita interface is drawn against, so the window ended up mixing two
+    icon languages.
+
+    Only the icon theme is forced. The colour scheme, accent colour and font
+    all still come from the system.
+    """
+    try:
+        settings = Gtk.Settings.get_default()
+        if settings is not None:
+            settings.set_property("gtk-icon-theme-name", "Adwaita")
+    except Exception:
+        pass
+
+
+def _ui_font_css(spec: str) -> str:
+    """CSS for a Pango-style font spec like "URW Palladio L 12".
+
+    A trailing integer is the point size; everything before it is the family.
+    Quoted so families with spaces work.
+    """
+    spec = spec.strip()
+    size = ""
+    parts = spec.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        spec, size = parts[0], f" font-size: {parts[1]}pt;"
+    return f"* {{ font-family: '{spec}';{size} }}"
+
 
 def _apply_theme():
     """Drive libadwaita's colour scheme from the stored System/Light/Dark choice.

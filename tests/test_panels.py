@@ -439,6 +439,15 @@ class TestMainWindowConstruction(unittest.TestCase):
         win._refresh_order_list()
         self.assertIsInstance(win._notebook, Gtk.Notebook)
 
+    def test_header_bar_hides_window_controls(self):
+        """Adw.HeaderBar splits these into start/end; the single-setter name
+        that GtkHeaderBar uses does not exist and raises at construction."""
+        win = self._make_window(use_tabs=False)
+        hdr = win._preview_btn.get_ancestor(Adw.HeaderBar)
+        self.assertIsNotNone(hdr)
+        self.assertFalse(hdr.get_show_start_title_buttons())
+        self.assertFalse(hdr.get_show_end_title_buttons())
+
     def test_status_bar_and_header_widgets_exist(self):
         win = self._make_window(use_tabs=False)
         for attr in ("_simple_status_btn", "_focus_status_btn", "_word_count_lbl",

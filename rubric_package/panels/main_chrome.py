@@ -29,6 +29,10 @@ class MainChrome:
 
         hdr = Adw.HeaderBar()
         hdr.add_css_class("rubric-main-hdr")
+        # No minimise/maximise/close: the mockup has none, and the window
+        # manager's own decorations, Ctrl+W and Alt+F4 all still close it.
+        hdr.set_show_start_title_buttons(False)
+        hdr.set_show_end_title_buttons(False)
         self._main._season_hdr_css = Gtk.CssProvider()
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), self._main._season_hdr_css,
@@ -147,7 +151,8 @@ class MainChrome:
         self._main._cover_thumb.add_css_class("cover-thumb")
         self._main._cover_thumb.set_visible(False)
         self._main._cover_thumb.set_tooltip_text("Cover image — change in Settings → Bulletin")
-        hdr.pack_start(self._main._cover_thumb)
+        # Deliberately not packed: it previews a Bulletin setting rather than
+        # doing anything, and it was the first thing in the header bar.
         self._main._refresh_cover_thumb()
 
         # Save is Ctrl+S and a menu item; the status bar's save-state chip is
@@ -211,6 +216,7 @@ class MainChrome:
         hdr.pack_end(_export_btn)
 
         tv = Adw.ToolbarView(); tv.add_top_bar(hdr)
+        tv.set_top_bar_style(Adw.ToolbarStyle.RAISED_BORDER)
 
         # ── Status bar ────────────────────────────────────────────────────────
         status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -344,6 +350,7 @@ class MainChrome:
         status_bar.append(_right_box)
 
         tv.add_bottom_bar(status_bar)
+        tv.set_bottom_bar_style(Adw.ToolbarStyle.RAISED_BORDER)
 
         # GOST CSS provider (priority above application so it overrides theme fonts)
         self._main._gost_css = Gtk.CssProvider()

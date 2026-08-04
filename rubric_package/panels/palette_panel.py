@@ -29,29 +29,13 @@ class PalettePanel:
         self._main._palette_search = Gtk.SearchEntry()
         self._main._palette_search.set_placeholder_text("Search elements…")
         self._main._palette_search.set_margin_start(12); self._main._palette_search.set_margin_end(12)
-        self._main._palette_search.set_margin_top(8); self._main._palette_search.set_margin_bottom(2)
+        self._main._palette_search.set_margin_top(6); self._main._palette_search.set_margin_bottom(2)
+        self._main._palette_search.add_css_class("palette-search")
         self._main._palette_search.connect("search-changed", self._on_palette_search_changed)
         box.append(self._main._palette_search)
 
-        # Hymn cache indicator
-        cache_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        cache_bar.set_margin_start(12); cache_bar.set_margin_end(12)
-        cache_bar.set_margin_bottom(4)
-        try:
-            from rubric_package.db import hymn_count as _hcount
-            _n = _hcount()
-        except Exception:
-            _n = 0
-        self._main._hymn_cache_lbl = Gtk.Label(label=f"📚 {_n} hymns cached")
-        self._main._hymn_cache_lbl.add_css_class("caption")
-        self._main._hymn_cache_lbl.add_css_class("dim-label")
-        self._main._hymn_cache_lbl.set_hexpand(True); self._main._hymn_cache_lbl.set_xalign(0)
-        cache_bar.append(self._main._hymn_cache_lbl)
-        clear_btn = Gtk.Button(label="Clear")
-        clear_btn.add_css_class("flat"); clear_btn.add_css_class("caption")
-        clear_btn.connect("clicked", self._on_hymn_cache_clear)
-        cache_bar.append(clear_btn)
-        box.append(cache_bar)
+        # The hymn-cache readout and its Clear button moved to Preferences —
+        # it's a maintenance statistic, not something to keep on screen.
 
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
         self._main._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -62,13 +46,24 @@ class PalettePanel:
         scroll.set_child(self._main._palette_inner); box.append(scroll)
         return box
 
-    def _on_hymn_cache_clear(self, _btn):
+    def hymn_cache_count(self) -> int:
         try:
-            from rubric_package.db import hymn_clear, hymn_count as _hcount
+            from rubric_package.db import hymn_count as _hcount
+            return _hcount()
+        except Exception:
+            return 0
+
+    def _on_hymn_cache_clear(self, _btn=None) -> int:
+        """Empty the hymn cache and report what it holds afterwards.
+
+        Called from Preferences now rather than from a row above the palette.
+        """
+        try:
+            from rubric_package.db import hymn_clear
             hymn_clear()
-            self._main._hymn_cache_lbl.set_label(f"📚 {_hcount()} hymns cached")
         except Exception:
             pass
+        return self.hymn_cache_count()
 
     def _on_palette_search_changed(self, entry):
         text = entry.get_text().lower().strip()

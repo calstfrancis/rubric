@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev10] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev11] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -75,6 +75,27 @@ All notable changes are documented here, newest first.
   bulletin options, scripture and hymn lookup moved behind a **Details** toggle that remembers
   whether you left it open — three rows of form controls used to stand between you and the text
   you were writing.
+- **The header bar and status bar are distinct surfaces again**, darker than the content with
+  a clear line under and over them. They had been sharing the content's colour because the
+  toolbars were left in libadwaita's flat style; they now use the raised style, which is what
+  draws the separator too.
+- **Less in the chrome.** The window's minimise/maximise/close buttons are gone (the window
+  manager's own decorations, Ctrl+W and Alt+F4 all still close it). The bulletin cover
+  thumbnail no longer sits in the header bar — it previewed a setting rather than doing
+  anything, and it was the first thing in the window. The hymn-cache readout and its Clear
+  button moved from above the element palette into Preferences, beside the cache they describe,
+  and the palette's search field lost its frame so it reads as part of the list.
+- **Bolding matches the design.** GTK sets button labels bold by default, so Preview, the
+  formatting toolbar, Details and the reading chips were all shouting. Bold is now reserved for
+  the service title, section headers, element titles, and whichever status-bar toggles are on.
+- **Icons come from Adwaita now, whatever the desktop's icon theme is.** Symbolic icon *names*
+  are shared between themes but the drawings are not: under KDE, Rubric was resolving them from
+  breeze-dark, where "save" is a sharp floppy disk rather than a download arrow and the sidebar
+  toggle is a small hard-edged rectangle. Good icons, but a different family from the one a
+  libadwaita interface is drawn against, so the window was mixing two icon languages. Only the
+  icon theme is pinned — colour scheme, accent colour and font still follow the system.
+- **An interface font setting**, under View in Preferences. Leave it empty to follow the system
+  font, or name a family and size — "URW Palladio L 12" — for something else.
 - **Smaller chrome corrections toward the same design:** the service title has no frame around
   it and spells out "· unsaved" rather than showing a bullet; Preview is a hairline pill rather
   than a framed button; the content editor is the pane itself rather than a card floating in

@@ -60,6 +60,8 @@ class Config:
         self.readings_collapsed: bool = False
         # UI colour scheme: "system" | "light" | "dark"
         self.theme: str = "system"
+        # UI font override, e.g. "URW Palladio L 11". Empty = follow the system.
+        self.ui_font: str = ""
         # Element "Details" strip (leader, duration, scripture, hymn) expanded
         self.element_details_open: bool = False
         self.window_sizes: dict[str, list] = {}
@@ -117,6 +119,7 @@ class Config:
                 self.ui_panes          = d.get("ui_panes", {})
                 self.readings_collapsed = d.get("readings_collapsed", False)
                 self.theme             = d.get("theme", "system")
+                self.ui_font           = d.get("ui_font", "")
                 self.element_details_open = d.get("element_details_open", False)
                 self.window_sizes      = d.get("window_sizes", {})
                 self.custom_dates      = d.get("custom_dates", [])
@@ -174,6 +177,7 @@ class Config:
             "ui_panes":              self.ui_panes,
             "readings_collapsed":    self.readings_collapsed,
             "theme":                 self.theme,
+            "ui_font":               self.ui_font,
             "element_details_open":  self.element_details_open,
             "window_sizes":          self.window_sizes,
             "custom_dates":          self.custom_dates,

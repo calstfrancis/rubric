@@ -63,6 +63,25 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)
 
+        # ── Interface font ────────────────────────────────────────────────
+        font_grp = Adw.PreferencesGroup(
+            title="Interface font",
+            description="Leave empty to follow the system font. "
+                        "Give a family and optional size, e.g. \u201cURW Palladio L 12\u201d.")
+        page.add(font_grp)
+        font_row = Adw.EntryRow(title="Font") if hasattr(Adw, "EntryRow") else None
+        if font_row is not None:
+            font_row.set_text(config.ui_font)
+
+            def _on_font_changed(row):
+                config.ui_font = row.get_text().strip()
+                config.save()
+                win = self.get_transient_for()
+                if win is not None and hasattr(win, "_apply_gost_mode"):
+                    win._apply_gost_mode()
+            font_row.connect("changed", _on_font_changed)
+            font_grp.add(font_row)
+
         # ── Simple mode ───────────────────────────────────────────────────
         mode_grp = Adw.PreferencesGroup(
             title="Feature level",
@@ -471,6 +490,21 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         status_row = Adw.ActionRow(title="Cached titles")
         status_row.add_suffix(self._hymn_dl_status)
+        # Clearing the cache used to be a row above the element palette. It's a
+        # maintenance action, so it belongs next to the cache it maintains.
+        _clear_btn = Gtk.Button(label="Clear", valign=Gtk.Align.CENTER)
+        _clear_btn.add_css_class("flat")
+
+        def _on_clear(_b):
+            try:
+                from rubric_package.db import hymn_clear, hymn_count as _hc
+                hymn_clear()
+                n = _hc()
+            except Exception:
+                n = 0
+            self._hymn_dl_status.set_text(f"{n} titles cached")
+        _clear_btn.connect("clicked", _on_clear)
+        status_row.add_suffix(_clear_btn)
         hymn_grp.add(status_row)
         hymn_grp.add(self._hymn_dl_bar)
 
