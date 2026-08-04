@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev14"
+APP_VERSION = "0.20.0-dev15"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -401,61 +401,74 @@ class MainWindow(Adw.ApplicationWindow):
         self._toast_overlay.add_toast(toast)
 
     def _refresh_menu(self):
+        """Build the primary menu.
+
+        Ordered the way GNOME's guidelines lay out a primary menu: the document
+        first, then what you can do to this service, then getting it out of the
+        app, then the library, and app-level items last. Accelerators are not
+        written into the labels - GTK renders them from the action's registered
+        accel, so typing them in duplicated them and made every label longer.
+
+        View toggles (compact view, developer mode, the interface font) live in
+        Preferences rather than here: a menu item that toggles something has to
+        show its state, and a column of them is a settings page wearing a menu.
+        """
         simple = config.simple_mode
         menu = Gio.Menu()
 
-        # Actions moved off the header bar keep their place here
+        # -- The document --------------------------------------------------
+        doc_sec = Gio.Menu()
+        doc_sec.append("New Service", "win.new")
+        doc_sec.append("New Window", "app.new-window")
+        doc_sec.append("Open\u2026", "win.open")
+        doc_sec.append_submenu("Open Recent", self._recent_sec)
+        menu.append_section(None, doc_sec)
+
         save_sec = Gio.Menu()
-        save_sec.append("Open… (Ctrl+O)", "win.open")
-        save_sec.append("Save (Ctrl+S)", "win.save")
-        save_sec.append("Save as…", "win.save-as")
-        save_sec.append("New window (Ctrl+Shift+N)", "app.new-window")
+        save_sec.append("Save", "win.save")
+        save_sec.append("Save As\u2026", "win.save-as")
+        save_sec.append("Duplicate Service", "win.duplicate")
         menu.append_section(None, save_sec)
 
-        menu.append("Preferences", "win.preferences")
-        menu.append("Bulletin settings…", "win.open-bulletin-prefs")
-        add_sec = Gio.Menu()
-        add_sec.append("Add element (Ctrl+Shift+N)", "win.add-custom")
-        add_sec.append("Add section (Ctrl+D)", "win.add-divider")
-        menu.append_section(None, add_sec)
-
-        menu.append("Duplicate service", "win.duplicate")
-        menu.append("Liturgical calendar…", "win.liturgical-events")
-        menu.append("Service notes…", "win.service-notes")
+        # -- This service --------------------------------------------------
+        svc_sec = Gio.Menu()
+        svc_sec.append("Service Notes\u2026", "win.service-notes")
+        svc_sec.append("Liturgical Calendar\u2026", "win.liturgical-events")
         if not simple:
-            menu.append("Save order as template…", "win.save-template")
+            svc_sec.append("Snippets\u2026", "win.snippets")
+            svc_sec.append("Save Order as Template\u2026", "win.save-template")
+        menu.append_section(None, svc_sec)
 
-        file_sec = Gio.Menu()
-        file_sec.append("Export as…", "win.export-as")
-        file_sec.append("Copy service as text", "win.copy-as-text")
-        file_sec.append("Services…", "win.open-services")
-        menu.append_section(None, file_sec)
-
-        if config.github_repo and not simple:
-            git_sec = Gio.Menu()
-            git_sec.append("Push to GitHub (Ctrl+Shift+G)", "win.git-push")
-            git_sec.append("Pull from GitHub", "win.git-pull")
-            menu.append_section("GitHub Sync", git_sec)
-
+        # -- Getting it out of the app ---------------------------------------
+        out_sec = Gio.Menu()
+        out_sec.append("Export\u2026", "win.export-as")
+        out_sec.append("Copy as Text", "win.copy-as-text")
+        out_sec.append("Bulletin Settings\u2026", "win.open-bulletin-prefs")
         if not simple:
-            adv_sec = Gio.Menu()
-            adv_sec.append("Snippets (Ctrl+Shift+I)", "win.snippets")
-            adv_sec.append("Document template", "win.toggle-template")
-            adv_sec.append("Compact view", "win.toggle-compact")
-            adv_sec.append("GOST interface font", "win.toggle-gost")
-            adv_sec.append("Developer mode", "win.toggle-dev")
-            menu.append_section("Advanced", adv_sec)
+            out_sec.append("Edit Document Template\u2026", "win.toggle-template")
+        menu.append_section(None, out_sec)
 
+        # -- Library and sync ------------------------------------------------
+        lib_sec = Gio.Menu()
+        lib_sec.append("Services\u2026", "win.open-services")
+        if config.github_repo:
+            lib_sec.append("Push to GitHub", "win.git-push")
+            lib_sec.append("Pull from GitHub", "win.git-pull")
+        menu.append_section(None, lib_sec)
+
+        # -- The app ---------------------------------------------------------
         theme_sec = Gio.Menu()
-        theme_sec.append("System theme", "win.theme-system")
-        theme_sec.append("Light", "win.theme-light")
-        theme_sec.append("Dark", "win.theme-dark")
-        menu.append_submenu("Appearance", theme_sec)
+        theme_sec.append("Follow System", "win.theme::system")
+        theme_sec.append("Light", "win.theme::light")
+        theme_sec.append("Dark", "win.theme::dark")
 
-        menu.append("What's on screen?", "win.ui-help")
-        menu.append("Help…", "win.open-help")
-        menu.append("Welcome wizard…", "win.show-wizard")
-        menu.append_submenu("Recent files", self._recent_sec)
+        app_sec = Gio.Menu()
+        app_sec.append_submenu("Appearance", theme_sec)
+        app_sec.append("Preferences", "win.preferences")
+        app_sec.append("What's on Screen?", "win.ui-help")
+        app_sec.append("Help", "win.open-help")
+        app_sec.append("Welcome Wizard\u2026", "win.show-wizard")
+        menu.append_section(None, app_sec)
 
         self._menu_btn.set_menu_model(menu)
 
@@ -487,9 +500,6 @@ class MainWindow(Adw.ApplicationWindow):
             ("toggle-compact",  lambda: self._on_compact_status_clicked(None), None),
             ("liturgical-events", self._show_liturgical_events, None),
             ("service-notes",     self._open_planning_notes,   None),
-            ("theme-system",  lambda: self._set_theme("system"), None),
-            ("theme-light",   lambda: self._set_theme("light"),  None),
-            ("theme-dark",    lambda: self._set_theme("dark"),   None),
             ("toggle-dev",      lambda: self._on_dev_status_clicked(None),     None),
             ("toggle-template", lambda: self._on_preamble_clicked(None),       None),
             ("clear-recent",       self._clear_recent,      None),
@@ -530,6 +540,17 @@ class MainWindow(Adw.ApplicationWindow):
         ra.connect("activate", lambda _a,p: self._confirm_discard(lambda path=p.get_string(): self._load_file(path)))
         self.add_action(ra)
         na = Gio.SimpleAction.new("noop", None); na.set_enabled(False); self.add_action(na)
+
+        # Theme is a radio group, not three separate commands: a stateful
+        # action lets the menu mark which one is in effect.
+        theme_action = Gio.SimpleAction.new_stateful(
+            "theme", GLib.VariantType.new("s"), GLib.Variant("s", config.theme))
+
+        def _on_theme(action, param):
+            action.set_state(param)
+            self._set_theme(param.get_string())
+        theme_action.connect("activate", _on_theme)
+        self.add_action(theme_action)
 
     # ── UI ────────────────────────────────────────────────────────────────────
     # (Moved to MainChrome, rubric_package/panels/main_chrome.py — see refactor.md.)

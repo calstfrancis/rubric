@@ -63,6 +63,57 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)
 
+        # ── View options ──────────────────────────────────────────────────
+        # These were menu items. A menu entry that toggles something has to show
+        # its state, and five of them in a row is a settings page in disguise.
+        view_grp = Adw.PreferencesGroup(title="View")
+        page.add(view_grp)
+
+        def _switch_row(title, subtitle, initial, on_change):
+            if hasattr(Adw, "SwitchRow"):
+                row = Adw.SwitchRow(title=title, subtitle=subtitle)
+                row.set_active(initial)
+                row.connect("notify::active", lambda r, _p: on_change(r.get_active()))
+            else:
+                row = Adw.ActionRow(title=title, subtitle=subtitle)
+                sw = Gtk.Switch(valign=Gtk.Align.CENTER)
+                sw.set_active(initial)
+                sw.connect("notify::active", lambda w, _p: on_change(w.get_active()))
+                row.add_suffix(sw); row.set_activatable_widget(sw)
+            view_grp.add(row)
+            return row
+
+        def _main():
+            return self.get_transient_for()
+
+        def _set_compact(active):
+            if config.compact_mode != active:
+                w = _main()
+                if w is not None:
+                    w._on_compact_status_clicked(None)
+
+        def _set_gost(active):
+            if config.gost_mode != active:
+                w = _main()
+                if w is not None:
+                    w._on_gost_status_clicked(None)
+
+        def _set_dev(active):
+            w = _main()
+            if w is not None and getattr(w, "_dev_mode", False) != active:
+                w._on_dev_status_clicked(None)
+
+        _switch_row("Compact view",
+                    "Tighter spacing so more of the service fits on screen",
+                    config.compact_mode, _set_compact)
+        if not config.simple_mode:
+            _switch_row("GOST interface font",
+                        "A Cyrillic engineering typeface, in place of the system font",
+                        config.gost_mode, _set_gost)
+            _switch_row("Developer mode",
+                        "Adds a \u201cCopy Typst source\u201d button to the preview panel",
+                        bool(getattr(self.get_transient_for(), "_dev_mode", False)), _set_dev)
+
         # ── Interface font ────────────────────────────────────────────────
         font_grp = Adw.PreferencesGroup(
             title="Interface font",

@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev14] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev15] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -37,6 +37,15 @@ All notable changes are documented here, newest first.
   section and sized by duration, with the current element highlighted. Click any tick to jump
   there. The editor is now held to a reading measure and centred, so text you'll read aloud is
   set like text rather than stretched across the pane.
+- **The menu is reorganised along GNOME's guidelines.** It had grown to eight groups in no
+  particular order, with Preferences floating in the middle and keyboard shortcuts typed into
+  the labels by hand. It now runs document, then this service, then getting it out of the app,
+  then the library, with app-level items last. Shortcuts are gone from the labels because GTK
+  already draws them from the action itself. Compact view, the GOST font and Developer mode
+  moved into Preferences, where a toggle can actually show whether it is on; the theme choice
+  became a proper radio group that marks the one in effect. Nineteen items down to eighteen in
+  simple mode, twenty-seven down to twenty-three otherwise, and grouped so the count matters
+  less than it did.
 - **Save and push to GitHub is one click again**, as a plain "Git" in the status bar. It saves
   the service, commits it and pushes, which is what Ctrl+Shift+G has always done — it just had
   nowhere visible to be clicked. It appears whenever a repository is configured, rather than

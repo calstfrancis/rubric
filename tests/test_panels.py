@@ -439,6 +439,39 @@ class TestMainWindowConstruction(unittest.TestCase):
         win._refresh_order_list()
         self.assertIsInstance(win._notebook, Gtk.Notebook)
 
+    def test_primary_menu_is_grouped_and_ends_with_app_items(self):
+        """The menu had grown to 22 entries across 8 groups with Preferences
+        floating in the middle. GNOME's primary menu puts the document first
+        and app-level items last."""
+        win = self._make_window(use_tabs=False)
+        model = win._menu_btn.get_menu_model()
+        self.assertIsNotNone(model)
+
+        def section_labels(m, i):
+            sec = m.get_item_link(i, "section")
+            out = []
+            for j in range(sec.get_n_items()):
+                v = sec.get_item_attribute_value(j, "label", None)
+                out.append(v.get_string() if v else None)
+            return out
+
+        sections = [section_labels(model, i) for i in range(model.get_n_items())]
+        self.assertEqual(sections[0][0], "New Service")
+        self.assertIn("Preferences", sections[-1])
+        self.assertIn("Help", sections[-1])
+        # No accelerator text typed into labels — GTK renders those itself.
+        for sec in sections:
+            for label in sec:
+                if label:
+                    self.assertNotIn("Ctrl", label, f"accel typed into {label!r}")
+
+    def test_theme_is_a_stateful_radio(self):
+        """Three separate commands can't show which one is in effect."""
+        win = self._make_window(use_tabs=False)
+        action = win.lookup_action("theme")
+        self.assertIsNotNone(action)
+        self.assertEqual(action.get_state().get_string(), config.theme)
+
     def test_git_button_follows_whether_a_repository_is_configured(self):
         """Save-and-push is shown to anyone who has set up a repository.
 
