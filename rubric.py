@@ -72,6 +72,21 @@ _hex_to_rgb             = hex_to_rgb
 _is_hymn_element        = is_hymn_element
 _entry_from_dict        = entry_from_dict
 
+def _item_cue_class(name: str) -> str:
+    """Which coloured dot an element gets: music, reading, or neither.
+
+    Ambo says an element's kind with a dot, not an icon — a column of glyphs
+    down a service is noise, a column of two or three colours is scannable.
+    """
+    n = name.lower()
+    if any(w in n for w in ("hymn", "song", "anthem", "music", "prelude",
+                            "postlude", "choir", "sung", "psalm")):
+        return "cue-music"
+    if any(w in n for w in ("scripture", "reading", "epistle", "gospel", "bible")):
+        return "cue-read"
+    return "cue-plain"
+
+
 def _item_type_icon(name: str) -> str | None:
     n = name.lower()
     if any(w in n for w in ("hymn","song","anthem","music","prelude","postlude","choir","sung","psalm")):
@@ -138,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev7"
+APP_VERSION = "0.20.0-dev8"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -294,7 +309,12 @@ class MainWindow(Adw.ApplicationWindow):
             self._gost_css.load_from_data(b"")
 
     def _toggle_chip(self, btn: Gtk.Widget, active: bool) -> None:
-        """Add/remove the active-pill visual on a status bar toggle button."""
+        """Mark a status-bar toggle active.
+
+        Weight, not a pill: the mockup's status bar is a line of plain words
+        where the active ones are simply bold, so nothing in it draws the eye
+        the way a filled chip does.
+        """
         if active:
             btn.add_css_class("mode-btn-active")
         else:
@@ -396,6 +416,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         menu.append("Duplicate service", "win.duplicate")
         menu.append("Liturgical calendar…", "win.liturgical-events")
+        menu.append("Service notes…", "win.service-notes")
         if not simple:
             menu.append("Save order as template…", "win.save-template")
 
@@ -460,6 +481,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("toggle-gost",     lambda: self._on_gost_status_clicked(None),    None),
             ("toggle-compact",  lambda: self._on_compact_status_clicked(None), None),
             ("liturgical-events", self._show_liturgical_events, None),
+            ("service-notes",     self._open_planning_notes,   None),
             ("theme-system",  lambda: self._set_theme("system"), None),
             ("theme-light",   lambda: self._set_theme("light"),  None),
             ("theme-dark",    lambda: self._set_theme("dark"),   None),
@@ -548,7 +570,11 @@ class MainWindow(Adw.ApplicationWindow):
     # ── Planning notes ────────────────────────────────────────────────────────
 
     def _build_planning_notes_area(self) -> Gtk.Box:
+        # Shown only when the service actually has planning notes. Ambo has no
+        # such strip; an empty one was a full-width row spent on nothing. Reach
+        # it from "Service notes…" in the menu when there's nothing to show yet.
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._planning_notes_outer = outer
 
         # Header bar: label + arrow indicator + pop-out button
         # The entire header is clickable (via GestureClick); the pop-out button is separate
@@ -619,11 +645,26 @@ class MainWindow(Adw.ApplicationWindow):
 
         return outer
 
+    def _sync_planning_notes_visibility(self):
+        """Hide the notes strip entirely while the service has no notes."""
+        outer = getattr(self, "_planning_notes_outer", None)
+        if outer is None:
+            return
+        has_notes = bool((getattr(self, "service_planning_notes", "") or "").strip())
+        outer.set_visible(has_notes or bool(getattr(self, "_notes_forced_open", False)))
+
+    def _open_planning_notes(self):
+        """Menu entry: reveal the notes strip and put the cursor in it."""
+        self._notes_forced_open = True
+        self._sync_planning_notes_visibility()
+        self._open_planning_notes_window()
+
     def _on_planning_notes_changed(self, buf: Gtk.TextBuffer):
         if getattr(self, "_loading_notes", False):
             return
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         self.service_planning_notes = text
+        self._notes_forced_open = True   # don't vanish while you're typing in it
         # Planning notes are not in the bulletin — don't trigger a preview redraw.
         self.modified = True
         self._update_title()
@@ -674,15 +715,12 @@ class MainWindow(Adw.ApplicationWindow):
         bx.set_margin_start(12); bx.set_margin_end(10)
         bx.set_margin_top(6); bx.set_margin_bottom(6)
 
-        # Type cue: the element's icon where it has one, a dot where it doesn't
-        user_icon = getattr(si, "icon", "")
-        _ico_name = user_icon or _item_type_icon(si.name)
-        if _ico_name:
-            cue = Gtk.Image(icon_name=_ico_name, pixel_size=14)
-        else:
-            cue = Gtk.Label(label="\u25cf")
-            cue.add_css_class("elem-cue")
-        cue.add_css_class("dim-label")
+        # Type cue: one dot, coloured by kind. Custom per-element icons still
+        # apply everywhere else (the bulletin, the palette); the list itself
+        # stays a column of colour rather than a column of glyphs.
+        cue = Gtk.Label(label="\u25cf")
+        cue.add_css_class("elem-cue")
+        cue.add_css_class(_item_cue_class(si.name))
         cue.set_valign(Gtk.Align.CENTER)
         bx.append(cue)
 
@@ -856,20 +894,15 @@ class MainWindow(Adw.ApplicationWindow):
         tl.connect("changed", lambda w,d=div: (setattr(d,"title",w.get_text().strip()), self._mark_modified()) if w.get_text().strip() and w.get_text().strip()!=d.title else None)
         bx.append(tl)
 
-        # Element count and running time — previously nowhere in the UI
-        meta = Gtk.Label(label=self._section_meta(global_idx))
+        # Element count and running time, set right against the title as one
+        # continuous label: "GATHERING · 12 MIN".
+        meta = Gtk.Label(label="\u00b7 " + self._section_meta(global_idx))
         row._meta_lbl = meta
         meta.add_css_class("section-meta")
         meta.set_valign(Gtk.Align.CENTER)
-        meta.set_margin_start(4)
         bx.append(meta)
 
-        # Hairline rule filling the rest of the row
-        rule = Gtk.Box(); rule.set_hexpand(True); rule.set_valign(Gtk.Align.CENTER)
-        rule.add_css_class("section-rule")
-        rule.set_size_request(-1, 1)
-        rule.set_margin_start(8); rule.set_margin_end(4)
-        bx.append(rule)
+        spacer = Gtk.Box(); spacer.set_hexpand(True); bx.append(spacer)
 
         db = Gtk.Button(icon_name="edit-delete-symbolic", tooltip_text="Remove section divider",
                         valign=Gtk.Align.CENTER)
@@ -955,7 +988,7 @@ class MainWindow(Adw.ApplicationWindow):
                 break
             lbl = getattr(row, "_meta_lbl", None)
             if lbl is not None:
-                lbl.set_label(self._section_meta(i))
+                lbl.set_label("\u00b7 " + self._section_meta(i))
             i += 1
 
     # ── Focus-mode spine ──────────────────────────────────────────────────────
@@ -1798,7 +1831,17 @@ class MainWindow(Adw.ApplicationWindow):
         cx = info["colour_hex"]
         self._season_colour_hex = cx
         self.season_dot.set_markup(f'<span color="{cx}">●</span>')
-        self.season_label.set_markup(f'<span color="{cx}">{GLib.markup_escape_text(info["week"])}</span>')
+        # "Ordinary 15" in the foreground, ", Year A" dim beside it. The text
+        # content is unchanged — only the weight differs — because the observance
+        # lookup reads this label back with get_text().
+        _week = info["week"]
+        _head, _sep, _tail = _week.partition(", Year ")
+        if _sep:
+            self.season_label.set_markup(
+                f'<b>{GLib.markup_escape_text(_head)}</b>'
+                f'<span alpha="55%">, Year {GLib.markup_escape_text(_tail)}</span>')
+        else:
+            self.season_label.set_markup(f'<b>{GLib.markup_escape_text(_week)}</b>')
         # One place, one block. The header-bar gradient tint and the per-season
         # chip fill both said the same thing as this swatch and made the window
         # read as washed in colour; the swatch beside the season name is now the
@@ -2265,10 +2308,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _update_title(self):
         svc = self.service_title_entry.get_text() or "New service"
-        if self.selected_date:
-            subtitle = self.selected_date.strftime("%-d %B %Y") + (" •" if self.modified else "")
-        else:
-            subtitle = svc + (" •" if self.modified else "")
+        # "16 August 2026 · unsaved" — the title carries save state, which is
+        # what lets the status bar stay quiet.
+        base = self.selected_date.strftime("%-d %B %Y") if self.selected_date else svc
+        subtitle = base + (" · unsaved" if self.modified else "")
         self.title_widget.set_title(
             Path(self.current_file).stem if self.current_file else svc)
         self.title_widget.set_subtitle(subtitle)
@@ -3273,6 +3316,8 @@ class MainWindow(Adw.ApplicationWindow):
             self._loading_notes = True
             self._planning_notes_buffer.set_text("")
             self._loading_notes = False
+        self._notes_forced_open = False
+        self._sync_planning_notes_visibility()
         if hasattr(self, "_bulletin_edit_btn") and self._bulletin_edit_btn.get_active():
             self._bulletin_edit_btn.set_active(False)
         if getattr(self, "_preview_webview", None):
@@ -3398,6 +3443,8 @@ class MainWindow(Adw.ApplicationWindow):
                 self._loading_notes = True
                 self._planning_notes_buffer.set_text(self.service_planning_notes)
                 self._loading_notes = False
+            self._notes_forced_open = False
+            self._sync_planning_notes_visibility()
             self.service_tags = list(data.get("tags", []) or [])
             self.service_series = data.get("series", "") or ""
             self.service_pinned = bool(data.get("pinned", False))
@@ -5008,10 +5055,14 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
 /* The list sits on a recessed ground so the grouped sections read as cards */
 .order-list { background: transparent; }
-.order-ground { background: alpha(@window_fg_color, 0.035); }
+/* The recessed pane the section cards sit on. Needs to be readable as a
+   different surface from the cards in both schemes, not a 2% hint. */
+.order-ground { background: alpha(@window_fg_color, 0.06); }
 /* Reading chips: quiet text, not tinted pills. The liturgical colour is said
    once by the swatch beside the season name and nowhere else. */
 button.reading-chip { background: transparent; box-shadow: none; border: none; }
+button.reading-chip label { font-weight: 400; opacity: 0.62; }
+button.reading-chip:hover label { opacity: 1; }
 button.reading-chip:hover { background: alpha(@window_fg_color, 0.07); }
 button.reading-chip:disabled { background: transparent; opacity: 0.4; }
 /* Reading chip: inserted into service */
@@ -5043,6 +5094,22 @@ notebook > stack { background: transparent; }
 .tab-list { background: transparent; }
 /* Header bar buttons: square, not tall */
 headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; padding: 4px; }
+/* Title button is text, not a control - no frame around the service name */
+headerbar .title-btn,
+headerbar .title-btn:hover { background: transparent; box-shadow: none; border: none; }
+headerbar .title-btn:hover label { opacity: 0.75; }
+/* Preview reads as a pill, the one bordered control in the header */
+.preview-pill {
+  border: 1px solid alpha(@borders, 0.9);
+  border-radius: 9999px;
+  padding: 2px 14px;
+  min-width: 0;
+}
+/* Editor surface is the pane itself, not a card floating in it */
+.elem-editor { border: none; box-shadow: none; background: transparent; }
+/* Formatting toolbar: quiet until used */
+.fmt-toolbar button { opacity: 0.6; }
+.fmt-toolbar button:hover { opacity: 1; }
 /* Drag handle: invisible until you're over the row it belongs to. A column of
    grip glyphs down every service was pure noise. */
 .order-list row .drag-handle { opacity: 0; transition: opacity 120ms; }
@@ -5061,7 +5128,13 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
-.section-meta { font-size: 0.78em; opacity: 0.55; }
+.section-meta {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
 /* Section delete: near-invisible at rest, legible on hover */
 .section-remove { opacity: 0; transition: opacity 120ms; min-height: 0; padding: 2px; }
 .order-list row.divider-row:hover .section-remove { opacity: 0.55; }
@@ -5075,7 +5148,8 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
 .elem-title { font-size: 0.98em; }
 .elem-detail { font-size: 0.88em; opacity: 0.55; }
 .elem-who { font-size: 0.88em; opacity: 0.6; }
-.elem-cue { font-size: 0.55em; opacity: 0.5; }
+.elem-cue { font-size: 0.62em; }
+.cue-plain { opacity: 0.28; }
 .compact-mode .elem-row > box { margin-top: 2px; margin-bottom: 2px; }
 /* Section rule: hairline running to the end of the header row */
 .section-rule { background: alpha(@borders, 0.45); min-height: 1px; }
@@ -5107,8 +5181,9 @@ headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; pad
   border-bottom-right-radius: 10px;
 }
 .order-list row.sec-item:not(.sec-first) { border-top: 1px solid alpha(@borders, 0.3); }
-/* Active mode toggle chips */
-.mode-btn-active { background: alpha(@accent_bg_color, 0.18); border-radius: 9999px; }
+/* Active status-bar toggle: weight, not a filled pill */
+.mode-btn-active { background: transparent; }
+.mode-btn-active label { font-weight: 700; color: @window_fg_color; }
 /* Metric pill chips (time bar, word count) */
 .metric-pill { background: alpha(@headerbar_shade_color, 0.5); border-radius: 9999px; padding: 1px 7px; }
 /* Planning notes header: pointer cursor + subtle hover */

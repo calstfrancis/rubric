@@ -64,6 +64,13 @@ sleep 2
 # GDK_BACKEND=x11 + unsetting WAYLAND_DISPLAY is required: GTK4 prefers Wayland
 # by default, which would otherwise connect to the real desktop session and
 # render there instead of into the isolated Xvfb display.
+#
+# dbus-run-session is required too, and for a reason none of the above covers:
+# GApplication's single-instance check runs over the *session* D-Bus bus, which
+# DISPLAY/HOME/XDG overrides don't touch. With Rubric already open for real,
+# this launch would register, find a primary instance, hand off to it, and exit
+# — leaving the isolated display empty and the screenshot solid black. Giving
+# the child its own bus makes it the primary instance of its own session.
 capture_scheme() {
   local scheme="$1" out="$2"
   mkdir -p "$DEMO_HOME/.config/glib-2.0/settings"
@@ -74,7 +81,8 @@ KEYFILE
 
   echo "==> Launching Rubric ($scheme) against demo data inside the isolated display"
   env -u WAYLAND_DISPLAY GDK_BACKEND=x11 HOME="$DEMO_HOME" XDG_CONFIG_HOME="$DEMO_HOME/.config" \
-    ADW_DISABLE_PORTAL=1 GSETTINGS_BACKEND=keyfile DISPLAY=":$DISPLAY_NUM" python3 rubric.py &
+    ADW_DISABLE_PORTAL=1 GSETTINGS_BACKEND=keyfile DISPLAY=":$DISPLAY_NUM" \
+    dbus-run-session -- python3 rubric.py &
   APP_PID=$!
 
   echo "==> Waiting for window to render"

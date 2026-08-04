@@ -79,6 +79,7 @@ class ElementContentWidget(Gtk.Box):
 
         # Formatting toolbar
         self._toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self._toolbar.add_css_class("fmt-toolbar")
         self._toolbar.set_hexpand(True)
 
         def _btn(label: str, tip: str, cb) -> Gtk.Button:
@@ -173,7 +174,7 @@ class ElementContentWidget(Gtk.Box):
             self._rich_view = Gtk.TextView()
             self._rich_buf = self._rich_view.get_buffer()
         self._rich_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self._rich_view.add_css_class("card")
+        self._rich_view.add_css_class("elem-editor")
         self._rich_view.set_top_margin(8);   self._rich_view.set_bottom_margin(8)
         self._rich_view.set_left_margin(10); self._rich_view.set_right_margin(10)
         ensure_tags(self._rich_buf)
@@ -202,7 +203,7 @@ class ElementContentWidget(Gtk.Box):
             self._typst_view = Gtk.TextView()
             self._typst_buf = self._typst_view.get_buffer()
         self._typst_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self._typst_view.add_css_class("card")
+        self._typst_view.add_css_class("elem-editor")
         self._typst_view.set_top_margin(8);   self._typst_view.set_bottom_margin(8)
         self._typst_view.set_left_margin(10); self._typst_view.set_right_margin(10)
         self._typst_buf.connect("changed", self._on_typst_buf_changed)

@@ -399,5 +399,50 @@ class TestOrderPanelConstruction(unittest.TestCase):
         self.assertFalse(main.sugg_revealer.get_reveal_child())
 
 
+@unittest.skipUnless(_GTK_OK, _SKIP_REASON)
+class TestMainWindowConstruction(unittest.TestCase):
+    """The one test that answers "does the app start?".
+
+    Every other test here drives a panel against a stub, which is exactly the
+    blind spot refactor.md's verification recipe warns about at step 4: a
+    chrome change that references an attribute before it is assigned builds
+    fine, imports fine, and passes every stub-based test — then throws
+    AttributeError the moment a real MainWindow is constructed, and the app
+    opens no window at all. That happened (``_focus_status_btn`` was appended
+    to the status bar above the line that creates it), and nothing in the suite
+    caught it. This does.
+
+    Both list views are covered because they take different construction paths:
+    ``use_tabs`` decides between ``_refresh_flat`` and ``_refresh_tabs``, and a
+    break in one is invisible from the other.
+    """
+
+    def _make_window(self, use_tabs: bool):
+        import rubric
+        prev = config.use_tabs
+        config.use_tabs = use_tabs
+        self.addCleanup(setattr, config, "use_tabs", prev)
+        app = rubric.LiturgyPlannerApp()
+        win = rubric.MainWindow(application=app)
+        self.addCleanup(win.destroy)
+        return win
+
+    def test_builds_in_flat_list_view(self):
+        win = self._make_window(use_tabs=False)
+        win._refresh_order_list()
+        self.assertIsInstance(win.order_listbox, Gtk.ListBox)
+
+    def test_builds_in_tabbed_view(self):
+        win = self._make_window(use_tabs=True)
+        win._refresh_order_list()
+        self.assertIsInstance(win._notebook, Gtk.Notebook)
+
+    def test_status_bar_and_header_widgets_exist(self):
+        win = self._make_window(use_tabs=False)
+        for attr in ("_simple_status_btn", "_focus_status_btn", "_word_count_lbl",
+                     "_save_state_lbl", "_preview_btn", "_menu_btn", "title_widget"):
+            self.assertTrue(hasattr(win, attr), f"missing chrome widget: {attr}")
+
+
 if __name__ == "__main__":
     unittest.main()

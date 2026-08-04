@@ -136,7 +136,8 @@ class MainChrome:
         info_pop.set_has_arrow(False); info_pop.set_position(Gtk.PositionType.BOTTOM)
 
         title_btn = Gtk.MenuButton(popover=info_pop)
-        title_btn.add_css_class("flat"); title_btn.set_child(self._main.title_widget)
+        title_btn.add_css_class("flat"); title_btn.add_css_class("title-btn")
+        title_btn.set_child(self._main.title_widget)
         hdr.set_title_widget(title_btn)
         self._main.selected_date = None
 
@@ -195,6 +196,7 @@ class MainChrome:
         self._main._preview_btn = Gtk.Button(tooltip_text="Toggle live preview")
         self._main._preview_btn.set_child(self._main._preview_lbl)
         self._main._preview_btn.add_css_class("flat")
+        self._main._preview_btn.add_css_class("preview-pill")
         self._main._preview_btn.connect("clicked", self._main._preview._toggle_preview_panel)
         hdr.pack_end(self._main._preview_btn)
 
@@ -235,6 +237,14 @@ class MainChrome:
             "SIMPLE", "Simple mode — hides export, GitHub sync and other advanced options. Good for first-time use.")
         self._main._simple_status_btn.connect("clicked", self._main._on_simple_status_clicked)
         _left_box.append(self._main._simple_status_btn)
+
+        # Focus sits beside Simple on the left, as in the mockup — it has to be
+        # built here rather than reused from the right-hand group, which is
+        # constructed further down.
+        self._main._focus_status_btn, self._main._focus_status_lbl = _status_toggle_btn(
+            "Focus", "Focus mode — hides the element palette and list so you can concentrate on the notes editor")
+        self._main._focus_status_btn.connect("clicked", lambda _: self._main._toggle_focus_mode())
+        _left_box.append(self._main._focus_status_btn)
 
         self._main._gost_status_btn, self._main._gost_status_lbl = _status_toggle_btn(
             "GOST", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
@@ -309,11 +319,6 @@ class MainChrome:
         self._main._save_state_lbl.set_visible(False)
         self._main._save_state_lbl.set_tooltip_text("Unsaved changes — press Ctrl+S to save")
         _right_box.append(self._main._save_state_lbl)
-
-        self._main._focus_status_btn, self._main._focus_status_lbl = _status_toggle_btn(
-            "Focus", "Focus mode — hides the element palette and list so you can concentrate on the notes editor")
-        self._main._focus_status_btn.connect("clicked", lambda _: self._main._toggle_focus_mode())
-        _right_box.append(self._main._focus_status_btn)
 
         _git_btn = Gtk.Button(label="Git")
         _git_btn.add_css_class("flat"); _git_btn.add_css_class("caption")

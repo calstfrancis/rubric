@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev7] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev8] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -39,13 +39,28 @@ All notable changes are documented here, newest first.
   the service title, Export, Preview, and the menu. Open, Undo, Redo, New Window, Save and
   Quick Help all moved into the hamburger and all keep their keyboard shortcuts. Export gains
   an icon, having previously been buried in a submenu.
-- **Element rows are one line instead of two.** A cue, the title, a dim reference where there
-  is one (a hymn number, a scripture citation), and the leader at the right edge. The old rows
-  stacked the leader and the opening line of the content underneath each title, which doubled
-  the height of every service and buried the titles themselves. The content preview is gone;
-  short references still show.
+- **Element rows are one line instead of two**, and carry a single coloured dot rather than a
+  type icon: green for music, red for readings, faint otherwise. A cue, the title, a dim
+  reference where there is one (a hymn number, a scripture citation), and the leader at the
+  right edge. The old rows stacked the leader and the opening line of the content underneath
+  each title, which doubled the height of every service and buried the titles themselves. The
+  content preview is gone; short references still show. Per-element custom icons are unchanged
+  everywhere else they appear.
 - **The readings row is a flat band across the top**, not a floating card with rounded corners
-  and margins.
+  and margins. The season name sits in the foreground with its year dim beside it — it used to
+  be entirely in the season's colour, which the colour block already says — and the readings
+  themselves are plain dim text.
+- **Section headers read as one label**: `GATHERING · 12 MIN`, uppercase and letterspaced,
+  instead of a title with its count flung to the far side of a hairline rule.
+- **Smaller chrome corrections toward the same design:** the service title has no frame around
+  it and spells out "· unsaved" rather than showing a bullet; Preview is the one bordered
+  control in the header; the content editor is the pane itself rather than a card floating in
+  it, with the formatting toolbar dimmed until you reach for it; active status-bar toggles are
+  bold text instead of filled pills, and Focus sits beside Simple; and the pane behind the
+  section cards is recessed enough to actually see in the light theme.
+- **The Service Notes strip appears only when the service has notes.** An empty one was a
+  full-width row spent on nothing; "Service notes…" in the menu opens it when there's nothing
+  there yet.
 - **Section colour appears once, on the section header, instead of as a stripe down the side
   of every element row** — a long service no longer reads as a stack of coloured bars.
 - **Section colours are a coherent family** rather than eight unrelated hues, with a second
@@ -77,6 +92,10 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **`capture-screenshots.sh` no longer opens windows in a running Rubric.** It isolated the
+  display, the home directory and the XDG dirs, but not the session D-Bus bus — so with Rubric
+  already open, the throwaway instance handed off to the real one, which opened a new window
+  per launch and left the screenshot blank. It now runs under `dbus-run-session`.
 - **Saving a service can no longer leave a half-written file.** Services and autosaves were
   written straight over the existing file, so a crash, a power loss, or a full disk partway
   through the write would truncate the file and lose the service. Both now write to a temporary

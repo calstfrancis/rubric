@@ -160,6 +160,7 @@ class OrderPanel:
 
         # ── Planning notes (theology / metaphors / movement) ──────────────────
         box.append(self._main._build_planning_notes_area())
+        self._main._sync_planning_notes_visibility()
 
         # ── Horizontal split: order pane (left) | notes pane (right) ─────────
         self._main._order_hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)

@@ -117,6 +117,11 @@ def time_colours(dark: bool | None = None) -> tuple[str, str]:
     return TIME_OVER, TIME_OK
 
 
+# Row cue dots: the element's kind, said in colour rather than an icon.
+CUE_MUSIC = SECTION_COLORS[0]
+CUE_MUSIC_DARK = SECTION_COLORS_DARK[0]
+
+
 def section_css(dark: bool | None = None) -> str:
     """Scheme-dependent CSS: section accents and the rubric-note tint.
 
@@ -129,7 +134,10 @@ def section_css(dark: bool | None = None) -> str:
     gray = SECTION_GRAY_DARK if dark else SECTION_GRAY
     red = RUBRIC_RED_DARK if dark else RUBRIC_RED
 
+    music = CUE_MUSIC_DARK if dark else CUE_MUSIC
     rules = [
+        f".cue-music {{ color: {music}; }}",
+        f".cue-read {{ color: {red}; }}",
         f".rubric-note-editor {{ color: {red}; }}",
         f".rubric-red {{ color: {red}; }}",
         f".section-dot-gray {{ color: {gray}; }}",
