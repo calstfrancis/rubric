@@ -439,6 +439,24 @@ class TestMainWindowConstruction(unittest.TestCase):
         win._refresh_order_list()
         self.assertIsInstance(win._notebook, Gtk.Notebook)
 
+    def test_git_button_follows_whether_a_repository_is_configured(self):
+        """Save-and-push is shown to anyone who has set up a repository.
+
+        It used to be tied to simple mode, which hid it from exactly the people
+        most likely to want one visible button for it.
+        """
+        win = self._make_window(use_tabs=False)
+        prev = config.github_repo
+        self.addCleanup(setattr, config, "github_repo", prev)
+
+        config.github_repo = ""
+        win._apply_simple_mode()
+        self.assertFalse(win._git_btn.get_visible())
+
+        config.github_repo = "/tmp/some-repo"
+        win._apply_simple_mode()
+        self.assertTrue(win._git_btn.get_visible())
+
     def test_element_rows_are_single_line_height(self):
         """Row height comes from one place, and compact is shorter than normal.
 
@@ -459,12 +477,22 @@ class TestMainWindowConstruction(unittest.TestCase):
         self.assertLess(natural, 48, f"single-line row is {natural}px tall")
         self.assertGreater(natural, 20)
 
-    def test_formatting_toolbar_hidden_until_the_editor_has_focus(self):
-        """It occupies the spot the mockup gives the element's name, and is no
-        use to someone reading the order rather than writing in it."""
+    def test_format_toggle_drives_the_formatting_toolbar(self):
+        """The toolbar is off by default and controlled by an explicit button.
+
+        It used to follow editor focus, which meant it appeared and vanished
+        as you clicked around; a button says what it does and stays put while
+        you use the toolbar it revealed.
+        """
         win = self._make_window(use_tabs=False)
-        rev = win._content_widget._toolbar_rev
-        self.assertFalse(rev.get_reveal_child())
+        prev = config.element_format_open
+        self.addCleanup(setattr, config, "element_format_open", prev)
+
+        self.assertFalse(win._content_widget.get_toolbar_visible())
+        win._format_btn.set_active(True)
+        self.assertTrue(win._content_widget.get_toolbar_visible())
+        win._format_btn.set_active(False)
+        self.assertFalse(win._content_widget.get_toolbar_visible())
 
     def test_header_bar_hides_window_controls(self):
         """Adw.HeaderBar splits these into start/end; the single-setter name

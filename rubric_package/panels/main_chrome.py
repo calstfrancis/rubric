@@ -202,6 +202,9 @@ class MainChrome:
         self._main._preview_btn.set_child(self._main._preview_lbl)
         self._main._preview_btn.add_css_class("flat")
         self._main._preview_btn.add_css_class("preview-pill")
+        # Without this the button fills the header bar's height and min-height
+        # in CSS has no effect — it was 40px tall against the design's 26.
+        self._main._preview_btn.set_valign(Gtk.Align.CENTER)
         self._main._preview_btn.connect("clicked", self._main._preview._toggle_preview_panel)
         # Export — the one document action worth an icon, and previously buried
         # document-save-symbolic is a downward arrow over a line in the runtime's
@@ -335,10 +338,12 @@ class MainChrome:
         _git_btn_lbl = _git_btn.get_child()
         if _git_btn_lbl:
             _git_btn_lbl.set_margin_top(1); _git_btn_lbl.set_margin_bottom(1)
-        _git_btn.set_tooltip_text("Commit and push to GitHub (Ctrl+Shift+G) — pull --rebase first")
+        _git_btn.set_tooltip_text(
+            "Save, commit and push this service to GitHub (Ctrl+Shift+G)")
         _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self._main.git_push())
         self._main._git_btn = _git_btn
+        _right_box.append(_git_btn)
         # Git lives under "GitHub Sync" in the hamburger; the status bar keeps
         # only what reports state (word count, save state) plus Focus.
 

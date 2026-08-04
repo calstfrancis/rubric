@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev13"
+APP_VERSION = "0.20.0-dev14"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -287,7 +287,7 @@ class MainWindow(Adw.ApplicationWindow):
         if hasattr(self, "_preamble_btn"):
             self._preamble_btn.set_visible(not simple)
         if hasattr(self, "_git_btn"):
-            self._git_btn.set_visible(not simple)
+            self._git_btn.set_visible(bool(config.github_repo))
         if hasattr(self, "_time_bar"):
             if simple:
                 self._time_bar.set_visible(False)
@@ -725,7 +725,8 @@ class MainWindow(Adw.ApplicationWindow):
         # Type cue: one dot, coloured by kind. Custom per-element icons still
         # apply everywhere else (the bulletin, the palette); the list itself
         # stays a column of colour rather than a column of glyphs.
-        cue = Gtk.Label(label="\u25cf")
+        cue = Gtk.Box()
+        cue.set_size_request(9, 9)
         cue.add_css_class("elem-cue")
         cue.add_css_class(_item_cue_class(si.name))
         cue.set_valign(Gtk.Align.CENTER)
@@ -4973,6 +4974,9 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             prefs.set_visible_page(prefs._dates_page)
         def on_destroy(_):
             self._palette._fill_palette_inner(); self._apply_tab_mode()
+            # A repository may have just been configured, which is what decides
+            # whether the status bar's Git button is shown.
+            self._apply_simple_mode()
             if self.selected_date:
                 self._refresh_justice_row(self.selected_date)
         prefs.connect("destroy", on_destroy); prefs.present()
@@ -5096,8 +5100,19 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .toolbar button.flat { min-height: 0; padding-top: 1px; padding-bottom: 1px; }
 /* Status bar separator */
 .rubric-statusbar-sep { opacity: 0.25; }
-/* Selected service order row */
-.order-list row.activatable:selected { border-left: 3px solid @accent_color; }
+/* Selected service order row: a quiet full-row wash, as in the design. The
+   accent-coloured outline GTK draws by default, plus the 3px bar this used to
+   add, made the current element shout instead of simply reading as current.
+   alpha() over the foreground darkens on a light card and lightens on a dark
+   one, so it works in both schemes without a second rule. */
+.order-list row.elem-row:selected,
+.order-list row.elem-row:selected:focus {
+  background: alpha(@window_fg_color, 0.09);
+  color: @window_fg_color;
+  border-left: none;
+  outline: none;
+  box-shadow: none;
+}
 /* The list sits on a recessed ground so the grouped sections read as cards */
 .order-list { background: transparent; }
 /* Surfaces. The mockup gets its legibility from four distinct planes, so use
@@ -5170,17 +5185,21 @@ headerbar .title-btn:hover label { opacity: 0.75; }
 /* Preview: a hairline pill, matching the mockup. It was reading as a heavy
    framed button because it drew a full-strength border on top of the flat
    button's own background. */
-.preview-pill {
+/* Preview: a hairline capsule. The selector has to include "headerbar button"
+   because "headerbar button:not(.suggested-action)" above is 0,1,2 and was
+   winning against a bare .preview-pill at 0,1,0 - forcing min-height 32px and
+   4px padding, which is what made the pill chubby and cramped round its text. */
+headerbar button.preview-pill {
   background: transparent;
   box-shadow: none;
   border: 1px solid alpha(@borders, 0.55);
   border-radius: 9999px;
-  padding: 0 11px;
-  min-height: 26px;
+  padding: 0 13px;
+  min-height: 25px;
   min-width: 0;
-  font-size: 0.92em;
 }
-.preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
+headerbar button.preview-pill label { font-size: 0.88em; font-weight: 400; }
+headerbar button.preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
 /* Bolding, matching the mockup. GTK sets button labels bold by default, which
    made Preview, the formatting toolbar and the Details toggle all shout. In the
    mockup the only bold things are the service title, section headers, element

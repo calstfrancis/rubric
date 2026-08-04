@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev13] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev14] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
 
@@ -37,6 +37,11 @@ All notable changes are documented here, newest first.
   section and sized by duration, with the current element highlighted. Click any tick to jump
   there. The editor is now held to a reading measure and centred, so text you'll read aloud is
   set like text rather than stretched across the pane.
+- **Save and push to GitHub is one click again**, as a plain "Git" in the status bar. It saves
+  the service, commits it and pushes, which is what Ctrl+Shift+G has always done — it just had
+  nowhere visible to be clicked. It appears whenever a repository is configured, rather than
+  being tied to simple mode, which had been hiding it from exactly the people who had set one
+  up.
 - **A System / Light / Dark theme choice**, under Appearance in the menu. Rubric previously
   had no colour-scheme handling at all, so it simply followed the desktop's appearance setting
   with no way to override it — and because it's a libadwaita app, GTK and KDE themes like
@@ -81,9 +86,13 @@ All notable changes are documented here, newest first.
   colour is pure white in the light scheme, so raising them alone changed nothing. The window
   now uses a deliberate ladder — cards and editor on the view surface, the order pane one step
   down, the chrome one step below that — so it reads as a frame around the content.
-- **The formatting toolbar appears only while you're in the editor.** It sat permanently in the
-  spot the design gives the element's name, and a row of B/I/H1/H2/H3 buttons is no use to
-  someone reading the service order rather than writing in it.
+- **A Format button beside Details** reveals the formatting toolbar, which is hidden otherwise.
+  It used to sit permanently in the spot the design gives the element's name, and a row of
+  B/I/H1/H2/H3 buttons is no use to someone reading the service order rather than writing in
+  it. Both toggles remember whether you left them open.
+- **The coloured dot beside each element is the size it should be.** A "\u25cf" glyph draws at
+  about a third of its own font size, so the cue was rendering at 5px where the design has 9;
+  it is a drawn circle now.
 - **The lectionary band is a strip rather than a slab.** Buttons have a 34px minimum in
   Adwaita, which was making a row of reference text twice as tall as the text in it.
 - **Element rows are single-line height at last — 40px, or 34 in compact view.** They had been
@@ -113,7 +122,9 @@ All notable changes are documented here, newest first.
   font, or name a family and size — "URW Palladio L 12" — for something else.
 - **Smaller chrome corrections toward the same design:** the service title has no frame around
   it and spells out "· unsaved" rather than showing a bullet; Preview is a hairline pill rather
-  than a framed button; the content editor is the pane itself rather than a card floating in
+  than a framed button (it had been rendering 40px tall with cramped padding, because a
+  header-bar rule out-specified its own styling and nothing capped its height); the content
+  editor is the pane itself rather than a card floating in
   it, with the formatting toolbar dimmed until you reach for it; active status-bar toggles are
   bold text instead of filled pills, Focus sits beside Simple, and the word count is plain text
   rather than a chip; and the pane behind the section cards uses the theme's own window and
@@ -122,6 +133,8 @@ All notable changes are documented here, newest first.
 - **The Service Notes strip appears only when the service has notes.** An empty one was a
   full-width row spent on nothing; "Service notes…" in the menu opens it when there's nothing
   there yet.
+- **The selected element is marked by a quiet wash across the row** instead of an accent-coloured
+  outline and a coloured bar down its side — it now reads as current rather than shouting.
 - **Section colour appears once, on the section header, instead of as a stripe down the side
   of every element row** — a long service no longer reads as a stack of coloured bars.
 - **Section colours are a coherent family** rather than eight unrelated hues, with a second

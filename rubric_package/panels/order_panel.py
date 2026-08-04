@@ -303,6 +303,14 @@ class OrderPanel:
         _hdr_text.append(self._main._elem_sub_lbl)
         elem_hdr.append(_hdr_text)
 
+        self._main._format_btn = Gtk.ToggleButton(label="Format")
+        self._main._format_btn.add_css_class("flat")
+        self._main._format_btn.add_css_class("details-btn")
+        self._main._format_btn.set_valign(Gtk.Align.CENTER)
+        self._main._format_btn.set_tooltip_text(
+            "Show the formatting toolbar — bold, italic, headings, lists, leader notes")
+        elem_hdr.append(self._main._format_btn)
+
         self._main._details_btn = Gtk.ToggleButton(label="Details")
         self._main._details_btn.add_css_class("flat")
         self._main._details_btn.add_css_class("details-btn")
@@ -434,6 +442,16 @@ class OrderPanel:
         self._main._content_widget.set_vexpand(True)
         self._main._content_widget.set_on_changed(self._main._on_content_typst_changed)
         self._main._content_widget.set_on_rubric_changed(self._main._on_rubric_note_changed)
+
+        # Wired here rather than beside the button: the toggle drives the
+        # content widget, which is only constructed at this point.
+        def _on_format_toggled(btn):
+            self._main._content_widget.set_toolbar_visible(btn.get_active())
+            config.element_format_open = btn.get_active()
+            config.save()
+        self._main._format_btn.set_active(config.element_format_open)
+        self._main._content_widget.set_toolbar_visible(config.element_format_open)
+        self._main._format_btn.connect("toggled", _on_format_toggled)
         notes_box.append(self._main._content_widget)
 
         # Scripture reference detection banner

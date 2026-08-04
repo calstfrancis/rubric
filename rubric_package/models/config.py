@@ -64,6 +64,8 @@ class Config:
         self.ui_font: str = ""
         # Element "Details" strip (leader, duration, scripture, hymn) expanded
         self.element_details_open: bool = False
+        # Formatting toolbar in the element editor revealed
+        self.element_format_open: bool = False
         self.window_sizes: dict[str, list] = {}
         self.custom_dates: list[dict] = []  # legacy; migrated into all_dates on first run
         self.all_dates: list[dict] = []
@@ -121,6 +123,7 @@ class Config:
                 self.theme             = d.get("theme", "system")
                 self.ui_font           = d.get("ui_font", "")
                 self.element_details_open = d.get("element_details_open", False)
+                self.element_format_open = d.get("element_format_open", False)
                 self.window_sizes      = d.get("window_sizes", {})
                 self.custom_dates      = d.get("custom_dates", [])
                 self.all_dates        = d.get("all_dates", [])
@@ -179,6 +182,7 @@ class Config:
             "theme":                 self.theme,
             "ui_font":               self.ui_font,
             "element_details_open":  self.element_details_open,
+            "element_format_open":   self.element_format_open,
             "window_sizes":          self.window_sizes,
             "custom_dates":          self.custom_dates,
             "all_dates":             self.all_dates,

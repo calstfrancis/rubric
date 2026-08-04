@@ -126,10 +126,6 @@ class ElementContentWidget(Gtk.Box):
         self._toolbar_rev.set_reveal_child(False)
         self.append(self._toolbar_rev)
 
-        _focus = Gtk.EventControllerFocus()
-        _focus.connect("notify::contains-focus",
-                       lambda c, _p: self._toolbar_rev.set_reveal_child(c.get_contains_focus()))
-        self.add_controller(_focus)
 
         # Notice banner: shown when typst→rich conversion loses some markup
         self._notice_rev = Gtk.Revealer()
@@ -347,6 +343,13 @@ class ElementContentWidget(Gtk.Box):
 
     def set_on_rubric_changed(self, callback) -> None:
         self._on_rubric_changed = callback
+
+    def set_toolbar_visible(self, visible: bool) -> None:
+        """Show or hide the formatting toolbar."""
+        self._toolbar_rev.set_reveal_child(bool(visible))
+
+    def get_toolbar_visible(self) -> bool:
+        return self._toolbar_rev.get_reveal_child()
 
     def set_blocks(self, blocks) -> None:
         """Load a document into the editor.
