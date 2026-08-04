@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from rubric_package.models import content as _content
+
 
 class SectionDivider:
     """A section divider in the service order."""
@@ -39,7 +41,7 @@ class ServiceItem:
         bulletin_note: str = "",
         prep_note: str = "",
         duration: int = 0,
-        content_typst: str = "",
+        content: list | None = None,
         content_mode: str = "rich",
         rubric_note: str = "",
         icon: str = "",
@@ -54,8 +56,9 @@ class ServiceItem:
         self.bulletin_note = bulletin_note
         self.prep_note = prep_note
         self.duration = duration
-        # Unified content field (Phase 2).  Populated from old fields on load.
-        self.content_typst = content_typst
+        # The document itself — a list of blocks. See models/content.py. Typst
+        # is an output format now and never appears in this field.
+        self.content = _content.normalise(content)
         # "rich" or "typst"; not persisted (always opens in rich mode)
         self.content_mode = content_mode
         # Leader-only instructions (red italic, manuscript only)
@@ -64,8 +67,37 @@ class ServiceItem:
         self.icon = icon
         # Bulletin appears as heading only (no body text in bulletin)
         self.bulletin_heading_only = bulletin_heading_only
-        # Short line shown in the bulletin instead of full content_typst
+        # Short line shown in the bulletin instead of the full content
         self.bulletin_summary = bulletin_summary
+
+    # ── content accessors ─────────────────────────────────────────────────────
+
+    @property
+    def content_typst(self) -> str:
+        """The content rendered as Typst, for export and preview.
+
+        Read-only and derived: assigning Typst to an element is what the old
+        model allowed and what let markup leak back into the editor. Use
+        :meth:`set_plain_text`, :meth:`append_text` or :meth:`prepend_text`.
+        """
+        return _content.blocks_to_typst(self.content)
+
+    @property
+    def content_plain(self) -> str:
+        """The content as readable text, for word counts and previews."""
+        return _content.blocks_to_plain(self.content)
+
+    def set_plain_text(self, text: str) -> None:
+        self.content = _content.plain_to_blocks(text)
+
+    def append_text(self, text: str) -> None:
+        self.content = _content.concat(self.content, _content.plain_to_blocks(text))
+
+    def prepend_text(self, text: str) -> None:
+        self.content = _content.concat(_content.plain_to_blocks(text), self.content)
+
+    def has_content(self) -> bool:
+        return not _content.is_empty(self.content)
 
     def to_dict(self) -> dict:
         """Serialize to dictionary."""
@@ -77,7 +109,7 @@ class ServiceItem:
             "leader": self.leader,
             "show_in_bulletin": self.show_in_bulletin,
             "bulletin_note": self.bulletin_note,
-            "content_typst": self.content_typst,
+            "content": self.content,
         }
         if self.prep_note:
             d["prep_note"] = self.prep_note
@@ -99,10 +131,15 @@ class ServiceItem:
         note         = d.get("note", "")
         bulletin_note = d.get("bulletin_note", "")
         prep_note    = d.get("prep_note", "")
-        content_typst = d.get("content_typst", "")
+        blocks = d.get("content")
 
-        # Migrate: build content_typst from old fields if the file pre-dates Phase 2
-        if not content_typst:
+        # Migration. Services written before the block model stored Typst in
+        # "content_typst"; ones older still had only note/bulletin_note/prep_note.
+        # Both are parsed into blocks on load and written back in the new format,
+        # so a service is migrated the first time it is opened and saved.
+        content_typst = "" if blocks is not None else d.get("content_typst", "")
+
+        if blocks is None and not content_typst:
             import re as _re
             base = bulletin_note or note
             # Old LaTeX content (\command{...}) must be stripped to plain text —
@@ -115,6 +152,9 @@ class ServiceItem:
             else:
                 content_typst = base
 
+        if blocks is None:
+            blocks = _content.typst_to_blocks(content_typst)
+
         return cls(
             d.get("name", ""),
             d.get("section", ""),
@@ -124,7 +164,7 @@ class ServiceItem:
             bulletin_note,
             prep_note,
             d.get("duration", 0),
-            content_typst,
+            blocks,
             rubric_note=d.get("rubric_note", ""),
             icon=d.get("icon", ""),
             bulletin_heading_only=d.get("bulletin_heading_only", False),

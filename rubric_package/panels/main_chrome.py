@@ -45,7 +45,7 @@ class MainChrome:
         # Ambo's header set: sidebar | new | [title] | Preview | export | menu.
         # Open, Undo and Redo keep their shortcuts (Ctrl+O / Ctrl+Z / Ctrl+Shift+Z)
         # and menu entries; they're no longer icons sitting on the bar.
-        new_btn = Gtk.Button(icon_name="document-new-symbolic",
+        new_btn = Gtk.Button(icon_name="list-add-symbolic",
                              tooltip_text="New service (Ctrl+N)")
         new_btn.add_css_class("flat")
         new_btn.connect("clicked", lambda _: self._main.new_service())
@@ -201,10 +201,10 @@ class MainChrome:
         hdr.pack_end(self._main._preview_btn)
 
         # Export — the one document action worth an icon, and previously buried
-        # document-save-symbolic renders as a floppy in this icon theme; the
-        # mockup's glyph is a downward arrow, which is also what "export" means
-        # to anyone who hasn't used a floppy disk.
-        _export_btn = Gtk.Button(icon_name="document-send-symbolic",
+        # document-save-symbolic is a downward arrow over a line in the runtime's
+        # icon theme — the mockup's glyph exactly. (It falls back to a floppy on
+        # some host themes, which is what it looked like when run from source.)
+        _export_btn = Gtk.Button(icon_name="document-save-symbolic",
                                  tooltip_text="Export as… (bulletin, manuscript, Typst, PDF)")
         _export_btn.add_css_class("flat")
         _export_btn.set_action_name("win.export-as")

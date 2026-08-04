@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev9"
+APP_VERSION = "0.20.0-dev10"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -735,7 +735,7 @@ class MainWindow(Adw.ApplicationWindow):
         # content doesn't, which is what made the old subtitle so noisy.
         detail = self._scripture_inline_preview(si.name) or ""
         if not detail:
-            note = (self._note_preview(si.content_typst) or "").strip()
+            note = (self._note_preview(si.content_plain) or "").strip()
             if note and len(note) <= 22:
                 detail = note
         if detail:
@@ -1262,7 +1262,7 @@ class MainWindow(Adw.ApplicationWindow):
             si = row._entry
             try: self._selected_global_idx = self.service_entries.index(si)
             except ValueError: self._selected_global_idx = -1
-            self._content_widget.set_content(si.content_typst)
+            self._content_widget.set_blocks(si.content)
             self._content_widget.set_rubric_note(getattr(si, "rubric_note", ""))
             # The header names the element; the editable fields stay behind
             # Details, wherever the user last left that toggle.
@@ -1292,7 +1292,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self._focus_elem_lbl.set_text(si.name)
         else:
             self._selected_global_idx = -1
-            self._content_widget.set_content("")
+            self._content_widget.set_blocks([])
             self._elem_header.set_visible(False)
             self.item_toolbar_revealer.set_reveal_child(False)
             self.leader_entry.set_text("")
@@ -1308,8 +1308,8 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_palette_row_activated(self, _lb, row):
         item = ServiceItem(row._item_name, row._section_name)
         default_note = config.element_defaults.get(row._item_name, "")
-        if default_note and not item.content_typst:
-            item.content_typst = default_note
+        if default_note and not item.has_content():
+            item.set_plain_text(default_note)
         self._push_undo(); self._add_entry(item)
         name = row._item_name
         was_empty = not config.recently_used
@@ -1503,7 +1503,12 @@ class MainWindow(Adw.ApplicationWindow):
             dup = SectionDivider(entry.title)
         else:
             dup = ServiceItem(entry.name, entry.section)
-            for attr in ("content_typst", "leader", "rubric_note", "duration",
+            # "content" not "content_typst": the Typst rendering is derived and
+            # read-only now, and copying the list needs to be a real copy so the
+            # duplicate doesn't share blocks with the original.
+            import copy as _copy
+            dup.content = _copy.deepcopy(entry.content)
+            for attr in ("leader", "rubric_note", "duration",
                          "show_in_bulletin", "bulletin_heading_only", "bulletin_summary", "icon"):
                 if hasattr(entry, attr):
                     setattr(dup, attr, getattr(entry, attr))
@@ -1578,9 +1583,8 @@ class MainWindow(Adw.ApplicationWindow):
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
         self._push_undo()
-        sep = "\n\n" if entry.content_typst else ""
-        entry.content_typst = entry.content_typst + sep + text
-        self._content_widget.set_content(entry.content_typst)
+        entry.append_text(text)
+        self._content_widget.set_blocks(entry.content)
         self._mark_modified()
 
     # ── Notes ─────────────────────────────────────────────────────────────────
@@ -1631,8 +1635,8 @@ class MainWindow(Adw.ApplicationWindow):
         words = first_line.split()
         return ' '.join(words[:5]) + ('…' if len(words) > 5 else '')
 
-    def _on_content_typst_changed(self, content: str):
-        """Called by ElementContentWidget when the user edits content."""
+    def _on_content_typst_changed(self, content: list):
+        """Called by ElementContentWidget when the user edits the document."""
         if self._updating_note:
             return
         idx = self._selected_index()
@@ -1641,11 +1645,11 @@ class MainWindow(Adw.ApplicationWindow):
         entry = self.service_entries[idx]
         if not isinstance(entry, ServiceItem):
             return
-        entry.content_typst = content
+        entry.content = content
         # Rows are single-line now and show the leader, not a content preview,
         # so editing content no longer changes anything on the row itself.
         self._mark_modified()
-        self._detect_scripture_ref(content)
+        self._detect_scripture_ref(entry.content_plain)
         self._update_word_count()
 
     def _on_rubric_note_changed(self, text: str):
@@ -2175,7 +2179,7 @@ class MainWindow(Adw.ApplicationWindow):
                 if si.leader:
                     line += f"  ({si.leader})"
                 parts.append(line)
-                note = strip_typst_plain(si.content_typst).strip() if si.content_typst else ""
+                note = si.content_plain.strip()
                 if note:
                     first = note.split('\n')[0].strip()
                     if first:
@@ -3320,7 +3324,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_entries.clear(); self._undo_stack.clear(); self.undo_btn.set_sensitive(False)
         self._redo_stack.clear(); self.redo_btn.set_sensitive(False)
         self.service_title_entry.set_text("")
-        self._content_widget.set_content("")
+        self._content_widget.set_blocks([])
         self._clear_order_list(); self.selected_date=None; self._set_date_label("No date selected")
         self.readings_card.set_visible(False); self._current_readings={}
         if hasattr(self, "_events_btn"):
@@ -3370,7 +3374,7 @@ class MainWindow(Adw.ApplicationWindow):
                 item = ServiceItem(name, "")
                 default_note = config.element_defaults.get(name, "")
                 if default_note:
-                    item.content_typst = default_note
+                    item.set_plain_text(default_note)
                 self.service_entries.append(item)
 
     def new_service(self):
@@ -3799,7 +3803,7 @@ class MainWindow(Adw.ApplicationWindow):
         for e in self.service_entries:
             if not isinstance(e, ServiceItem):
                 continue
-            text = strip_typst_plain(e.content_typst or "")
+            text = e.content_plain
             # strip leader notes (not spoken by congregation)
             text = strip_leader_notes(text)
             words = _re.split(r'\s+', text.strip())
@@ -3959,18 +3963,14 @@ class MainWindow(Adw.ApplicationWindow):
             if isinstance(entry, ServiceItem):
                 self._push_undo()
                 # Prepend to content — hymn ref goes at the top
-                entry.content_typst = ref + ("\n" + entry.content_typst
-                                             if entry.content_typst else "")
-                self._content_widget.set_content(entry.content_typst)
-                row = self._find_row_for_index(idx)
-                if isinstance(row, Adw.ActionRow):
-                    row.set_subtitle(self._note_preview(entry.content_typst))
+                entry.prepend_text(ref)
+                self._content_widget.set_blocks(entry.content)
                 self._mark_modified()
                 return
         # Nothing selected — create a new Hymn element as fallback
         self._push_undo()
         si = ServiceItem("Hymn", list(self._palette_listboxes.keys())[0] if self._palette_listboxes else "")
-        si.content_typst = ref
+        si.set_plain_text(ref)
         self._add_entry(si)
 
     # ── Scripture search ──────────────────────────────────────────────────────
@@ -4076,7 +4076,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     f"<tr class='section-row'><td colspan='5'>{esc(current_section)}</td></tr>"
                 )
             elif isinstance(entry, ServiceItem):
-                note_src = entry.content_typst
+                note_src = entry.content_plain
                 rows.append(
                     f"<tr><td>{esc(current_section)}</td>"
                     f"<td><strong>{esc(entry.name)}</strong></td>"
@@ -4396,7 +4396,10 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             snip = snippets[idx]
             name_entry.set_text(snip["name"])
             tags_entry.set_text(", ".join(snip.get("tags", [])))
-            editor_widget.set_content(snip.get("content", ""))
+            # Snippets stay plain strings on disk (they're shared and hand-edited);
+            # parse in and render out so the editor only ever sees a document.
+            from rubric_package.models.content import typst_to_blocks
+            editor_widget.set_blocks(typst_to_blocks(snip.get("content", "")))
             save_btn.set_sensitive(True)
             del_btn.set_sensitive(True)
             insert_btn.set_sensitive(True)
@@ -4408,7 +4411,8 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             snip["name"] = name_entry.get_text().strip() or snip["name"]
             raw_tags = tags_entry.get_text()
             snip["tags"] = [t.strip() for t in raw_tags.split(",") if t.strip()]
-            snip["content"] = editor_widget.get_content()
+            from rubric_package.models.content import blocks_to_typst
+            snip["content"] = blocks_to_typst(editor_widget.get_blocks())
             save_snippets(snippets)
             _rebuild_tag_filter()
             _rebuild_list()
@@ -4501,7 +4505,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             else:
                 # Detect hymn ref: first line of content that matches VU/MV/LUS pattern
                 hymn_ref = ""
-                _plain = strip_typst_plain(entry.content_typst) if entry.content_typst else ""
+                _plain = entry.content_plain
                 if _plain:
                     m = re.match(r'^(VU|MV|LUS)\s+\d+[^$]*', _plain.split('\n')[0])
                     if m: hymn_ref = m.group(0)[:40]
@@ -5084,11 +5088,15 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
 .order-list row.activatable:selected { border-left: 3px solid @accent_color; }
 /* The list sits on a recessed ground so the grouped sections read as cards */
 .order-list { background: transparent; }
-/* The recessed pane the section cards sit on: the theme's own window surface,
-   with the cards on its card surface. Adwaita already defines this pair for
-   sidebars, so using the named colours follows the system palette exactly
-   rather than washing a computed grey over it. */
-.order-ground { background: @window_bg_color; }
+/* Surfaces. The mockup gets its legibility from four distinct planes, so use
+   the four libadwaita already defines rather than near-identical greys:
+     headerbar  - top bar and status bar        (@headerbar_bg_color)
+     view       - readings band and the editor  (@view_bg_color)
+     sidebar    - the pane the order sits on    (@sidebar_bg_color)
+     card       - the section cards on top      (@card_bg_color)
+   window_bg vs card_bg was a 2% difference in Adwaita light, i.e. invisible. */
+.order-ground { background: @sidebar_bg_color; }
+.editor-ground { background: @view_bg_color; }
 /* Reading chips: quiet text, not tinted pills. The liturgical colour is said
    once by the swatch beside the season name and nowhere else. */
 button.reading-chip { background: transparent; box-shadow: none; border: none; }
@@ -5248,7 +5256,7 @@ headerbar .title-btn:hover label { opacity: 0.75; }
    swatch instead of a full-bleed coloured bar */
 .season-swatch { border-radius: 3px; }
 .readings-card {
-  background: transparent;
+  background: @view_bg_color;
   border-bottom: 1px solid alpha(@borders, 0.6);
 }
 button.reading-chip { font-size: 0.9em; }

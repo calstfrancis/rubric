@@ -1,20 +1,12 @@
-"""Typst ↔ GtkTextBuffer rich text converter for Rubric.
+"""Rich-text helpers for Rubric's element editor.
 
-Supported round-trip subset:
-  *text*            bold
-  _text_            italic
-  #strong[text]     bold (normalised to *text* on round-trip)
-  #emph[text]       italic (normalised to _text_ on round-trip)
-  = Heading         H1
-  == Heading        H2
-  === Heading       H3
-  - item            bullet list
-  + item            ordered list
-  blank line        paragraph break
-  #leader-note[…]  leader note block (grey in manuscript, omitted in bulletin)
+Converts between a document (a list of blocks — see models/content.py) and the
+GtkTextBuffer the editor displays it in. Neither direction goes near a markup
+language: the editor renders blocks and reads blocks back, so nothing the user
+did not type can appear in their text.
 
-Constructs outside this subset pass through as literal text in rich mode so no
-data is lost when toggling to Typst source mode.
+Typst lives in models/content.py now, as an output format for export and as a
+one-time parser for services written before the block model.
 """
 
 from __future__ import annotations
@@ -142,221 +134,83 @@ def _insert_tagged(buf, text: str, tags: frozenset[str]) -> None:
 
 # ── typst_to_tags ──────────────────────────────────────────────────────────────
 
-def typst_to_tags(typst_str: str, buf) -> bool:
-    """Parse Typst markup subset and apply as tags to a GtkTextBuffer.
+def blocks_to_buffer(blocks, buf) -> None:
+    """Fill a GtkTextBuffer from a block list."""
+    from rubric_package.models.content import normalise
 
-    Clears the buffer first.  Returns True if the source contains constructs
-    outside the supported subset (caller can show a notice to the user).
-    """
     ensure_tags(buf)
     buf.set_text("", 0)
-
-    if not typst_str:
-        return False
-
-    # Convert scripture blocks to readable plain text before further parsing
-    typst_str = _normalise_scripture(typst_str)
-
-    has_unsupported = False
-
-    # Split on #leader-note[…] blocks so leader content is tagged separately
-    parts: list[tuple[bool, str]] = []
-    last = 0
-    for m in _LEADER_RE.finditer(typst_str):
-        if m.start() > last:
-            parts.append((False, typst_str[last:m.start()]))
-        parts.append((True, m.group(1)))
-        last = m.end()
-    if last < len(typst_str):
-        parts.append((False, typst_str[last:]))
-
-    parts = [(ldr, c) for ldr, c in parts if c.strip()]
-
-    need_nl = False
-    for is_leader, content in parts:
-        if need_nl:
-            buf.insert(buf.get_end_iter(), '\n')
-        need_nl = True
-
-        content = content.strip('\n')
-        if not content:
-            need_nl = False
-            continue
-
-        if is_leader:
-            ldr_start = buf.get_end_iter().get_offset()
-            _insert_lines(buf, content, extra=frozenset({TAG_LEADER}))
-            _apply(buf, TAG_LEADER, ldr_start, buf.get_end_iter().get_offset())
-        else:
-            if _insert_lines(buf, content):
-                has_unsupported = True
-
-    # Flag remaining unrecognised #func calls
-    check = _LEADER_RE.sub('', typst_str)
-    check = _STRONG_RE.sub('', check)
-    check = _EMPH_RE.sub('', check)
-    if re.search(r'#[a-zA-Z]', check):
-        has_unsupported = True
-
-    return has_unsupported
-
-
-def _insert_lines(buf, text: str, extra: frozenset[str] = frozenset()) -> bool:
-    """Insert multi-line text with block and inline markup tags.
-
-    Returns True if unrecognised Typst constructs were encountered.
-    """
-    has_unsupported = False
-    lines = text.split('\n')
     first = True
-
-    for line in lines:
+    for block in normalise(blocks):
         if not first:
-            buf.insert(buf.get_end_iter(), '\n')
+            buf.insert(buf.get_end_iter(), "\n")
         first = False
 
-        # Strip Typst hard line-break suffix (appended by tags_to_typst)
-        if line.endswith(' \\'):
-            line = line[:-2]
-
-        block_tag: str | None = None
-        inline_text = line
-        # Convert Typst tab spacing back to actual tab characters
-        inline_text = re.sub(r'#h\([^)]+\)', '\t', inline_text)
-
-        if inline_text.startswith('=== '):
-            block_tag, inline_text = TAG_H3, inline_text[4:]
-        elif inline_text.startswith('== '):
-            block_tag, inline_text = TAG_H2, inline_text[3:]
-        elif inline_text.startswith('= '):
-            block_tag, inline_text = TAG_H1, inline_text[2:]
-        elif inline_text.startswith('- '):
-            block_tag = TAG_BULLET
-            inline_text = '• ' + inline_text[2:]   # bullet character for display
-        elif inline_text.startswith('+ ') or re.match(r'^\d+\.\s', inline_text):
-            block_tag = TAG_ORDERED
-            inline_text = re.sub(r'^[+\d]+[.) ]\s*', '', inline_text)
-        elif re.search(r'#[a-zA-Z]', inline_text):
-            has_unsupported = True
-
-        tags = extra | ({block_tag} if block_tag else set())
         line_start = buf.get_end_iter().get_offset()
-
-        for fragment, inline_tags in process_inline(inline_text):
-            _insert_tagged(buf, fragment, frozenset(tags) | inline_tags)
-
+        btype = block["type"]
+        prefix = "\u2022 " if btype == "bullet" else ""
+        if prefix:
+            _insert_tagged(buf, prefix, frozenset())
+        for run in block["runs"]:
+            tags = set()
+            if run.get("bold"):
+                tags.add(TAG_BOLD)
+            if run.get("italic"):
+                tags.add(TAG_ITALIC)
+            _insert_tagged(buf, run["text"], frozenset(tags))
+        block_tag = _BLOCK_TAGS.get(btype)
         if block_tag:
             _apply(buf, block_tag, line_start, buf.get_end_iter().get_offset())
 
-    return has_unsupported
 
+def buffer_to_blocks(buf) -> list[dict]:
+    """Read a GtkTextBuffer back into a block list."""
+    from rubric_package.models.content import make_block, make_run
 
-# ── tags_to_typst ──────────────────────────────────────────────────────────────
-
-def tags_to_typst(buf) -> str:
-    """Convert a GtkTextBuffer with formatting tags back to Typst markup."""
-    start_it = buf.get_start_iter()
-    end_it   = buf.get_end_iter()
-
-    if start_it.equal(end_it):
-        return ""
-
+    start_it, end_it = buf.get_start_iter(), buf.get_end_iter()
     full_text = buf.get_text(start_it, end_it, False)
     if not full_text:
-        return ""
+        return []
 
-    tag_table = buf.get_tag_table()
-    lines     = full_text.split('\n')
-    out: list[str] = []
-    pending_leader: list[str] = []
+    table = buf.get_tag_table()
+    bold_tag = table.lookup(TAG_BOLD)
+    ital_tag = table.lookup(TAG_ITALIC)
+
+    blocks: list[dict] = []
     line_off = 0
-
-    for line in lines:
+    for line in full_text.split("\n"):
         line_end = line_off + len(line)
         it = buf.get_iter_at_offset(line_off)
 
-        def _has(tname: str) -> bool:
-            tag = tag_table.lookup(tname)
-            return tag is not None and it.has_tag(tag)
+        btype = "p"
+        for tag_name, name in _TAG_BLOCKS.items():
+            tag = table.lookup(tag_name)
+            if tag is not None and it.has_tag(tag):
+                btype = name
+                break
 
-        is_leader = _has(TAG_LEADER)
-        inline = _inline_to_typst(buf, full_text, line_off, line_end, tag_table)
+        text = line
+        start = line_off
+        if btype == "bullet" and text.startswith("\u2022 "):
+            text = text[2:]
+            start += 2
 
-        if is_leader:
-            pending_leader.append(inline + (' \\' if inline.strip() else ''))
-        else:
-            if pending_leader:
-                # Strip trailing ' \' from the last line — it would escape the closing ']'
-                last = pending_leader[-1]
-                if last.endswith(' \\'):
-                    pending_leader[-1] = last[:-2]
-                out.append(f'#leader-note[{chr(10).join(pending_leader)}]')
-                pending_leader = []
+        runs = []
+        cur, cur_bold, cur_ital = "", None, None
+        for i, ch in enumerate(text):
+            ci = buf.get_iter_at_offset(start + i)
+            b = bold_tag is not None and ci.has_tag(bold_tag)
+            v = ital_tag is not None and ci.has_tag(ital_tag)
+            if (b, v) != (cur_bold, cur_ital) and cur:
+                runs.append(make_run(cur, bool(cur_bold), bool(cur_ital)))
+                cur = ""
+            cur_bold, cur_ital = b, v
+            cur += ch
+        if cur:
+            runs.append(make_run(cur, bool(cur_bold), bool(cur_ital)))
 
-            if _has(TAG_H3):
-                out.append(f'=== {inline}')
-            elif _has(TAG_H2):
-                out.append(f'== {inline}')
-            elif _has(TAG_H1):
-                out.append(f'= {inline}')
-            elif _has(TAG_BULLET):
-                body = inline[2:] if inline.startswith('• ') else inline
-                out.append(f'- {body}')
-            elif _has(TAG_ORDERED):
-                out.append(f'+ {inline}')
-            else:
-                out.append(inline + (' \\' if inline.strip() else ''))
-
+        blocks.append(make_block(btype, runs))
         line_off = line_end + 1
-
-    if pending_leader:
-        last = pending_leader[-1]
-        if last.endswith(' \\'):
-            pending_leader[-1] = last[:-2]
-        out.append(f'#leader-note[{chr(10).join(pending_leader)}]')
-
-    return '\n'.join(out)
+    return blocks
 
 
-def _inline_to_typst(buf, full_text: str, line_off: int, line_end: int,
-                      tag_table) -> str:
-    """Return Typst inline markup for the line range [line_off, line_end)."""
-    if line_off >= line_end:
-        return ""
-
-    bold_tag   = tag_table.lookup(TAG_BOLD)
-    italic_tag = tag_table.lookup(TAG_ITALIC)
-
-    toggle_offs: set[int] = {line_off, line_end}
-    for tag in (t for t in (bold_tag, italic_tag) if t is not None):
-        it = buf.get_iter_at_offset(line_off)
-        while True:
-            if not it.forward_to_tag_toggle(tag):
-                break
-            off = it.get_offset()
-            if off > line_end:
-                break
-            toggle_offs.add(off)
-
-    result: list[str] = []
-    for i, s in enumerate(sorted(toggle_offs)[:-1]):
-        e = min(sorted(toggle_offs)[i + 1], line_end)
-        if s >= line_end:
-            break
-        seg = full_text[s:e]
-        if not seg:
-            continue
-        it = buf.get_iter_at_offset(s)
-        bold   = bold_tag   is not None and it.has_tag(bold_tag)
-        italic = italic_tag is not None and it.has_tag(italic_tag)
-        seg_t = seg.replace('\t', '#h(1.5em)')
-        if bold and italic:
-            result.append(f'*_{seg_t}_*')
-        elif bold:
-            result.append(f'*{seg_t}*')
-        elif italic:
-            result.append(f'_{seg_t}_')
-        else:
-            result.append(seg_t)
-
-    return ''.join(result)

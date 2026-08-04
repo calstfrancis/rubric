@@ -5,7 +5,7 @@ from .colors import section_colour, hex_to_rgb
 from .helpers import is_hymn_element, HYMN_KEYWORDS
 from .rich_typst import (
     TAG_BOLD, TAG_ITALIC, TAG_H1, TAG_H2, TAG_H3, TAG_LEADER, TAG_BULLET, TAG_ORDERED,
-    ensure_tags, process_inline, typst_to_tags, tags_to_typst,
+    ensure_tags, process_inline, blocks_to_buffer, buffer_to_blocks,
 )
 
 __all__ = [
@@ -20,5 +20,5 @@ __all__ = [
     "HYMN_KEYWORDS",
     "TAG_BOLD", "TAG_ITALIC", "TAG_H1", "TAG_H2", "TAG_H3",
     "TAG_LEADER", "TAG_BULLET", "TAG_ORDERED",
-    "ensure_tags", "process_inline", "typst_to_tags", "tags_to_typst",
+    "ensure_tags", "process_inline", "blocks_to_buffer", "buffer_to_blocks",
 ]

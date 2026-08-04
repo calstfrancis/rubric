@@ -76,12 +76,11 @@ class HymnLookupPanel:
             if idx < 0:
                 return  # target item was deleted while the lookup was in flight
             self._main._push_undo()
-            entry.content_typst = (hymn_line + "\n" + entry.content_typst
-                                   if entry.content_typst else hymn_line)
-            self._main._content_widget.set_content(entry.content_typst)
+            entry.prepend_text(hymn_line)
+            self._main._content_widget.set_blocks(entry.content)
             row = self._main._find_row_for_index(idx)
             if isinstance(row, Adw.ActionRow):
-                preview = self._main._note_preview(entry.content_typst) or self._main._scripture_inline_preview(entry.name)
+                preview = self._main._note_preview(entry.content_plain) or self._main._scripture_inline_preview(entry.name)
                 sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
                 row.set_subtitle(sub)
             self._main._mark_modified()
@@ -113,12 +112,11 @@ class HymnLookupPanel:
         if idx < 0:
             return  # target item was deleted while the manual-entry box was open
         self._main._push_undo()
-        entry.content_typst = (hymn_line + "\n" + entry.content_typst
-                               if entry.content_typst else hymn_line)
-        self._main._content_widget.set_content(entry.content_typst)
+        entry.prepend_text(hymn_line)
+        self._main._content_widget.set_blocks(entry.content)
         row = self._main._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
-            preview = self._main._note_preview(entry.content_typst) or self._main._scripture_inline_preview(entry.name)
+            preview = self._main._note_preview(entry.content_plain) or self._main._scripture_inline_preview(entry.name)
             sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
             row.set_subtitle(sub)
         self._main._mark_modified()
@@ -325,10 +323,9 @@ class HymnLookupPanel:
         if not (0 <= idx < len(self._main.service_entries)): return
         entry = self._main.service_entries[idx]
         if not isinstance(entry, ServiceItem): return
-        entry.content_typst = (hymn_line + "\n" + entry.content_typst
-                               if entry.content_typst else hymn_line)
-        self._main._content_widget.set_content(entry.content_typst)
+        entry.prepend_text(hymn_line)
+        self._main._content_widget.set_blocks(entry.content)
         row = self._main._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
-            row.set_subtitle(self._main._note_preview(entry.content_typst))
+            row.set_subtitle(self._main._note_preview(entry.content_plain))
         self._main._mark_modified()

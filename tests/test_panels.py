@@ -135,7 +135,8 @@ class TestBulletinPreviewLogic(unittest.TestCase):
     def test_bulletin_as_plain_text_uses_exporter_grouped_entries(self):
         main = self._stub_main()
         main.service_title_entry.get_text.return_value = "Sunday Service"
-        item = ServiceItem("Welcome", "Gathering", content_typst="Good morning!")
+        item = ServiceItem("Welcome", "Gathering")
+        item.set_plain_text("Good morning!")
         main._exporter._grouped_entries.return_value = [("Gathering", [item])]
         preview = BulletinPreview(main)
 
@@ -218,33 +219,34 @@ class TestHymnLookupPanelLogic(unittest.TestCase):
         return main
 
     def test_inject_hymn_line_updates_selected_item_and_marks_modified(self):
-        item = ServiceItem("Opening Hymn", "Gathering", content_typst="")
+        item = ServiceItem("Opening Hymn", "Gathering")
         main = self._stub_main([item], selected_index=0)
         panel = HymnLookupPanel(main)
 
         panel._inject_hymn_line("VU 1 — Test Hymn")
 
-        self.assertEqual(item.content_typst, "VU 1 — Test Hymn")
+        self.assertEqual(item.content_plain, "VU 1 — Test Hymn")
         main._mark_modified.assert_called_once()
         main._hymn_search_pop.popdown.assert_called_once()
 
     def test_inject_hymn_line_appends_to_existing_content(self):
-        item = ServiceItem("Opening Hymn", "Gathering", content_typst="Existing note")
+        item = ServiceItem("Opening Hymn", "Gathering")
+        item.set_plain_text("Existing note")
         main = self._stub_main([item], selected_index=0)
         panel = HymnLookupPanel(main)
 
         panel._inject_hymn_line("VU 1 — Test Hymn")
 
-        self.assertEqual(item.content_typst, "VU 1 — Test Hymn\nExisting note")
+        self.assertEqual(item.content_plain, "VU 1 — Test Hymn\n\nExisting note")
 
     def test_inject_hymn_line_noop_when_nothing_selected(self):
-        item = ServiceItem("Opening Hymn", "Gathering", content_typst="")
+        item = ServiceItem("Opening Hymn", "Gathering")
         main = self._stub_main([item], selected_index=-1)
         panel = HymnLookupPanel(main)
 
         panel._inject_hymn_line("VU 1 — Test Hymn")
 
-        self.assertEqual(item.content_typst, "")
+        self.assertEqual(item.content_plain, "")
         main._mark_modified.assert_not_called()
 
     def test_inject_hymn_line_noop_on_section_divider(self):

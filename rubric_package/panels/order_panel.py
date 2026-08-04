@@ -257,6 +257,7 @@ class OrderPanel:
 
         # ── Notes pane (right) ────────────────────────────────────────────────
         notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        notes_box.add_css_class("editor-ground")
 
         # Focus mode banner — shown in F11 focus mode, hidden otherwise
         self._main._focus_banner = Gtk.Revealer()

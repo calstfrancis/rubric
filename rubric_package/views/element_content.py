@@ -26,7 +26,7 @@ except Exception:
 from rubric_package.utils.rich_typst import (
     TAG_BOLD, TAG_ITALIC, TAG_H1, TAG_H2, TAG_H3,
     TAG_LEADER, TAG_BULLET, TAG_ORDERED,
-    ensure_tags, typst_to_tags, tags_to_typst,
+    ensure_tags, blocks_to_buffer, buffer_to_blocks,
 )
 
 
@@ -35,9 +35,9 @@ class ElementContentWidget(Gtk.Box):
 
     Public API::
 
-        set_content(typst_str)        — load Typst (suppresses change callback)
-        get_content() -> str          — read current Typst string
-        set_on_changed(cb)            — register cb(content: str) for user edits
+        set_blocks(blocks)            — load a document (suppresses change callback)
+        get_blocks() -> list          — read the current document
+        set_on_changed(cb)            — register cb(blocks: list) for user edits
         clear()                       — equivalent to set_content("")
 
         set_rubric_note(text)         — load rubric note text
@@ -327,36 +327,46 @@ class ElementContentWidget(Gtk.Box):
     def set_on_rubric_changed(self, callback) -> None:
         self._on_rubric_changed = callback
 
-    def set_content(self, typst_str: str) -> None:
+    def set_blocks(self, blocks) -> None:
+        """Load a document into the editor.
+
+        The editor speaks blocks, not markup. There is nothing to fail to
+        parse, so the "some markup can't be displayed" notice is gone with it.
+        """
         self._updating = True
         try:
-            has_unsup = typst_to_tags(typst_str or "", self._rich_buf)
-            self._notice_rev.set_reveal_child(has_unsup)
+            blocks_to_buffer(blocks or [], self._rich_buf)
+            self._notice_rev.set_reveal_child(False)
             if self._typst_mode:
+                from rubric_package.models.content import blocks_to_typst
                 self._typst_updating = True
                 try:
-                    self._typst_buf.set_text(typst_str or "", -1)
+                    self._typst_buf.set_text(blocks_to_typst(blocks or []), -1)
                 finally:
                     self._typst_updating = False
         finally:
             self._updating = False
 
-    def get_content(self) -> str:
+    def get_blocks(self) -> list:
         if self._typst_mode:
+            from rubric_package.models.content import typst_to_blocks
             s, e = self._typst_buf.get_bounds()
-            return self._typst_buf.get_text(s, e, False)
-        return tags_to_typst(self._rich_buf)
+            return typst_to_blocks(self._typst_buf.get_text(s, e, False))
+        return buffer_to_blocks(self._rich_buf)
 
     def clear(self) -> None:
-        self.set_content("")
+        self.set_blocks([])
 
     def set_typst_mode(self, enabled: bool) -> None:
         """Switch between rich text editor (False) and raw Typst source editor (True)."""
         if enabled == self._typst_mode:
             return
+        from rubric_package.models.content import blocks_to_typst, typst_to_blocks
         if enabled:
-            # Flush rich editor → raw typst view
-            raw = tags_to_typst(self._rich_buf)
+            # Flush rich editor → raw typst view. Raw mode is a developer
+            # escape hatch: it shows what will be *printed*, generated from the
+            # document, not a second place the document is stored.
+            raw = blocks_to_typst(buffer_to_blocks(self._rich_buf))
             self._typst_updating = True
             try:
                 self._typst_buf.set_text(raw, -1)
@@ -370,9 +380,10 @@ class ElementContentWidget(Gtk.Box):
             raw = self._typst_buf.get_text(s, e, False)
             self._editor_stack.set_visible_child_name("rich")
             self._toolbar.set_sensitive(True)
-            self.set_content(raw)
+            blocks = typst_to_blocks(raw)
+            self.set_blocks(blocks)
             if self._on_changed:
-                self._on_changed(raw)
+                self._on_changed(blocks)
         self._typst_mode = enabled
 
     def set_rubric_note(self, text: str) -> None:
@@ -473,12 +484,13 @@ class ElementContentWidget(Gtk.Box):
 
     def _on_typst_buf_changed(self, _buf) -> None:
         if not self._typst_updating and self._on_changed:
+            from rubric_package.models.content import typst_to_blocks
             s, e = self._typst_buf.get_bounds()
-            self._on_changed(self._typst_buf.get_text(s, e, False))
+            self._on_changed(typst_to_blocks(self._typst_buf.get_text(s, e, False)))
 
     def _emit_changed(self) -> None:
         if self._on_changed:
-            self._on_changed(self.get_content())
+            self._on_changed(self.get_blocks())
 
     # ── Keyboard shortcuts ─────────────────────────────────────────────────────
 

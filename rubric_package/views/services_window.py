@@ -331,7 +331,7 @@ class ServicesWindow(Adw.Window):
                 if tmpl:
                     for d in tmpl:
                         item = dict(d)
-                        item["note"] = ""; item["bulletin_note"] = ""; item["content_typst"] = ""
+                        item["note"] = ""; item["bulletin_note"] = ""; item["content"] = []
                         items.append(item)
             elif idx >= 2 and past_svcs and (idx - 2) < len(past_svcs):
                 # Copy element structure (names/sections only) from a past service
@@ -346,7 +346,7 @@ class ServicesWindow(Adw.Window):
                             cur_sec = sec
                         items.append({"type": "item", "name": e.get("name", ""),
                                       "section": sec, "leader": e.get("leader", ""),
-                                      "note": "", "bulletin_note": "", "content_typst": "",
+                                      "note": "", "bulletin_note": "", "content": [],
                                       "show_in_bulletin": True, "duration": 0})
                 except Exception:
                     pass
@@ -1598,8 +1598,11 @@ class ServicesWindow(Adw.Window):
         entry = win.service_entries[idx]
         if not isinstance(entry, ServiceItem):
             self._show_toast("Select an element (not a section header)"); return
-        entry.content_typst = note
-        win._content_widget.set_content(note)
+        # The library stores element content as text written by older versions,
+        # so it comes in as Typst; parse it into the document model on insert.
+        from rubric_package.models.content import typst_to_blocks
+        entry.content = typst_to_blocks(note)
+        win._content_widget.set_blocks(entry.content)
         win._mark_modified()
         self._show_toast(f'Inserted into "{entry.name}"')
 

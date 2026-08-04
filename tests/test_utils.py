@@ -470,5 +470,9 @@ class TestAtomicWriteText(unittest.TestCase):
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
 
 
+# The editor-leak tests that lived here moved to tests/test_content.py when the
+# editor stopped speaking Typst: the constructs they guarded against are now
+# handled by the migration parser, not by the editor.
+
 if __name__ == "__main__":
     unittest.main()

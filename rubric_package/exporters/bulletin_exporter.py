@@ -44,6 +44,7 @@ except Exception:
 from rubric_package.models.config import config
 from rubric_package.models.service import ServiceItem, SectionDivider
 from rubric_package.utils.helpers import flatpak_git_prefix
+from rubric_package.models.content import blocks_to_html
 from rubric_package.utils.typst import (
     typst_escape as _typst_escape,
     note_for_typst as _note_for_typst,
@@ -386,7 +387,7 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                 parts.append(f"<div class='el'>"
                              f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
                 if si.content_typst:
-                    clean = strip_latex(si.content_typst)
+                    clean = si.content_plain
                     parts.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
                 parts.append("</div>")
@@ -493,7 +494,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 if rubric:
                     lines.append(f"<span class='rubric-note'>{esc(rubric)}</span>")
                 if si.content_typst:
-                    clean = strip_typst_for_html(si.content_typst, manuscript=True)
+                    clean = blocks_to_html(si.content, include_leader=True)
                     lines.append(f"<div class='note'>{clean.replace(chr(10), '<br>')}</div>")
 
         lines.append("</body></html>")
@@ -931,7 +932,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             _name_lower = si.name.lower()
             _is_hymn = any(k in _name_lower
                            for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
-            _content = si.content_typst
+            _content = si.content_plain
             if _is_hymn and _content:
                 _hm = re.match(
                     r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)',
@@ -1096,7 +1097,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 lines.append(f"<div class='element'>")
                 lines.append(f"<div class='element-name'>{_esc(si.name)}{leader_html}</div>")
                 if si.content_typst:
-                    clean = strip_typst_for_html(si.content_typst)
+                    clean = blocks_to_html(si.content)
                     note_lines = clean.split('\n')
                     note_html = "<div class='note'>" + "<br>".join(note_lines) + "</div>"
                     lines.append(note_html)
@@ -1129,7 +1130,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
             lines.append(""); lines.append(sec.upper() if sec else "")
             for si in items:
                 line = f"  \u2022 {si.name}"
-                _ct = strip_typst_plain(si.content_typst) if si.content_typst else ""
+                _ct = si.content_plain
                 if _ct: line += f"  \u2014  {_ct.split(chr(10))[0]}"
                 lines.append(line)
         try:

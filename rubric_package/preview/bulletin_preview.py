@@ -378,7 +378,7 @@ class BulletinPreview:
                 if not si.show_in_bulletin:
                     continue
                 lines.append(si.name)
-                body = strip_typst_plain(si.content_typst).strip() if si.content_typst else ""
+                body = si.content_plain.strip()
                 if body:
                     for bline in body.splitlines():
                         if bline.strip():

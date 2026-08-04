@@ -97,55 +97,76 @@ class TestServiceItem(unittest.TestCase):
         self.assertIn("Hymn", r)
         self.assertIn("Minister", r)
 
-    def test_content_typst_field(self):
-        """ServiceItem accepts and stores content_typst."""
-        item = ServiceItem("Test", "Word", content_typst="*bold* text")
-        self.assertEqual(item.content_typst, "*bold* text")
+    def test_content_is_a_block_list(self):
+        """Content is the document model, not a markup string."""
+        item = ServiceItem("Test", "Word")
+        item.set_plain_text("bold text")
+        self.assertEqual(item.content_plain, "bold text")
         self.assertEqual(item.content_mode, "rich")
 
-    def test_content_typst_in_to_dict(self):
-        """content_typst is serialised to dict."""
-        item = ServiceItem("Test", "Word", content_typst="hello")
+    def test_content_in_to_dict(self):
+        """to_dict writes blocks under "content"; no Typst is stored."""
+        item = ServiceItem("Test", "Word")
+        item.set_plain_text("hello")
         d = item.to_dict()
-        self.assertEqual(d["content_typst"], "hello")
+        self.assertEqual(d["content"], [{"type": "p", "runs": [{"text": "hello"}]}])
+        self.assertNotIn("content_typst", d)
+
+    def test_content_typst_is_derived_and_read_only(self):
+        """Typst is rendered on demand for export, never stored or assigned."""
+        item = ServiceItem("Test", "Word")
+        item.set_plain_text("hello")
+        self.assertIn("hello", item.content_typst)
+        with self.assertRaises(AttributeError):
+            item.content_typst = "anything"
 
     def test_migration_from_bulletin_note(self):
-        """from_dict migrates bulletin_note to content_typst when absent."""
-        d = {"type": "item", "name": "Test", "bulletin_note": "Bulletin text"}
-        item = ServiceItem.from_dict(d)
-        self.assertEqual(item.content_typst, "Bulletin text")
+        """from_dict migrates bulletin_note into blocks when nothing newer exists."""
+        item = ServiceItem.from_dict({"type": "item", "name": "Test",
+                                      "bulletin_note": "Bulletin text"})
+        self.assertEqual(item.content_plain, "Bulletin text")
 
     def test_migration_fallback_to_note(self):
         """from_dict falls back to note when bulletin_note is absent."""
-        d = {"type": "item", "name": "Test", "note": "Leader note"}
-        item = ServiceItem.from_dict(d)
-        self.assertEqual(item.content_typst, "Leader note")
+        item = ServiceItem.from_dict({"type": "item", "name": "Test",
+                                      "note": "Leader note"})
+        self.assertEqual(item.content_plain, "Leader note")
 
-    def test_migration_prep_note_wrapped(self):
-        """from_dict wraps prep_note in #leader-note[...] and appends to base."""
-        d = {
+    def test_migration_prep_note_becomes_a_leader_block(self):
+        """prep_note migrates to a leader block, not to #leader-note markup."""
+        item = ServiceItem.from_dict({
             "type": "item", "name": "Test",
             "bulletin_note": "Bulletin", "prep_note": "Private",
-        }
-        item = ServiceItem.from_dict(d)
-        self.assertIn("Bulletin", item.content_typst)
-        self.assertIn("#leader-note[Private]", item.content_typst)
+        })
+        types = [b["type"] for b in item.content]
+        self.assertIn("leader", types)
+        self.assertEqual(item.content_plain, "Bulletin\nPrivate")
 
     def test_migration_prep_note_only(self):
-        """from_dict wraps prep_note alone when no base content."""
-        d = {"type": "item", "name": "Test", "prep_note": "Only prep"}
-        item = ServiceItem.from_dict(d)
-        self.assertEqual(item.content_typst, "#leader-note[Only prep]")
+        """prep_note alone still becomes a leader block."""
+        item = ServiceItem.from_dict({"type": "item", "name": "Test",
+                                      "prep_note": "Only prep"})
+        self.assertEqual([b["type"] for b in item.content], ["leader"])
+        self.assertEqual(item.content_plain, "Only prep")
 
-    def test_content_typst_preserved_over_migration(self):
-        """content_typst in the dict takes priority over old fields."""
-        d = {
+    def test_migration_from_stored_typst(self):
+        """A service written before the block model is parsed on load."""
+        item = ServiceItem.from_dict({
             "type": "item", "name": "Test",
-            "content_typst": "New content",
+            "content_typst": "= Heading\n*New* content",
             "bulletin_note": "Old bulletin",
-        }
-        item = ServiceItem.from_dict(d)
-        self.assertEqual(item.content_typst, "New content")
+        })
+        self.assertEqual([b["type"] for b in item.content], ["h1", "p"])
+        self.assertEqual(item.content_plain, "Heading\nNew content")
+
+    def test_stored_blocks_take_priority_over_legacy_typst(self):
+        """Once migrated, the block list wins and the old field is ignored."""
+        item = ServiceItem.from_dict({
+            "type": "item", "name": "Test",
+            "content": [{"type": "p", "runs": [{"text": "current"}]}],
+            "content_typst": "stale",
+        })
+        self.assertEqual(item.content_plain, "current")
 
 
 class TestSectionDivider(unittest.TestCase):

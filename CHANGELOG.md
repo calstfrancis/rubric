@@ -4,9 +4,27 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev9] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev10] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
 
 ### Added
+
+- **Element content is a document now, not markup.** The editor used to be a Typst editor
+  wearing a rich-text costume: anything the translator didn't recognise was shown to you
+  verbatim, which is why services filled up with `#linebreak()` nobody typed and why the
+  "some markup can't be displayed" warning kept appearing. Content is stored as the document
+  itself — paragraphs, headings, lists, leader notes, bold and italic — and Typst is generated
+  only when something is printed or previewed. There is no longer any way for markup to reach
+  your text, because the editor has nowhere to put it.
+  - **Your existing services migrate the first time you open and save them.** All five of the
+    services on this machine — 111 elements — were checked: no words lost, no element emptied,
+    and opening/saving repeatedly leaves the file unchanged.
+  - The "Typst source" toggle still exists for debugging, and now shows what *will be printed*,
+    generated from the document, rather than being a second place the document is stored.
+  - Manual `#colbreak()` / `#pagebreak()` in element content are dropped, since templates own
+    page layout.
+  - **Once a service has been saved by this version, older versions of Rubric will open it with
+    empty elements.** The content is in the file, in the new field; earlier builds only know how
+    to read the old one. Keep a copy of anything you still need to open elsewhere.
 
 - **The service order now reads as a shape, not a list — in both views.** Each section gets a
   letterspaced header carrying a colour dot, its element count, and its running time, so you
