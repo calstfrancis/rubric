@@ -28,7 +28,7 @@ jobs:
 
       - name: Run backend/data-layer tests
         run: |
-          python3 -m unittest test_rcl_data test_bible_api test_hymn_lookup test_snippets -v
+          python3 -m unittest test_rcl_data test_bible_api test_snippets -v
           python3 -m unittest discover -s tests -v
 
   gtk-panels:
@@ -52,4 +52,6 @@ jobs:
 
       - name: Run panel/exporter tests
         run: |
-          xvfb-run -a python3 -m unittest tests.test_panels -v
+          # test_hymn_lookup belongs here, not in the backend job: hymn_lookup
+          # imports gi, which the setup-python interpreter there cannot see.
+          xvfb-run -a python3 -m unittest tests.test_panels test_hymn_lookup -v

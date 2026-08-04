@@ -59,9 +59,10 @@ class BulletinPreview:
         hdr.set_margin_start(6); hdr.set_margin_end(6)
         hdr.set_margin_top(6); hdr.set_margin_bottom(6)
 
-        lbl = Gtk.Label(label="Preview")
-        lbl.add_css_class("heading"); lbl.set_hexpand(True); lbl.set_xalign(0)
-        hdr.append(lbl)
+        # No "Preview" label: the pane is the preview. The header carries what
+        # you steer with — which document, and compile now — and everything
+        # occasional lives behind the gear, as the rest of the window does.
+        hdr.add_css_class("preview-header")
 
         # Bulletin / Manuscript toggle
         mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -83,6 +84,7 @@ class BulletinPreview:
         self._main._preview_manuscript_btn.connect("toggled", _on_preview_mode, "manuscript")
         mode_box.append(self._main._preview_bulletin_btn)
         mode_box.append(self._main._preview_manuscript_btn)
+        mode_box.set_hexpand(True); mode_box.set_halign(Gtk.Align.START)
         hdr.append(mode_box)
 
         # Compile mode cycle (Auto / Save / Manual) — lives here rather than in a second toolbar
@@ -101,7 +103,6 @@ class BulletinPreview:
             self._main._preview_mode_btn.set_label(_mode_labels[nxt])
 
         self._main._preview_mode_btn.connect("clicked", _on_preview_mode_cycle)
-        hdr.append(self._main._preview_mode_btn)
 
         # Compile button — always visible; essential in Save/Manual modes
         self._main._preview_compile_btn = Gtk.Button(icon_name="view-refresh-symbolic",
@@ -114,13 +115,11 @@ class BulletinPreview:
                                                    tooltip_text="Edit bulletin text for this service")
         self._main._bulletin_edit_btn.add_css_class("flat")
         self._main._bulletin_edit_btn.connect("toggled", self._on_bulletin_edit_toggled)
-        hdr.append(self._main._bulletin_edit_btn)
 
-        gear_btn = Gtk.MenuButton(icon_name="emblem-system-symbolic")
+        gear_btn = Gtk.MenuButton(icon_name="view-more-symbolic")
         gear_btn.add_css_class("flat")
-        gear_btn.set_tooltip_text("Preview options — format, church name, bulletin settings")
-        gear_btn.set_popover(self._build_preview_gear_popover())
-        hdr.append(gear_btn)
+        gear_btn.set_tooltip_text("Preview options")
+        self._main._preview_gear_btn = gear_btn
 
         # Compiling indicator (hidden until xelatex is running)
         self._main._preview_spinner = Gtk.Spinner()
@@ -137,14 +136,20 @@ class BulletinPreview:
                                tooltip_text="Print bulletin…")
         print_btn.add_css_class("flat")
         print_btn.connect("clicked", lambda _: self._main._exporter._print_bulletin_webkit())
-        hdr.append(print_btn)
 
         # Popout into separate window
         popout_btn = Gtk.Button(icon_name="view-restore-symbolic",
                                 tooltip_text="Open in separate window")
         popout_btn.add_css_class("flat")
         popout_btn.connect("clicked", lambda _: self._popout_preview())
-        hdr.append(popout_btn)
+
+        # Built last so the four controls above already exist to hand to it.
+        gear_btn.set_popover(self._build_preview_gear_popover(
+            extra=[("Compile mode", self._main._preview_mode_btn),
+                   ("Edit bulletin text", self._main._bulletin_edit_btn),
+                   ("Print bulletin\u2026", print_btn),
+                   ("Open in a window", popout_btn)]))
+        hdr.append(gear_btn)
 
         box.append(hdr)
         box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
@@ -246,12 +251,27 @@ class BulletinPreview:
 
         return box
 
-    def _build_preview_gear_popover(self) -> Gtk.Popover:
-        """Small popover for print/digital mode toggle and quick church name edit."""
+    def _build_preview_gear_popover(self, extra=None) -> Gtk.Popover:
+        """Popover for preview format, church name, and the occasional actions.
+
+        `extra` is a list of (label, widget) pairs for controls that used to sit
+        in the preview header. They are re-parented here rather than duplicated,
+        so their existing handlers and state carry over untouched.
+        """
         pop = Gtk.Popover()
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_top(12); box.set_margin_bottom(12)
         box.set_margin_start(12); box.set_margin_end(12)
+
+        for label, widget in (extra or []):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            lab = Gtk.Label(label=label); lab.set_xalign(0); lab.set_hexpand(True)
+            row.append(lab)
+            widget.set_valign(Gtk.Align.CENTER)
+            row.append(widget)
+            box.append(row)
+        if extra:
+            box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         fmt_lbl = Gtk.Label(label="Preview format")
         fmt_lbl.add_css_class("caption"); fmt_lbl.add_css_class("dim-label")

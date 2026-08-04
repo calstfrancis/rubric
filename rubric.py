@@ -153,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.20.0-dev16"
+APP_VERSION = "0.20.0-dev17"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -5153,6 +5153,15 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
    Adwaita's own headerbar colour is pure white in the light scheme, which is
    why raising the toolbars added a separator but no tint. */
 .order-ground { background: @secondary_sidebar_bg_color; }
+/* The element palette sits one step further out than the order pane, so it
+   takes the chrome surface - same relationship the design gives its side pane
+   against the cards on it. */
+.palette-ground { background: @sidebar_bg_color; }
+.palette-list { background: transparent; }
+/* Section disclosure carries the order list's header rather than GTK's own
+   expander label, so the two panes describe a section identically. */
+.palette-section > title { padding: 0; }
+.palette-section > title > expander { margin-right: 4px; opacity: 0.5; }
 .editor-ground { background: @view_bg_color; }
 .rubric-main-hdr { background: @sidebar_bg_color; }
 .rubric-statusbar { background: @sidebar_bg_color; }
@@ -5345,9 +5354,15 @@ row.elem-row > box { padding-top: 7px; padding-bottom: 7px; margin-top: 0; margi
   50%       { opacity: 0.35; }
 }
 .unsaved-pulse { animation: rubric-unsaved-pulse 1.6s ease-in-out infinite; }
-/* Preview pane: the page sits on the theme's card ground, so it is legible
-   in dark mode instead of a hardcoded sheet of white */
-.preview-pane { background-color: @card_bg_color; }
+/* Preview pane: the page on a recessed ground, with its header on the chrome
+   surface and a hairline under it - the same three-plane arrangement the
+   editor and order panes use. */
+.preview-pane { background-color: @secondary_sidebar_bg_color; }
+.preview-header {
+  background: @sidebar_bg_color;
+  border-bottom: 1px solid alpha(@borders, 0.6);
+}
+.preview-header button { min-height: 26px; }
 /* Readings band: reference material, so it stays quiet - a small season
    swatch instead of a full-bleed coloured bar */
 .season-swatch { border-radius: 3px; }

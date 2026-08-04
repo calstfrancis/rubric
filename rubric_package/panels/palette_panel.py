@@ -12,9 +12,19 @@ from __future__ import annotations
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GLib
+from gi.repository import Gtk, Adw, GLib, Pango
 
 from rubric_package.models.config import config, get_palette
+
+
+def _rows(listbox):
+    i = 0
+    while True:
+        r = listbox.get_row_at_index(i)
+        if r is None:
+            return
+        yield r
+        i += 1
 
 
 class PalettePanel:
@@ -37,6 +47,7 @@ class PalettePanel:
         # The hymn-cache readout and its Clear button moved to Preferences —
         # it's a maintenance statistic, not something to keep on screen.
 
+        box.add_css_class("palette-ground")
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
         self._main._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._main._palette_inner.set_margin_top(4); self._main._palette_inner.set_margin_bottom(8)
@@ -84,6 +95,51 @@ class PalettePanel:
                 return sname
         return ""
 
+    def _make_palette_row(self, name: str, section: str) -> Gtk.ListBoxRow:
+        """One element in the palette, styled as the order list's rows are."""
+        row = Gtk.ListBoxRow()
+        row.set_activatable(True)
+        row.add_css_class("sec-item"); row.add_css_class("elem-row")
+        row._item_name = name
+        row._section_name = section
+        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        bx.set_margin_start(12); bx.set_margin_end(10)
+        lbl = Gtk.Label(label=name)
+        lbl.add_css_class("elem-title")
+        lbl.set_xalign(0)
+        lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        bx.append(lbl)
+        row.set_child(bx)
+        return row
+
+    def _make_palette_header(self, title: str, section: str | None) -> Gtk.Widget:
+        """The same section header the service order uses: dot, small caps."""
+        bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        bx.add_css_class("divider-header")
+        if section is not None:
+            dot = Gtk.Label(label="\u25cf")
+            dot.add_css_class("section-dot")
+            dot.add_css_class(self._main._section_dot_class(section))
+            dot.set_valign(Gtk.Align.CENTER)
+            bx.append(dot)
+        lbl = Gtk.Label(label=title)
+        lbl.add_css_class("section-title")
+        lbl.set_valign(Gtk.Align.CENTER)
+        bx.append(lbl)
+        return bx
+
+    def _make_palette_list(self, items, section: str) -> Gtk.ListBox:
+        lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        lb.add_css_class("order-list"); lb.add_css_class("palette-list")
+        lb.set_valign(Gtk.Align.START)
+        lb.connect("row-activated", self._main._on_palette_row_activated)
+        for pos, name in enumerate(items):
+            row = self._make_palette_row(name, section)
+            if pos == 0: row.add_css_class("sec-first")
+            if pos == len(items) - 1: row.add_css_class("sec-last")
+            lb.append(row)
+        return lb
+
     def _fill_palette_inner(self):
         while True:
             c = self._main._palette_inner.get_first_child()
@@ -92,38 +148,32 @@ class PalettePanel:
         self._main._palette_listboxes.clear()
         self._main._palette_expanders.clear()
 
-        # Recently used section
+        # Recently used
         if config.recently_used:
-            rec_lbl = Gtk.Label(label="Recent")
-            rec_lbl.add_css_class("caption"); rec_lbl.add_css_class("dim-label")
-            rec_lbl.set_xalign(0)
-            rec_lbl.set_margin_start(12); rec_lbl.set_margin_end(12)
-            rec_lbl.set_margin_top(8); rec_lbl.set_margin_bottom(2)
-            self._main._palette_inner.append(rec_lbl)
-            rec_lb = Gtk.ListBox(); rec_lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            rec_lb.add_css_class("boxed-list")
-            rec_lb.set_margin_start(12); rec_lb.set_margin_end(12); rec_lb.set_margin_bottom(4)
-            rec_lb.connect("row-activated", self._main._on_palette_row_activated)
-            for rname in config.recently_used[:6]:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(rname)); row.set_activatable(True)
-                row._item_name = rname; row._section_name = self._section_for_item(rname)
-                rec_lb.append(row)
+            hdr = self._make_palette_header("Recent", None)
+            hdr.set_margin_start(16); hdr.set_margin_end(16)
+            hdr.set_margin_top(8); hdr.set_margin_bottom(2)
+            self._main._palette_inner.append(hdr)
+            recent = list(config.recently_used[:6])
+            rec_lb = self._make_palette_list(recent, "")
+            for row in _rows(rec_lb):
+                row._section_name = self._section_for_item(row._item_name)
+            rec_lb.set_margin_start(16); rec_lb.set_margin_end(16); rec_lb.set_margin_bottom(6)
             self._main._palette_inner.append(rec_lb)
             self._main._palette_listboxes["__recent__"] = rec_lb
-            self._main._palette_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        # Sections with expanders (first expanded, rest collapsed)
+        # Sections. Still collapsible — fifty elements need it — but the
+        # disclosure carries the order list's section header rather than
+        # GTK's default expander label.
         for i, (sname, items) in enumerate(get_palette()):
-            exp = Gtk.Expander(label=sname)
-            exp.set_margin_start(12); exp.set_margin_end(12)
+            exp = Gtk.Expander()
+            exp.set_label_widget(self._make_palette_header(sname, sname))
+            exp.add_css_class("palette-section")
+            exp.set_margin_start(16); exp.set_margin_end(16)
             exp.set_margin_top(8); exp.set_margin_bottom(2)
             exp.set_expanded(i == 0)
-            lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            lb.add_css_class("boxed-list"); lb.set_margin_bottom(4)
-            lb.connect("row-activated", self._main._on_palette_row_activated)
-            for iname in items:
-                row = Adw.ActionRow(title=GLib.markup_escape_text(iname)); row.set_activatable(True)
-                row._item_name = iname; row._section_name = sname; lb.append(row)
+            lb = self._make_palette_list(items, sname)
+            lb.set_margin_top(4); lb.set_margin_bottom(4)
             exp.set_child(lb)
             self._main._palette_inner.append(exp)
             self._main._palette_listboxes[sname] = lb

@@ -276,6 +276,18 @@ class TestHymnLookupPanelLogic(unittest.TestCase):
 class TestPalettePanelLogic(unittest.TestCase):
     """PalettePanel — section lookup and palette-list rebuilding."""
 
+    @staticmethod
+    def _stub_main():
+        """A stub whose section-colour lookup returns a real CSS class name.
+
+        The palette builds its section headers the same way the service order
+        does, so it calls back into MainWindow for the colour class; a bare
+        MagicMock there fails PyGObject's string check on add_css_class().
+        """
+        main = MagicMock()
+        main._section_dot_class.return_value = "section-dot-c0"
+        return main
+
     def setUp(self):
         self._palette_backup = config.palette
         self._recent_backup = list(config.recently_used)
@@ -286,7 +298,7 @@ class TestPalettePanelLogic(unittest.TestCase):
         config.recently_used = self._recent_backup
 
     def test_section_for_item_finds_containing_section(self):
-        main = MagicMock()
+        main = self._stub_main()
         panel = PalettePanel(main)
 
         from rubric_package.models.config import SECTIONS
@@ -304,7 +316,7 @@ class TestPalettePanelLogic(unittest.TestCase):
         from rubric_package.models.config import SECTIONS
 
         config.recently_used = []
-        main = MagicMock()
+        main = self._stub_main()
         main._palette_inner = Gtk.Box()
         main._palette_listboxes = {}
         main._palette_expanders = []
@@ -317,7 +329,7 @@ class TestPalettePanelLogic(unittest.TestCase):
 
     def test_fill_palette_inner_adds_recent_section_when_present(self):
         config.recently_used = ["Opening Prayer"]
-        main = MagicMock()
+        main = self._stub_main()
         main._palette_inner = Gtk.Box()
         main._palette_listboxes = {}
         main._palette_expanders = []

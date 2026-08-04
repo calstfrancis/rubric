@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.0-dev16] — Interface refresh; crash-safe saving; guided conflict resolution for GitHub sync; wide bug-fixing pass
+## [0.20.0-dev17] — Content becomes a document instead of markup; the interface rebuilt; crash-safe saving
 
 ### Added
 
@@ -46,6 +46,15 @@ All notable changes are documented here, newest first.
   became a proper radio group that marks the one in effect. Nineteen items down to eighteen in
   simple mode, twenty-seven down to twenty-three otherwise, and grouped so the count matters
   less than it did.
+- **The element palette matches the service order.** It sits on its own recessed surface, its
+  sections carry the same colour dot and letterspaced heading the order list uses, and its
+  elements are single-line rows in the same cards. Sections still collapse — fifty elements
+  need it — but the disclosure carries that header rather than a default expander label.
+- **The preview panel's header went from ten controls to four:** which document you're looking
+  at, compile now, the compiling indicator, and one overflow menu. Compile mode, editing the
+  bulletin text, printing and opening in a window all moved into that menu. The page sits on a
+  recessed ground with its header on the chrome surface and a line between, matching the editor
+  and order panes.
 - **Services moved to the status bar**, beside Focus, and out of the menu — browsing past
   liturgies and the element library is something you reach for constantly.
 - **Save and push to GitHub is one click again**, as a plain "Git" in the status bar. It saves
@@ -177,6 +186,9 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **The test suite was not running in full on CI.** One test file was in the job that has no
+  GTK bindings, so it failed to import there and took the whole run down with it — the build
+  has been red since that file was added. It runs in the job that has them now.
 - **Element content was not being displayed at all.** The editor pane stayed blank however you
   clicked around, Snippets did nothing, and inserting from the element library silently failed.
   A tidy-up of dead code removed two lookup tables the editor's own text conversion depends on —
