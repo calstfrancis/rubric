@@ -312,6 +312,58 @@ class TestPalettePanelLogic(unittest.TestCase):
 
         self.assertEqual(panel._section_for_item("Not A Real Element"), "")
 
+    def test_build_palette_panel_includes_the_new_element_button(self):
+        config.recently_used = []
+        main = self._stub_main()
+        panel = PalettePanel(main)
+
+        box = panel._build_palette_panel()
+
+        search_row = box.get_first_child()
+        btn = search_row.get_last_child()
+        self.assertIsInstance(btn, Gtk.Button)
+        self.assertEqual(btn.get_icon_name(), "list-add-symbolic")
+
+    def test_add_element_materialises_palette_and_appends(self):
+        from rubric_package.models.config import SECTIONS
+        section_name = SECTIONS[0][0]
+        panel = PalettePanel(MagicMock())
+
+        with patch.object(config, "save"):
+            added = panel.add_element("  Blessing of the Nets  ", section_name)
+
+        self.assertTrue(added)
+        sec = next(s for s in config.palette if s["section"] == section_name)
+        self.assertIn("Blessing of the Nets", sec["items"])
+        # Every built-in section survives the materialisation, not just the one
+        # written to.
+        self.assertEqual(len(config.palette), len(SECTIONS))
+
+    def test_add_element_rejects_duplicates_case_insensitively(self):
+        from rubric_package.models.config import SECTIONS
+        section_name, items = SECTIONS[0]
+        panel = PalettePanel(MagicMock())
+
+        with patch.object(config, "save"):
+            added = panel.add_element(items[0].upper(), section_name)
+
+        self.assertFalse(added)
+
+    def test_add_element_rejects_blank_names(self):
+        panel = PalettePanel(MagicMock())
+
+        with patch.object(config, "save"):
+            self.assertFalse(panel.add_element("   ", "Gathering"))
+
+    def test_add_element_creates_a_missing_section(self):
+        panel = PalettePanel(MagicMock())
+
+        with patch.object(config, "save"):
+            self.assertTrue(panel.add_element("Net Blessing", "Harbour"))
+
+        sec = next(s for s in config.palette if s["section"] == "Harbour")
+        self.assertEqual(sec["items"], ["Net Blessing"])
+
     def test_fill_palette_inner_builds_a_listbox_per_section(self):
         from rubric_package.models.config import SECTIONS
 

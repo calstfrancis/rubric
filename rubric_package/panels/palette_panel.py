@@ -35,14 +35,23 @@ class PalettePanel:
 
     def _build_palette_panel(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL); box.set_size_request(230,-1)
-        # Search entry
+        # Search entry, with the "new element" button beside it
+        search_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        search_row.set_margin_start(12); search_row.set_margin_end(12)
+        search_row.set_margin_top(6); search_row.set_margin_bottom(2)
         self._main._palette_search = Gtk.SearchEntry()
         self._main._palette_search.set_placeholder_text("Search elements…")
-        self._main._palette_search.set_margin_start(12); self._main._palette_search.set_margin_end(12)
-        self._main._palette_search.set_margin_top(6); self._main._palette_search.set_margin_bottom(2)
+        self._main._palette_search.set_hexpand(True)
         self._main._palette_search.add_css_class("fond-search")
         self._main._palette_search.connect("search-changed", self._on_palette_search_changed)
-        box.append(self._main._palette_search)
+        search_row.append(self._main._palette_search)
+        new_btn = Gtk.Button(icon_name="list-add-symbolic")
+        new_btn.set_tooltip_text("New element — add one to the palette")
+        new_btn.add_css_class("flat")
+        new_btn.set_valign(Gtk.Align.CENTER)
+        new_btn.connect("clicked", self._on_new_element_clicked)
+        search_row.append(new_btn)
+        box.append(search_row)
 
         # The hymn-cache readout and its Clear button moved to Preferences —
         # it's a maintenance statistic, not something to keep on screen.
@@ -88,6 +97,131 @@ class PalettePanel:
             else:
                 lb.set_filter_func(None)
             lb.invalidate_filter()
+
+    # ── Creating new elements ─────────────────────────────────────────────────
+
+    def add_element(self, name: str, section: str) -> bool:
+        """Add `name` to `section` in the saved palette. False if it's a duplicate.
+
+        The palette lives in config only once it's been customised (get_palette()
+        falls back to the built-in SECTIONS), so the first custom element has to
+        materialise the current palette into config.palette before appending.
+        """
+        name = name.strip()
+        if not name:
+            return False
+        if any(name.lower() == existing.lower()
+               for _s, items in get_palette() for existing in items):
+            return False
+        if not config.palette:
+            config.palette = [{"section": s, "items": list(i)} for s, i in get_palette()]
+        for sd in config.palette:
+            if sd["section"] == section:
+                sd["items"].append(name)
+                break
+        else:
+            config.palette.append({"section": section, "items": [name]})
+        config.save()
+        return True
+
+    def _expanded_section(self) -> str | None:
+        """The section the user is currently looking at, if any is open."""
+        for exp, (sname, _items) in zip(self._main._palette_expanders, get_palette()):
+            if exp.get_expanded():
+                return sname
+        return None
+
+    def _on_new_element_clicked(self, _btn=None):
+        sections = [s for s, _ in get_palette()]
+        if not sections:
+            return
+
+        win = Adw.Window(transient_for=self._main, modal=True)
+        win.set_title("New element")
+        win.set_default_size(360, -1)
+        tv = Adw.ToolbarView()
+        tv.add_top_bar(Adw.HeaderBar())
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        outer.set_margin_top(12); outer.set_margin_bottom(12)
+        outer.set_margin_start(16); outer.set_margin_end(16)
+
+        grp = Adw.PreferencesGroup()
+        grp.set_description("Elements added here stay in the palette for every service.")
+        name_row = Adw.EntryRow(title="Element name")
+        grp.add(name_row)
+        section_row = Adw.ComboRow(title="Section")
+        section_row.set_model(Gtk.StringList.new(sections))
+        current = self._expanded_section()
+        if current in sections:
+            section_row.set_selected(sections.index(current))
+        grp.add(section_row)
+        outer.append(grp)
+
+        err = Gtk.Label(label="", xalign=0)
+        err.add_css_class("caption"); err.add_css_class("error")
+        err.set_margin_top(6); err.set_visible(False)
+        outer.append(err)
+
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_row.set_margin_top(16)
+        sp = Gtk.Box(); sp.set_hexpand(True); btn_row.append(sp)
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda _: win.close())
+        btn_row.append(cancel_btn)
+        add_btn = Gtk.Button(label="Add")
+        add_btn.add_css_class("suggested-action")
+
+        def on_add(_b=None):
+            nm = name_row.get_text().strip()
+            if not nm:
+                name_row.add_css_class("error")
+                err.set_label("Give the element a name."); err.set_visible(True)
+                return
+            sec = sections[section_row.get_selected()]
+            if not self.add_element(nm, sec):
+                name_row.add_css_class("error")
+                err.set_label(f"“{nm}” is already in the palette.")
+                err.set_visible(True)
+                return
+            win.close()
+            self._fill_palette_inner()
+            self._reveal_section(sec)
+            self._toast_added(nm, sec)
+
+        def on_changed(_r):
+            name_row.remove_css_class("error"); err.set_visible(False)
+
+        name_row.connect("changed", on_changed)
+        name_row.connect("entry-activated", on_add)
+        add_btn.connect("clicked", on_add)
+        btn_row.append(add_btn)
+        outer.append(btn_row)
+
+        tv.set_content(outer); win.set_content(tv); win.present()
+        GLib.idle_add(name_row.grab_focus)
+
+    def _reveal_section(self, section: str):
+        """Open the expander holding `section` so the new element is visible."""
+        for exp, (sname, _items) in zip(self._main._palette_expanders, get_palette()):
+            exp.set_expanded(sname == section)
+
+    def _toast_added(self, name: str, section: str):
+        """Confirm the addition, offering to drop it into the open service too."""
+        overlay = getattr(self._main, "_toast_overlay", None)
+        if overlay is None:
+            return
+        toast = Adw.Toast.new(f'“{name}” added to {section}')
+        toast.set_timeout(6)
+        toast.set_button_label("Add to service")
+
+        def on_add_to_service(_t):
+            from rubric_package.models.service import ServiceItem
+            self._main._push_undo()
+            self._main._add_entry(ServiceItem(name, section))
+
+        toast.connect("button-clicked", on_add_to_service)
+        overlay.add_toast(toast)
 
     def _section_for_item(self, name: str) -> str:
         for sname, items in get_palette():

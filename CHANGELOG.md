@@ -4,7 +4,20 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.20.1-dev1] — Rubric's styling moves onto the suite's shared stylesheet
+## [0.21.0-dev1] — New elements from the sidebar; styling moves onto the suite's shared stylesheet
+
+### Added
+
+- **New elements can be created from the sidebar.** Adding an element to the palette used to
+  mean opening Preferences and finding the Palette page; the sidebar you were already looking
+  at had no way to do it. A **+** button beside the palette search opens a small dialog — name,
+  and which section it belongs to, preselected to the section you have open. The element is
+  saved to the palette for every service, the section it landed in is expanded so you can see
+  it, and the confirmation offers to drop it straight into the service you're planning.
+  - Names are checked against the whole palette regardless of case, so you can't end up with
+    two elements that differ only in capitalisation.
+  - The Preferences palette page is unchanged and still does the things the sidebar doesn't:
+    removing elements, and adding or removing whole sections.
 
 ### Changed
 
