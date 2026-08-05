@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [dev] — Rubric's styling moves onto the suite's shared stylesheet
+## [0.20.1-dev1] — Rubric's styling moves onto the suite's shared stylesheet
 
 ### Changed
 
