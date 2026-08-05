@@ -62,3 +62,7 @@ build/
 *.deb
 *.png
 !screenshots/*.png
+
+# Written by the build (manifest/install) from style/fond.css — never committed;
+# the canonical vendored copy is style/fond.css.
+rubric_package/data/fond.css

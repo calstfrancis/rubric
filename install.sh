@@ -63,6 +63,12 @@ else
     exit 1
 fi
 
+# The suite's shared stylesheet, which rubric.py looks for beside itself
+if [ -f "$SCRIPT_DIR/style/fond.css" ]; then
+    mkdir -p "$APP_DIR/style"
+    cp "$SCRIPT_DIR/style/fond.css" "$APP_DIR/style/fond.css"
+fi
+
 # Optional root-level modules
 for f in hymn_lookup.py hymn_suggestions.py bible_api.py snippets.py rubric_setup.py; do
     [ -f "$SCRIPT_DIR/$f" ] && cp "$SCRIPT_DIR/$f" "$APP_DIR/"

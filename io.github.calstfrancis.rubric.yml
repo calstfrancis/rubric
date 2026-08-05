@@ -31,6 +31,10 @@ modules:
       - rm -f rubric_package/data/CHANGELOG.md && cp CHANGELOG.md rubric_package/data/CHANGELOG.md
       - rm -f rubric_package/data/HELP.md && cp HELP.md rubric_package/data/HELP.md
       - rm -f rubric_package/data/FAQ.md && cp FAQ.md rubric_package/data/FAQ.md
+      # rubric.py installs as a top-level module, so style/fond.css beside it in
+      # the checkout is not carried into the install — same resolve-before-build
+      # step as the documents above.
+      - rm -f rubric_package/data/fond.css && cp style/fond.css rubric_package/data/fond.css
       - pip3 install --prefix=/app --no-build-isolation .
       - install -Dm755 typst-bin/typst /app/bin/typst
       - install -Dm644 io.github.calstfrancis.rubric.desktop /app/share/applications/io.github.calstfrancis.rubric.desktop

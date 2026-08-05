@@ -20,6 +20,11 @@ All notable changes are documented here, newest first.
     shared row padding, and `headerbar button:not(.suggested-action)` outranked the pill.
     Both are now scoped with `:not()` so they apply to Rubric's own widgets and leave the
     shared components alone.
+  - The stylesheet is installed alongside the app rather than only existing in the source
+    tree: `rubric.py` installs as a top-level module, so a file beside it in the checkout
+    is not carried into a flatpak or a pip install. The flatpak manifest and `install.sh`
+    now place it where the app looks, and a missing stylesheet degrades to an unstyled
+    window instead of a failure to start.
 
 ---
 

@@ -5111,12 +5111,13 @@ class LiturgyPlannerApp(Adw.Application):
             # Loaded before Rubric's own rules so those can still override it.
             # Do not edit style/fond.css here — change it in fond-style and run
             # that repo's sync.sh, or the next sync silently reverts you.
-            _fond = (Path(__file__).parent / "style" / "fond.css").read_text()
-            fond_css = Gtk.CssProvider()
-            fond_css.load_from_data(_fond.encode())
-            Gtk.StyleContext.add_provider_for_display(
-                Gdk.Display.get_default(), fond_css,
-                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            _fond = _find_fond_css()
+            if _fond is not None:
+                fond_css = Gtk.CssProvider()
+                fond_css.load_from_data(_fond.read_text().encode())
+                Gtk.StyleContext.add_provider_for_display(
+                    Gdk.Display.get_default(), fond_css,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
             css = Gtk.CssProvider()
             css.load_from_data(b"""
@@ -5364,6 +5365,33 @@ button.reading-chip { font-size: 0.9em; }
             sm.connect("notify::dark", _reload_scheme_css)
 
         MainWindow(application=app).present()
+
+def _find_fond_css() -> Path | None:
+    """Locate the vendored copy of the suite's shared stylesheet.
+
+    Two places, for the same reason the help documents have two (see
+    ``HelpWindow._find_doc``): ``rubric.py`` installs as a top-level module, so
+    ``style/fond.css`` sitting beside it in the checkout is not carried into a
+    pip install or the flatpak. The manifest copies it to
+    ``rubric_package/data/`` before building, the way it already does for
+    CHANGELOG/HELP/FAQ, and that copy is what an installed Rubric reads.
+
+    A missing stylesheet is not worth refusing to start over — the app is
+    entirely usable unstyled, and this is exactly the file most likely to be
+    absent in some packaging arrangement nobody has tried yet.
+    """
+    p = Path(__file__).resolve().parent / "style" / "fond.css"
+    if p.exists():
+        return p
+    try:
+        import rubric_package as _rp
+        p2 = Path(_rp.__file__).parent / "data" / "fond.css"
+        if p2.exists():
+            return p2
+    except ImportError:
+        pass
+    return None
+
 
 def _force_adwaita_icons():
     """Draw Rubric's icons from Adwaita whatever the desktop's icon theme is.
