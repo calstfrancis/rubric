@@ -28,7 +28,7 @@ class MainChrome:
         from rubric import APP_VERSION
 
         hdr = Adw.HeaderBar()
-        hdr.add_css_class("rubric-main-hdr")
+        hdr.add_css_class("fond-chrome")
         # No minimise/maximise/close: the mockup has none, and the window
         # manager's own decorations, Ctrl+W and Alt+F4 all still close it.
         hdr.set_show_start_title_buttons(False)
@@ -140,7 +140,7 @@ class MainChrome:
         info_pop.set_has_arrow(False); info_pop.set_position(Gtk.PositionType.BOTTOM)
 
         title_btn = Gtk.MenuButton(popover=info_pop)
-        title_btn.add_css_class("flat"); title_btn.add_css_class("title-btn")
+        title_btn.add_css_class("flat"); title_btn.add_css_class("fond-title-btn")
         title_btn.set_child(self._main.title_widget)
         hdr.set_title_widget(title_btn)
         self._main.selected_date = None
@@ -201,7 +201,7 @@ class MainChrome:
         self._main._preview_btn = Gtk.Button(tooltip_text="Toggle live preview")
         self._main._preview_btn.set_child(self._main._preview_lbl)
         self._main._preview_btn.add_css_class("flat")
-        self._main._preview_btn.add_css_class("preview-pill")
+        self._main._preview_btn.add_css_class("fond-pill")
         # Without this the button fills the header bar's height and min-height
         # in CSS has no effect — it was 40px tall against the design's 26.
         self._main._preview_btn.set_valign(Gtk.Align.CENTER)
@@ -224,7 +224,9 @@ class MainChrome:
         # ── Status bar ────────────────────────────────────────────────────────
         status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         status_bar.add_css_class("toolbar")
-        status_bar.add_css_class("rubric-statusbar")
+        # fond-statusbar sets the metrics; the surface comes from fond-chrome.
+        status_bar.add_css_class("fond-chrome")
+        status_bar.add_css_class("fond-statusbar")
 
         def _status_toggle_btn(label_text, tooltip):
             lbl = Gtk.Label(); lbl.add_css_class("caption"); lbl.set_use_markup(True)
@@ -330,7 +332,7 @@ class MainChrome:
         # Word count chip — updates as content changes
         self._main._word_count_lbl = Gtk.Label()
         self._main._word_count_lbl.add_css_class("caption")
-        self._main._word_count_lbl.add_css_class("metric-pill")
+        self._main._word_count_lbl.add_css_class("fond-metric")
         self._main._word_count_lbl.set_margin_start(4); self._main._word_count_lbl.set_margin_end(6)
         self._main._word_count_lbl.set_visible(False)
         self._main._word_count_lbl.set_tooltip_text("Approximate spoken word count and reading time")

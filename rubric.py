@@ -321,9 +321,9 @@ class MainWindow(Adw.ApplicationWindow):
         the way a filled chip does.
         """
         if active:
-            btn.add_css_class("mode-btn-active")
+            btn.add_css_class("fond-toggle-active")
         else:
-            btn.remove_css_class("mode-btn-active")
+            btn.remove_css_class("fond-toggle-active")
 
     def _on_compact_status_clicked(self, _btn):
         config.compact_mode = not config.compact_mode
@@ -733,12 +733,12 @@ class MainWindow(Adw.ApplicationWindow):
         """
         row = Gtk.ListBoxRow()
         row._entry = si
-        row.add_css_class("sec-item")
-        row.add_css_class("elem-row")
+        row.add_css_class("fond-card")
+        row.add_css_class("fond-row")
 
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         bx.set_margin_start(12); bx.set_margin_end(10)
-        # Vertical spacing is CSS-only (see row.elem-row > box): setting it here
+        # Vertical spacing is CSS-only (see row.fond-row > box): setting it here
         # as well made widget margins and stylesheet padding stack, and compact
         # mode ended up taller than normal.
 
@@ -747,13 +747,13 @@ class MainWindow(Adw.ApplicationWindow):
         # stays a column of colour rather than a column of glyphs.
         cue = Gtk.Box()
         cue.set_size_request(9, 9)
-        cue.add_css_class("elem-cue")
+        cue.add_css_class("fond-cue")
         cue.add_css_class(_item_cue_class(si.name))
         cue.set_valign(Gtk.Align.CENTER)
         bx.append(cue)
 
         title = Gtk.Label(label=si.name)
-        title.add_css_class("elem-title")
+        title.add_css_class("fond-row-title")
         title.set_xalign(0)
         title.set_ellipsize(Pango.EllipsizeMode.END)
         bx.append(title)
@@ -768,7 +768,7 @@ class MainWindow(Adw.ApplicationWindow):
                 detail = note
         if detail:
             dl = Gtk.Label(label=detail)
-            dl.add_css_class("elem-detail")
+            dl.add_css_class("fond-row-detail")
             dl.set_xalign(0)
             dl.set_ellipsize(Pango.EllipsizeMode.END)
             bx.append(dl)
@@ -776,7 +776,7 @@ class MainWindow(Adw.ApplicationWindow):
         spacer = Gtk.Box(); spacer.set_hexpand(True); bx.append(spacer)
 
         who = Gtk.Label(label=si.leader or "")
-        who.add_css_class("elem-who")
+        who.add_css_class("fond-row-meta")
         who.set_ellipsize(Pango.EllipsizeMode.END)
         who.set_visible(bool(si.leader))
         row._who_lbl = who
@@ -872,23 +872,23 @@ class MainWindow(Adw.ApplicationWindow):
         """
         title = div.title if div is not None else "Service"
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        bx.add_css_class("divider-header")
+        bx.add_css_class("fond-section")
         bx.set_margin_start(16); bx.set_margin_end(16)
         bx.set_margin_top(10); bx.set_margin_bottom(2)
 
         dot = Gtk.Label(label="●")
-        dot.add_css_class("section-dot")
+        dot.add_css_class("fond-section-dot")
         dot.add_css_class(self._section_dot_class(title))
         dot.set_valign(Gtk.Align.CENTER)
         bx.append(dot)
 
         lbl = Gtk.Label(label=title)
-        lbl.add_css_class("section-title")
+        lbl.add_css_class("fond-section-title")
         lbl.set_valign(Gtk.Align.CENTER)
         bx.append(lbl)
 
         meta = Gtk.Label(label="\u00b7 " + self._section_meta_text(items))
-        meta.add_css_class("section-meta")
+        meta.add_css_class("fond-section-meta")
         meta.set_valign(Gtk.Align.CENTER)
         bx.append(meta)
 
@@ -902,7 +902,7 @@ class MainWindow(Adw.ApplicationWindow):
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         bx.set_margin_top(2); bx.set_margin_bottom(2)
         bx.set_margin_start(2); bx.set_margin_end(2)
-        bx.add_css_class("divider-header")
+        bx.add_css_class("fond-section")
 
         handle = Gtk.Label(label="⠿")
         handle.add_css_class("dim-label"); handle.add_css_class("drag-handle")
@@ -912,12 +912,12 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Section colour: a single dot, the one place it appears
         dot = Gtk.Label(label="●")
-        dot.add_css_class("section-dot")
+        dot.add_css_class("fond-section-dot")
         dot.add_css_class(self._section_dot_class(div.title))
         dot.set_valign(Gtk.Align.CENTER)
         bx.append(dot)
 
-        tl = Gtk.EditableLabel(text=div.title); tl.add_css_class("section-title")
+        tl = Gtk.EditableLabel(text=div.title); tl.add_css_class("fond-section-title")
         tl.set_valign(Gtk.Align.CENTER)
         # An EditableLabel reserves room for its editing state, which opened a
         # gap between the title and its meta. Hug the text instead.
@@ -930,7 +930,7 @@ class MainWindow(Adw.ApplicationWindow):
         # continuous label: "GATHERING · 12 MIN".
         meta = Gtk.Label(label="\u00b7 " + self._section_meta(global_idx))
         row._meta_lbl = meta
-        meta.add_css_class("section-meta")
+        meta.add_css_class("fond-section-meta")
         meta.set_valign(Gtk.Align.CENTER)
         bx.append(meta)
 
@@ -1002,8 +1002,8 @@ class MainWindow(Adw.ApplicationWindow):
                 # ends into a boxed list without splitting the ListBox.
                 first = i == 0 or entries[i - 1].is_divider
                 last = i == len(entries) - 1 or entries[i + 1].is_divider
-                if first: row.add_css_class("sec-first")
-                if last: row.add_css_class("sec-last")
+                if first: row.add_css_class("fond-card-first")
+                if last: row.add_css_class("fond-card-last")
             self.order_listbox.append(row)
         if select_index >= 0 and self.service_entries:
             r = self.order_listbox.get_row_at_index(min(select_index, len(self.service_entries)-1))
@@ -1161,12 +1161,12 @@ class MainWindow(Adw.ApplicationWindow):
             # Each page opens with the same section header the flat list uses —
             # colour dot, small caps, count and running time.
             page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-            page.add_css_class("order-ground")
+            page.add_css_class("fond-ground")
             page.append(self._make_section_header_strip(div, items))
             scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
             scroll.set_vexpand(True)
             lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-            lb.add_css_class("order-list"); lb.add_css_class("tab-list")
+            lb.add_css_class("fond-list"); lb.add_css_class("tab-list")
             lb.set_valign(Gtk.Align.START)
             lb.set_margin_start(16); lb.set_margin_end(16); lb.set_margin_top(8); lb.set_margin_bottom(12)
             lb.connect("row-selected", lambda _lb,row,d=div,i=items: self._on_tab_row_selected(row))
@@ -1178,8 +1178,8 @@ class MainWindow(Adw.ApplicationWindow):
                 g_idx = self.service_entries.index(item)
                 row = self._make_item_row(item, g_idx)
                 # One card per section, same as the flat list
-                if pos == 0: row.add_css_class("sec-first")
-                if pos == len(items) - 1: row.add_css_class("sec-last")
+                if pos == 0: row.add_css_class("fond-card-first")
+                if pos == len(items) - 1: row.add_css_class("fond-card-last")
                 lb.append(row)
             _page_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             _page_inner.set_valign(Gtk.Align.START)   # hug the card, don't fill
@@ -5107,18 +5107,33 @@ class LiturgyPlannerApp(Adw.Application):
             _ensure_gost_font()
             _apply_theme()
             _force_adwaita_icons()
+            # The suite's shared interface layer, vendored from fond-style.
+            # Loaded before Rubric's own rules so those can still override it.
+            # Do not edit style/fond.css here — change it in fond-style and run
+            # that repo's sync.sh, or the next sync silently reverts you.
+            _fond = (Path(__file__).parent / "style" / "fond.css").read_text()
+            fond_css = Gtk.CssProvider()
+            fond_css.load_from_data(_fond.encode())
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), fond_css,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
             css = Gtk.CssProvider()
             css.load_from_data(b"""
 /* Default (non-compact): give rows comfortable breathing room */
-row.activatable { min-height: 52px; }
-row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
+/* These give ordinary Adw.ActionRows room to breathe. They must not reach the
+   suite's single-line rows: fond.css is loaded first so app rules can override
+   it, which means an unscoped rule here silently beats fond-row's own padding
+   and every element row grows by 20px. */
+row.activatable:not(.fond-row) { min-height: 52px; }
+row.activatable:not(.fond-row) > box { padding-top: 10px; padding-bottom: 10px; }
 /* Compact mode: very tight rows */
-.compact-mode row.activatable { min-height: 22px; }
-.compact-mode row.activatable > box { padding-top: 1px; padding-bottom: 1px; }
+.compact-mode row.activatable:not(.fond-row) { min-height: 22px; }
+.compact-mode row.activatable:not(.fond-row) > box { padding-top: 1px; padding-bottom: 1px; }
 .compact-mode row.activatable title { font-size: 0.8em; }
 .compact-mode row.activatable subtitle { font-size: 0.7em; }
-.compact-mode .order-list row.activatable { min-height: 24px; }
-.compact-mode .order-list row.activatable title { font-size: 0.8em; margin-top: 0; margin-bottom: 0; }
+.compact-mode .fond-list row.activatable { min-height: 24px; }
+.compact-mode .fond-list row.activatable title { font-size: 0.8em; margin-top: 0; margin-bottom: 0; }
 /* Status bar: slim height */
 .toolbar { min-height: 18px; padding-top: 0; padding-bottom: 0; }
 .toolbar button.flat { min-height: 0; padding-top: 1px; padding-bottom: 1px; }
@@ -5129,16 +5144,7 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
    add, made the current element shout instead of simply reading as current.
    alpha() over the foreground darkens on a light card and lightens on a dark
    one, so it works in both schemes without a second rule. */
-.order-list row.elem-row:selected,
-.order-list row.elem-row:selected:focus {
-  background: alpha(@window_fg_color, 0.09);
-  color: @window_fg_color;
-  border-left: none;
-  outline: none;
-  box-shadow: none;
-}
 /* The list sits on a recessed ground so the grouped sections read as cards */
-.order-list { background: transparent; }
 /* Surfaces. The mockup gets its legibility from four distinct planes, so use
    the four libadwaita already defines rather than near-identical greys:
      headerbar  - top bar and status bar        (@headerbar_bg_color)
@@ -5152,19 +5158,14 @@ row.activatable > box { padding-top: 10px; padding-bottom: 10px; }
    so the chrome reads as a frame around the content instead of merging into it.
    Adwaita's own headerbar colour is pure white in the light scheme, which is
    why raising the toolbars added a separator but no tint. */
-.order-ground { background: @secondary_sidebar_bg_color; }
 /* The element palette sits one step further out than the order pane, so it
    takes the chrome surface - same relationship the design gives its side pane
    against the cards on it. */
-.palette-ground { background: @sidebar_bg_color; }
 .palette-list { background: transparent; }
 /* Section disclosure carries the order list's header rather than GTK's own
    expander label, so the two panes describe a section identically. */
 .palette-section > title { padding: 0; }
 .palette-section > title > expander { margin-right: 4px; opacity: 0.5; }
-.editor-ground { background: @view_bg_color; }
-.rubric-main-hdr { background: @sidebar_bg_color; }
-.rubric-statusbar { background: @sidebar_bg_color; }
 /* Reading chips: quiet text, not tinted pills. The liturgical colour is said
    once by the swatch beside the season name and nowhere else. */
 /* The readings band is a strip of reference material, so it stays about as tall
@@ -5210,41 +5211,27 @@ notebook > stack { background: transparent; }
 /* Section list inside a tab: one card, sized to its contents */
 .tab-list { background: transparent; }
 /* Header bar buttons: square, not tall */
-headerbar button:not(.suggested-action) { min-width: 32px; min-height: 32px; padding: 4px; }
+/* Square header-bar buttons - but not the suite's pill. fond.css is loaded
+   first so app rules can override it, which means an unscoped rule here beats
+   fond-pill's own sizing at equal specificity and the capsule comes back
+   32px tall with 4px padding. */
+headerbar button:not(.suggested-action):not(.fond-pill) {
+  min-width: 32px; min-height: 32px; padding: 4px;
+}
 /* Title button is text, not a control - no frame around the service name */
-headerbar .title-btn,
-headerbar .title-btn:hover { background: transparent; box-shadow: none; border: none; }
-headerbar .title-btn:hover label { opacity: 0.75; }
 /* Preview: a hairline pill, matching the mockup. It was reading as a heavy
    framed button because it drew a full-strength border on top of the flat
    button's own background. */
-/* Preview: a hairline capsule. The selector has to include "headerbar button"
-   because "headerbar button:not(.suggested-action)" above is 0,1,2 and was
-   winning against a bare .preview-pill at 0,1,0 - forcing min-height 32px and
-   4px padding, which is what made the pill chubby and cramped round its text. */
-headerbar button.preview-pill {
-  background: transparent;
-  box-shadow: none;
-  border: 1px solid alpha(@borders, 0.55);
-  border-radius: 9999px;
-  padding: 0 13px;
-  min-height: 25px;
-  min-width: 0;
-}
-headerbar button.preview-pill label { font-size: 0.88em; font-weight: 400; }
-headerbar button.preview-pill:hover { background: alpha(@window_fg_color, 0.05); }
 /* Bolding, matching the mockup. GTK sets button labels bold by default, which
    made Preview, the formatting toolbar and the Details toggle all shout. In the
    mockup the only bold things are the service title, section headers, element
    titles and whichever status toggles are active. */
-.preview-pill label,
+.fond-pill label,
 .fmt-toolbar button label,
 .details-btn label,
 .add-btn label,
 button.reading-chip label { font-weight: 400; }
 /* Element palette search: part of the list, not a piece of chrome */
-.palette-search { background: transparent; box-shadow: none; border: none; }
-.palette-search:focus-within { background: alpha(@window_fg_color, 0.05); }
 /* Editor surface is the pane itself, not a card floating in it */
 .elem-editor { border: none; box-shadow: none; background: transparent; }
 /* Formatting toolbar: quiet until used */
@@ -5252,34 +5239,20 @@ button.reading-chip label { font-weight: 400; }
 .fmt-toolbar button:hover { opacity: 1; }
 /* Drag handle: invisible until you're over the row it belongs to. A column of
    grip glyphs down every service was pure noise. */
-.order-list row .drag-handle { opacity: 0; transition: opacity 120ms; }
-.order-list row:hover .drag-handle { opacity: 0.45; }
+.fond-list row .drag-handle { opacity: 0; transition: opacity 120ms; }
+.fond-list row:hover .drag-handle { opacity: 0.45; }
 /* Element type icons sit back rather than competing with the titles */
-.order-list row image { opacity: 0.55; }
+.fond-list row image { opacity: 0.55; }
 /* -- Section headers ------------------------------------------------------
    Sections are a typographic rule, not a coloured card: letterspaced small
    caps, a section-colour dot, and the element count + running time at the
    end. Section colour lives here and on nothing else, so element rows stay
    quiet and the service's shape is the thing that reads first. */
-.divider-header { background: transparent; min-height: 26px; }
-.section-title {
-  font-size: 0.78em;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-.section-meta {
-  font-size: 0.78em;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  opacity: 0.55;
-}
+.fond-section { background: transparent; min-height: 26px; }
 /* Section delete: near-invisible at rest, legible on hover */
 .section-remove { opacity: 0; transition: opacity 120ms; min-height: 0; padding: 2px; }
-.order-list row.divider-row:hover .section-remove { opacity: 0.55; }
+.fond-list row.divider-row:hover .section-remove { opacity: 0.55; }
 .section-remove:hover, .section-remove:focus { opacity: 1; }
-.section-dot { font-size: 0.7em; }
 /* Add line: reads as an invitation under the list, not a toolbar */
 .add-btn { opacity: 0.55; padding: 2px 6px; min-height: 0; }
 .add-btn:hover { opacity: 1; }
@@ -5287,64 +5260,35 @@ button.reading-chip label { font-weight: 400; }
    Selector has to out-specify "row.activatable { min-height: 52px }" near the
    top of this sheet - a bare ".elem-row" loses to it (0,1,0 against 0,1,1) and
    every element row was silently 52px tall regardless of its contents. */
-row.elem-row { min-height: 34px; }
-.compact-mode row.elem-row { min-height: 28px; }
 /* The height actually came from "row.activatable > box { padding: 10px 0 }"
    near the top of this sheet, not from min-height: 20px of padding on top of
    the row's own margins. Single-line rows set their own spacing. */
-row.elem-row > box { padding-top: 7px; padding-bottom: 7px; margin-top: 0; margin-bottom: 0; }
-.compact-mode row.elem-row > box { padding-top: 4px; padding-bottom: 4px; margin-top: 0; margin-bottom: 0; }
-.elem-title { font-size: 0.98em; }
-.elem-detail { font-size: 0.88em; opacity: 0.55; }
-.elem-who { font-size: 0.88em; opacity: 0.6; }
 /* The cue is a drawn 9px box, so it needs a radius to be a circle. A large
    absolute value, not 50%: a percentage did not round a box this small in
    GTK's renderer and they came out square. Its colour is set per kind by
    utils/colors.section_css(). */
-.elem-cue { border-radius: 9999px; }
 /* Editor pane header: the element's name, then who leads it */
 .elem-heading { font-size: 1.3em; font-weight: 700; }
 .elem-subheading { font-size: 0.88em; opacity: 0.6; }
 .details-btn { opacity: 0.6; font-size: 0.9em; }
 .details-btn:hover, .details-btn:checked { opacity: 1; }
 
-
 /* Section rule: hairline running to the end of the header row */
 .section-rule { background: alpha(@borders, 0.45); min-height: 1px; }
 /* Divider rows themselves are not list items - no card chrome, no hover */
-.order-list row.divider-row {
+.fond-list row.divider-row {
   background: transparent;
   border: none;
   box-shadow: none;
   margin-top: 6px;
 }
-.order-list row.divider-row:first-child { margin-top: 0; }
+.fond-list row.divider-row:first-child { margin-top: 0; }
 /* -- Grouped element rows -------------------------------------------------
    The list stays one ListBox (the drag-and-drop index model depends on it),
    but rows carry their position within a section so CSS can round the ends
    and give each section the boxed-list look without restructuring. */
-.order-list row.sec-item {
-  background: @card_bg_color;
-  color: @window_fg_color;
-  border-left: 1px solid alpha(@borders, 0.55);
-  border-right: 1px solid alpha(@borders, 0.55);
-}
-.order-list row.sec-first {
-  border-top: 1px solid alpha(@borders, 0.55);
-  border-top-left-radius: 10px;
-  border-top-right-radius: 10px;
-}
-.order-list row.sec-last {
-  border-bottom: 1px solid alpha(@borders, 0.55);
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-}
-.order-list row.sec-item:not(.sec-first) { border-top: 1px solid alpha(@borders, 0.3); }
 /* Active status-bar toggle: weight, not a filled pill */
-.mode-btn-active { background: transparent; }
-.mode-btn-active label { font-weight: 700; color: @window_fg_color; }
 /* Metric readouts are plain text - the mockup's status bar has no filled chips */
-.metric-pill { background: transparent; padding: 1px 4px; }
 /* Planning notes header: pointer cursor + subtle hover */
 .notes-header { border-radius: 4px; }
 /* Pop-out button appears only when you're over the notes header */

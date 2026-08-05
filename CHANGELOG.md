@@ -4,6 +4,25 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [dev] — Rubric's styling moves onto the suite's shared stylesheet
+
+### Changed
+
+- **The interface layer is now shared with the rest of the suite.** Rubric's stylesheet had
+  its own copy of every rule the redesign introduced — surfaces, section headers, cards,
+  rows, cues, the status bar, the header-bar pill. Those rules now live in `style/fond.css`,
+  the interface layer Zerkalo also loads, so a change to how a section header or a row is set
+  happens once and reaches both apps rather than being reproduced by hand and drifting.
+  - Nothing about the app looks different: the light and dark screenshots after the move are
+    pixel-for-pixel identical to the ones shipped with 0.20.0.
+  - Two of Rubric's own rules were quietly beating the shared ones, because the shared sheet
+    is loaded first so the app can still override it: `row.activatable > box` outranked the
+    shared row padding, and `headerbar button:not(.suggested-action)` outranked the pill.
+    Both are now scoped with `:not()` so they apply to Rubric's own widgets and leave the
+    shared components alone.
+
+---
+
 ## [0.20.0] "Plain Chant" — Content becomes a document instead of markup; the interface rebuilt; crash-safe saving
 
 ### Added

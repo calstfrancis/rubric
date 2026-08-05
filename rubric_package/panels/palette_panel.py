@@ -40,14 +40,14 @@ class PalettePanel:
         self._main._palette_search.set_placeholder_text("Search elements…")
         self._main._palette_search.set_margin_start(12); self._main._palette_search.set_margin_end(12)
         self._main._palette_search.set_margin_top(6); self._main._palette_search.set_margin_bottom(2)
-        self._main._palette_search.add_css_class("palette-search")
+        self._main._palette_search.add_css_class("fond-search")
         self._main._palette_search.connect("search-changed", self._on_palette_search_changed)
         box.append(self._main._palette_search)
 
         # The hymn-cache readout and its Clear button moved to Preferences —
         # it's a maintenance statistic, not something to keep on screen.
 
-        box.add_css_class("palette-ground")
+        box.add_css_class("fond-sidebar")
         scroll = Gtk.ScrolledWindow(); scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC); scroll.set_vexpand(True)
         self._main._palette_inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._main._palette_inner.set_margin_top(4); self._main._palette_inner.set_margin_bottom(8)
@@ -99,13 +99,13 @@ class PalettePanel:
         """One element in the palette, styled as the order list's rows are."""
         row = Gtk.ListBoxRow()
         row.set_activatable(True)
-        row.add_css_class("sec-item"); row.add_css_class("elem-row")
+        row.add_css_class("fond-card"); row.add_css_class("fond-row")
         row._item_name = name
         row._section_name = section
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         bx.set_margin_start(12); bx.set_margin_end(10)
         lbl = Gtk.Label(label=name)
-        lbl.add_css_class("elem-title")
+        lbl.add_css_class("fond-row-title")
         lbl.set_xalign(0)
         lbl.set_ellipsize(Pango.EllipsizeMode.END)
         bx.append(lbl)
@@ -115,28 +115,28 @@ class PalettePanel:
     def _make_palette_header(self, title: str, section: str | None) -> Gtk.Widget:
         """The same section header the service order uses: dot, small caps."""
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        bx.add_css_class("divider-header")
+        bx.add_css_class("fond-section")
         if section is not None:
             dot = Gtk.Label(label="\u25cf")
-            dot.add_css_class("section-dot")
+            dot.add_css_class("fond-section-dot")
             dot.add_css_class(self._main._section_dot_class(section))
             dot.set_valign(Gtk.Align.CENTER)
             bx.append(dot)
         lbl = Gtk.Label(label=title)
-        lbl.add_css_class("section-title")
+        lbl.add_css_class("fond-section-title")
         lbl.set_valign(Gtk.Align.CENTER)
         bx.append(lbl)
         return bx
 
     def _make_palette_list(self, items, section: str) -> Gtk.ListBox:
         lb = Gtk.ListBox(); lb.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        lb.add_css_class("order-list"); lb.add_css_class("palette-list")
+        lb.add_css_class("fond-list"); lb.add_css_class("palette-list")
         lb.set_valign(Gtk.Align.START)
         lb.connect("row-activated", self._main._on_palette_row_activated)
         for pos, name in enumerate(items):
             row = self._make_palette_row(name, section)
-            if pos == 0: row.add_css_class("sec-first")
-            if pos == len(items) - 1: row.add_css_class("sec-last")
+            if pos == 0: row.add_css_class("fond-card-first")
+            if pos == len(items) - 1: row.add_css_class("fond-card-last")
             lb.append(row)
         return lb
 

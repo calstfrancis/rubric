@@ -177,10 +177,10 @@ class OrderPanel:
         self._main._flat_scroll = Gtk.ScrolledWindow()
         self._main._flat_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         # Recessed ground so the grouped section cards lift off it in both themes
-        self._main._flat_scroll.add_css_class("order-ground")
+        self._main._flat_scroll.add_css_class("fond-ground")
         self._main.order_listbox = Gtk.ListBox()
         self._main.order_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self._main.order_listbox.add_css_class("order-list")
+        self._main.order_listbox.add_css_class("fond-list")
         self._main.order_listbox.set_margin_start(16); self._main.order_listbox.set_margin_end(16)
         self._main.order_listbox.set_margin_top(8); self._main.order_listbox.set_margin_bottom(8)
         self._main.order_listbox.connect("row-selected", self._main._on_flat_row_selected)
@@ -243,7 +243,7 @@ class OrderPanel:
         self._main._time_bar.set_margin_start(12); self._main._time_bar.set_margin_end(12)
         self._main._time_bar.set_margin_top(2); self._main._time_bar.set_margin_bottom(0)
         self._main._time_bar.add_css_class("caption")
-        self._main._time_bar.add_css_class("metric-pill")
+        self._main._time_bar.add_css_class("fond-metric")
         self._main._time_bar.set_visible(False)
         order_box.append(self._main._time_bar)
 
@@ -257,7 +257,7 @@ class OrderPanel:
 
         # ── Notes pane (right) ────────────────────────────────────────────────
         notes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        notes_box.add_css_class("editor-ground")
+        notes_box.add_css_class("fond-view")
 
         # Focus mode banner — shown in F11 focus mode, hidden otherwise
         self._main._focus_banner = Gtk.Revealer()
