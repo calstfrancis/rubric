@@ -965,7 +965,11 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     _tail = linebreak_fix(
                         escape_unmatched_brackets(blocks_to_typst(_blocks[1:])))
                     if _tail.strip():
-                        target.append(_tail)
+                        # The reference is inline content, and a bare newline is
+                        # only a space in Typst markup, so without an explicit
+                        # break the next line runs straight on from the hymn
+                        # title: "…Emmanuel Verses 1, 3 and 5 only".
+                        target.append("#linebreak()" + _tail)
                     return
             if _plain:
                 target.append(_typ)

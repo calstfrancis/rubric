@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.21.0-dev2] — Hymns work entirely offline; leader notes stay out of the bulletin; a preferences audit
+## [0.21.0-dev3] — Hymns work entirely offline; leader notes stay out of the bulletin; a preferences audit
 
 ### Added
 

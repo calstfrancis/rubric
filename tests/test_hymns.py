@@ -259,6 +259,17 @@ class TestHymnRenderingInTheBulletin(unittest.TestCase):
         self.assertIn("Verses 1, 3 and 5 only", out)
         self.assertIn("Please stand", out)
 
+    def test_lines_below_the_reference_start_on_their_own_line(self):
+        """The reference is inline content and a bare newline is only a space in
+        Typst markup, so without an explicit break the PDF read
+        "…Emmanuel Verses 1, 3 and 5 only" as one run-on line."""
+        out = self._bulletin(self._hymn_item(
+            "VU 1 — O come, O come, Emmanuel\nVerses 1, 3 and 5 only"))
+        lines = [l for l in out.splitlines() if l.strip()]
+        idx = next(i for i, l in enumerate(lines) if l.startswith("#hymnref("))
+        self.assertTrue(lines[idx + 1].startswith("#linebreak()"),
+                        f"expected a break before the tail, got {lines[idx + 1]!r}")
+
     def test_a_leader_note_under_a_hymn_never_reaches_the_bulletin(self):
         from rubric_package.models.service import ServiceItem
         from rubric_package.models.content import make_block, make_run
