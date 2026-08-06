@@ -97,6 +97,19 @@ class BulletinPrefsWindow(Adw.Window):
         cs_box.append(cs_full_btn); cs_box.append(cs_compact_btn)
         cover_style_row.add_suffix(cs_box); fmt_grp.add(cover_style_row)
 
+        # The exporter has always honoured this key; until now there was no way
+        # to turn it off short of hand-editing config.json.
+        ann_row = Adw.SwitchRow(
+            title="Include announcements",
+            subtitle="Print the announcements below in generated bulletins")
+        ann_row.set_active(bool(config.bulletin.get("include_announcements", True)))
+        def on_include_ann(row, _pspec):
+            config.bulletin["include_announcements"] = row.get_active()
+            config.save()
+            if self._main: self._main._schedule_preview_update()
+        ann_row.connect("notify::active", on_include_ann)
+        fmt_grp.add(ann_row)
+
         # ── Boilerplate text ──────────────────────────────────────────────
         text_grp = Adw.PreferencesGroup(title="Boilerplate text")
         page.add(text_grp)

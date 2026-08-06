@@ -1,7 +1,13 @@
 """PreferencesWindow — Rubric's tabbed preferences dialog.
 
-Covers view/layout options, templates, palette, snippets, scripture/hymn
-settings, custom dates, and GitHub sync setup.
+Covers view/layout options, recurring elements and element defaults, templates,
+palette, scripture/hymn settings, snippets, and GitHub sync setup.
+
+Custom observances are *not* here: they are edited in DatesEditorWindow, opened
+from "Edit dates…" in the liturgical events popover. This window used to carry a
+Dates page that wrote to the legacy ``config.custom_dates`` key, which nothing
+has read since dates moved to ``config.all_dates`` — every date added through it
+was silently discarded.
 """
 
 from __future__ import annotations
@@ -26,28 +32,35 @@ from rubric_package.views import github_signin
 _GIT = flatpak_git_prefix()
 
 try:
-    from hymn_lookup import prefetch_hymnal
-except ImportError:
-    def prefetch_hymnal(book, on_progress=None, on_done=None): pass
-
-try:
     from snippets import load_snippets, save_snippets
     _SNIP_OK = True
 except ImportError:
     _SNIP_OK = False
 
 
+def _esc(text: str) -> str:
+    """Escape user text bound for an Adw row title/subtitle.
+
+    Those properties are parsed as Pango markup, so an element or template name
+    containing "&" (e.g. "Welcome & Announcements") renders as nothing at all
+    plus a GTK markup warning. Every name in this window comes from the user.
+    """
+    return GLib.markup_escape_text(text or "")
+
+
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.set_title("Preferences"); self.set_default_size(700,560); self.set_search_enabled(False)
+        self.set_title("Preferences"); self.set_default_size(700, 560)
+        # Seven pages is more than a glance can scan — let people type for a row.
+        self.set_search_enabled(True)
         self._build_view()
+        self._build_elements()
         self._build_template(); self._build_palette()
+        self._build_scripture()
         if _SNIP_OK and not config.simple_mode:
-            self._build_snippets()
-        self._build_github(); self._build_scripture()
-        self._build_dates_page()
-        # self._build_typst_files()  # hidden — use Template panel instead
+            self._try_build_snippets()
+        self._build_github()
         if self._simple_row:
             self._simple_row.connect("notify::active", self._on_simple_mode_toggled)
         else:
@@ -55,85 +68,46 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.connect("close-request", self._on_close)
 
     def _on_simple_mode_toggled(self, _widget, _pspec):
-        # Turning Simple Mode off should reveal the Snippets page immediately,
-        # not just after Preferences is closed and reopened.
-        if _SNIP_OK and not self._simple_mode_active() and not hasattr(self, "_snip_page"):
+        # Simple mode applies the moment it is switched, rather than waiting for
+        # _on_close to write it: leaving it until close meant a Simple toggle
+        # made from the status bar while this window was open got silently
+        # reverted by the stale switch state saved here.
+        active = self._simple_mode_active()
+        if config.simple_mode != active:
+            win = self.get_transient_for()
+            if win is not None and hasattr(win, "_on_simple_status_clicked"):
+                win._on_simple_status_clicked(None)
+            else:
+                config.simple_mode = active
+                config.save()
+        # Turning Simple mode off should reveal the advanced view toggles and
+        # the Snippets page immediately, not just after a close and reopen.
+        # Visibility first: building the Snippets page touches the snippet
+        # database, and a failure there must not leave this page half-updated.
+        self._sync_advanced_visibility()
+        if _SNIP_OK and not active and not hasattr(self, "_snip_page"):
+            self._try_build_snippets()
+
+    def _try_build_snippets(self):
+        """Add the Snippets page, tolerating an unreadable snippet store.
+
+        Building it opens the snippet database. If that fails the page simply
+        stays absent — it must not take the rest of Preferences down with it.
+        """
+        try:
             self._build_snippets()
+        except Exception:
+            pass
 
     def _build_view(self):
         page = Adw.PreferencesPage(title="View", icon_name="view-grid-symbolic"); self.add(page)
 
-        # ── View options ──────────────────────────────────────────────────
-        # These were menu items. A menu entry that toggles something has to show
-        # its state, and five of them in a row is a settings page in disguise.
-        view_grp = Adw.PreferencesGroup(title="View")
-        page.add(view_grp)
-
-        def _switch_row(title, subtitle, initial, on_change):
-            if hasattr(Adw, "SwitchRow"):
-                row = Adw.SwitchRow(title=title, subtitle=subtitle)
-                row.set_active(initial)
-                row.connect("notify::active", lambda r, _p: on_change(r.get_active()))
-            else:
-                row = Adw.ActionRow(title=title, subtitle=subtitle)
-                sw = Gtk.Switch(valign=Gtk.Align.CENTER)
-                sw.set_active(initial)
-                sw.connect("notify::active", lambda w, _p: on_change(w.get_active()))
-                row.add_suffix(sw); row.set_activatable_widget(sw)
-            view_grp.add(row)
-            return row
-
         def _main():
             return self.get_transient_for()
 
-        def _set_compact(active):
-            if config.compact_mode != active:
-                w = _main()
-                if w is not None:
-                    w._on_compact_status_clicked(None)
-
-        def _set_gost(active):
-            if config.gost_mode != active:
-                w = _main()
-                if w is not None:
-                    w._on_gost_status_clicked(None)
-
-        def _set_dev(active):
-            w = _main()
-            if w is not None and getattr(w, "_dev_mode", False) != active:
-                w._on_dev_status_clicked(None)
-
-        _switch_row("Compact view",
-                    "Tighter spacing so more of the service fits on screen",
-                    config.compact_mode, _set_compact)
-        if not config.simple_mode:
-            _switch_row("GOST interface font",
-                        "A Cyrillic engineering typeface, in place of the system font",
-                        config.gost_mode, _set_gost)
-            _switch_row("Developer mode",
-                        "Adds a \u201cCopy Typst source\u201d button to the preview panel",
-                        bool(getattr(self.get_transient_for(), "_dev_mode", False)), _set_dev)
-
-        # ── Interface font ────────────────────────────────────────────────
-        font_grp = Adw.PreferencesGroup(
-            title="Interface font",
-            description="Leave empty to follow the system font. "
-                        "Give a family and optional size, e.g. \u201cURW Palladio L 12\u201d.")
-        page.add(font_grp)
-        font_row = Adw.EntryRow(title="Font") if hasattr(Adw, "EntryRow") else None
-        if font_row is not None:
-            font_row.set_text(config.ui_font)
-
-            def _on_font_changed(row):
-                config.ui_font = row.get_text().strip()
-                config.save()
-                win = self.get_transient_for()
-                if win is not None and hasattr(win, "_apply_gost_mode"):
-                    win._apply_gost_mode()
-            font_row.connect("changed", _on_font_changed)
-            font_grp.add(font_row)
-
-        # ── Simple mode ───────────────────────────────────────────────────
+        # -- Feature level -------------------------------------------------
+        # Simple mode leads the page: it decides what the rest of this page --
+        # and most of the app -- even shows.
         mode_grp = Adw.PreferencesGroup(
             title="Feature level",
             description="Simple mode hides Typst export, GitHub sync, CSV export, "
@@ -156,7 +130,40 @@ class PreferencesWindow(Adw.PreferencesWindow):
             row.add_suffix(self._simple_switch); row.set_activatable_widget(self._simple_switch)
             mode_grp.add(row); self._simple_row = None
 
-        # ── Layout ────────────────────────────────────────────────────────
+        # -- Appearance ----------------------------------------------------
+        # Theme lives here as well as in the menu's Appearance submenu: the menu
+        # is where you reach for it mid-edit, this is where you look when you
+        # have gone hunting through settings for it.
+        appear_grp = Adw.PreferencesGroup(title="Appearance")
+        page.add(appear_grp)
+
+        theme_row = Adw.ComboRow(
+            title="Theme",
+            subtitle="System follows your desktop's light/dark setting")
+        theme_model = Gtk.StringList()
+        for lbl in ("System", "Light", "Dark"):
+            theme_model.append(lbl)
+        theme_row.set_model(theme_model)
+        _theme_keys = ["system", "light", "dark"]
+        theme_row.set_selected(_theme_keys.index(config.theme)
+                               if config.theme in _theme_keys else 0)
+
+        def _on_theme_row(row, _pspec):
+            choice = _theme_keys[row.get_selected()]
+            if choice == config.theme:
+                return
+            w = _main()
+            if w is None or not hasattr(w, "_set_theme"):
+                return
+            w._set_theme(choice)
+            # Keep the menu's radio group in step with this combo.
+            act = w.lookup_action("theme")
+            if act is not None:
+                act.set_state(GLib.Variant("s", choice))
+        theme_row.connect("notify::selected", _on_theme_row)
+        appear_grp.add(theme_row)
+
+        # -- Layout --------------------------------------------------------
         grp = Adw.PreferencesGroup(title="Service order layout",
             description="Tab view groups items by section divider. "
                         "Switching modes preserves all data.")
@@ -174,24 +181,87 @@ class PreferencesWindow(Adw.PreferencesWindow):
             row.add_suffix(self._tabs_switch); row.set_activatable_widget(self._tabs_switch)
             grp.add(row); self._tabs_row = None
 
-        # ── Density ───────────────────────────────────────────────────────
-        dens_grp = Adw.PreferencesGroup(title="Density",
-            description="Compact view reduces row height for larger services on small screens.")
-        page.add(dens_grp)
-        try:
-            self._compact_row = Adw.SwitchRow(title="Compact view",
-                                              subtitle="Smaller rows in the order list and palette")
-            self._compact_row.set_active(config.compact_mode)
-            dens_grp.add(self._compact_row)
-        except AttributeError:
-            row = Adw.ActionRow(title="Compact view",
-                                subtitle="Smaller rows in the order list and palette")
-            self._compact_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
-            self._compact_switch.set_active(config.compact_mode)
-            row.add_suffix(self._compact_switch); row.set_activatable_widget(self._compact_switch)
-            dens_grp.add(row); self._compact_row = None
+        # -- Advanced ------------------------------------------------------
+        # Built unconditionally and hidden while Simple mode is on, rather than
+        # skipped at construction. Building them conditionally meant switching
+        # Simple mode off here left them absent until Preferences was closed and
+        # reopened -- and since neither has a status-bar button any more, that
+        # was the only route to them at all.
+        self._adv_grp = Adw.PreferencesGroup(
+            title="Advanced",
+            description="Shown when Simple mode is off.")
+        page.add(self._adv_grp)
 
-        # ── Recurring elements ─────────────────────────────────────────────
+        def _switch_row(grp, title, subtitle, initial, on_change):
+            if hasattr(Adw, "SwitchRow"):
+                row = Adw.SwitchRow(title=title, subtitle=subtitle)
+                row.set_active(initial)
+                row.connect("notify::active", lambda r, _p: on_change(r.get_active()))
+            else:
+                row = Adw.ActionRow(title=title, subtitle=subtitle)
+                sw = Gtk.Switch(valign=Gtk.Align.CENTER)
+                sw.set_active(initial)
+                sw.connect("notify::active", lambda w, _p: on_change(w.get_active()))
+                row.add_suffix(sw); row.set_activatable_widget(sw)
+            grp.add(row)
+            return row
+
+        def _set_gost(active):
+            if config.gost_mode != active:
+                w = _main()
+                if w is not None:
+                    w._on_gost_status_clicked(None)
+
+        def _set_dev(active):
+            if config.dev_mode != active:
+                w = _main()
+                if w is not None:
+                    w._on_dev_status_clicked(None)
+
+        _switch_row(self._adv_grp, "GOST interface font",
+                    "A Cyrillic engineering typeface, in place of the system font",
+                    config.gost_mode, _set_gost)
+        _switch_row(self._adv_grp, "Developer mode",
+                    "Adds a “Copy Typst source” button to the preview panel, "
+                    "and a Typst source toggle to the status bar",
+                    config.dev_mode, _set_dev)
+
+        # -- Interface font ------------------------------------------------
+        font_grp = Adw.PreferencesGroup(
+            title="Interface font",
+            description="Leave empty to follow the system font. "
+                        "Give a family and optional size, e.g. “URW Palladio L 12”.")
+        page.add(font_grp)
+        font_row = Adw.EntryRow(title="Font") if hasattr(Adw, "EntryRow") else None
+        if font_row is not None:
+            font_row.set_text(config.ui_font)
+
+            def _on_font_changed(row):
+                config.ui_font = row.get_text().strip()
+                config.save()
+                win = self.get_transient_for()
+                if win is not None and hasattr(win, "_apply_gost_mode"):
+                    win._apply_gost_mode()
+            font_row.connect("changed", _on_font_changed)
+            font_grp.add(font_row)
+
+        self._sync_advanced_visibility()
+
+    def _sync_advanced_visibility(self):
+        """Show the advanced view toggles only while Simple mode is off."""
+        if hasattr(self, "_adv_grp"):
+            self._adv_grp.set_visible(not self._simple_mode_active())
+
+    def _build_elements(self):
+        """Preferences page: recurring elements and per-element default notes.
+
+        These are about what goes *into* a service, not how it is displayed, so
+        they get their own page rather than sitting at the bottom of View.
+        """
+        page = Adw.PreferencesPage(title="Elements", icon_name="view-list-symbolic")
+        self.add(page)
+
+        # -- Recurring elements ---------------------------------------------
         rec_grp = Adw.PreferencesGroup(title="Recurring elements",
             description="These element names are added automatically to every new service "
                         "if not already present.")
@@ -215,7 +285,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         rec_grp.add(add_rec_row)
         self._recurring_group = rec_grp
 
-        # ── Element defaults ──────────────────────────────────────────────
+        # -- Element defaults ------------------------------------------------
         def_grp = Adw.PreferencesGroup(title="Element defaults",
             description="Default note content auto-filled when an element is added by name. "
                         "Useful for recurring prayers, responses, or instructions.")
@@ -247,7 +317,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._element_defaults_group = def_grp
 
     def _add_recurring_row(self, grp, name: str):
-        row = Adw.ActionRow(title=name)
+        row = Adw.ActionRow(title=_esc(name))
         del_btn = Gtk.Button(icon_name="list-remove-symbolic", valign=Gtk.Align.CENTER)
         del_btn.add_css_class("flat")
         def _del(btn, r=row, n=name):
@@ -276,11 +346,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
         grp.add(row)
         self._element_default_rows.append((name_e, note_e, row))
 
-    def _compact_mode_active(self) -> bool:
-        if hasattr(self, "_compact_row") and self._compact_row:
-            return self._compact_row.get_active()
-        return self._compact_switch.get_active() if hasattr(self, "_compact_switch") else False
-
     def _simple_mode_active(self) -> bool:
         if hasattr(self, "_simple_row") and self._simple_row:
             return self._simple_row.get_active()
@@ -306,7 +371,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         if config.templates:
             for tname, items in list(config.templates.items()):
                 is_default = (tname == config.default_template)
-                grp = Adw.PreferencesGroup(title=tname + (" ★" if is_default else ""))
+                grp = Adw.PreferencesGroup(title=_esc(tname) + (" ★" if is_default else ""))
 
                 # Set as default button
                 if not is_default:
@@ -320,14 +385,14 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 dividers = sum(1 for i in items if i.get("type") == "divider")
                 summary = Adw.ActionRow(
                     title=f"{count} entries" if not dividers else f"{count - dividers} elements, {dividers} dividers",
-                    subtitle=", ".join(i.get("name", i.get("title", "")) for i in items[:4] if i.get("type") != "divider") +
+                    subtitle=", ".join(_esc(i.get("name", i.get("title", ""))) for i in items[:4] if i.get("type") != "divider") +
                              ("…" if sum(1 for i in items if i.get("type") != "divider") > 4 else "")
                 )
                 grp.add(summary)
 
                 # Delete button row
                 del_grp = Adw.PreferencesGroup()
-                del_row = Adw.ActionRow(title=f"Delete “{tname}”",
+                del_row = Adw.ActionRow(title=f"Delete “{_esc(tname)}”",
                                         subtitle="Cannot be undone")
                 del_btn = Gtk.Button(label="Delete", valign=Gtk.Align.CENTER)
                 del_btn.add_css_class("destructive-action")
@@ -366,13 +431,13 @@ class PreferencesWindow(Adw.PreferencesWindow):
             except Exception: pass
         self._pal_grps.clear()
         for sd in self._pal:
-            grp = Adw.PreferencesGroup(title=sd["section"])
+            grp = Adw.PreferencesGroup(title=_esc(sd["section"]))
             rb = Gtk.Button(label="Remove section", valign=Gtk.Align.CENTER)
             rb.add_css_class("destructive-action"); rb.add_css_class("flat")
             rb.connect("clicked", lambda _,s=sd: (self._pal.__setitem__(slice(None), [x for x in self._pal if x is not s]), self._refresh_pal()))
             grp.set_header_suffix(rb)
             for n in sd["items"]:
-                row = Adw.ActionRow(title=n)
+                row = Adw.ActionRow(title=_esc(n))
                 db = Gtk.Button(icon_name="list-remove-symbolic", tooltip_text=f"Remove '{n}'", valign=Gtk.Align.CENTER)
                 db.add_css_class("flat"); db.connect("clicked", lambda _,s=sd,i=n: (s["items"].__delitem__(s["items"].index(i)), self._refresh_pal()))
                 row.add_suffix(db); grp.add(row)
@@ -404,7 +469,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._snip_groups.clear()
 
         for i, snip in enumerate(self._snippets):
-            grp = Adw.PreferencesGroup(title=snip["name"])
+            grp = Adw.PreferencesGroup(title=_esc(snip["name"]))
             # Delete button
             del_btn = Gtk.Button(label="Delete", valign=Gtk.Align.CENTER)
             del_btn.add_css_class("destructive-action"); del_btn.add_css_class("flat")
@@ -412,7 +477,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             grp.set_header_suffix(del_btn)
             # Preview row
             preview = snip["content"].replace("\n"," ")[:80]+("…" if len(snip["content"])>80 else "")
-            row = Adw.ActionRow(title=preview); row.set_subtitle_lines(2); grp.add(row)
+            row = Adw.ActionRow(title=_esc(preview)); row.set_subtitle_lines(2); grp.add(row)
             self._snip_page.add(grp); self._snip_groups.append(grp)
 
         # Add new snippet group
@@ -449,8 +514,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
         builtin = [{"section":s,"items":list(i)} for s,i in SECTIONS]
         config.palette = self._pal if self._pal != builtin else None
         config.use_tabs = self._tabs_active()
-        config.simple_mode = self._simple_mode_active()
-        config.compact_mode = self._compact_mode_active()
+        # Simple mode is deliberately not written here — it applies live in
+        # _on_simple_mode_toggled. Writing cached switch state on close is what
+        # let this window silently undo a toggle made elsewhere while it was up.
         if hasattr(self, "_recurring_rows"):
             config.recurring_elements = [n for _r, n in self._recurring_rows]
         if hasattr(self, "_element_default_rows"):
@@ -462,8 +528,6 @@ class PreferencesWindow(Adw.PreferencesWindow):
         win = self.get_transient_for()
         if win and hasattr(win, "_apply_simple_mode"):
             win._apply_simple_mode()
-        if win and hasattr(win, "_apply_density"):
-            win._apply_density()
 
         # Save scripture settings
         if hasattr(self, "_scripture_combo"):
@@ -523,350 +587,74 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # ── Hymn database ──────────────────────────────────────────────────
         try:
-            from rubric_package.db import hymn_count as _hcount
+            from rubric_package.db import hymn_count as _hcount, hymn_bundled_count
             _n = _hcount()
+            _bundled = hymn_bundled_count()
         except Exception:
             _n = 0
+            _bundled = 0
 
+        # No download buttons: Rubric reads hymn titles from its own database and
+        # never goes to the network for them. It used to fetch from Hymnary.org,
+        # which now answers automated requests with a bot-protection challenge,
+        # so every lookup failed and a "download" worked through a whole hymnal
+        # to add nothing. Titles ship with the app; missing ones are typed in
+        # once from the Lookup tab and kept.
         hymn_grp = Adw.PreferencesGroup(
             title="Hymn title database",
-            description="Pre-download all VU/MV/LUS titles so lookup works offline and search works immediately.")
+            description=(
+                f"Rubric includes {_bundled} hymn titles, so lookup and title search "
+                "work offline. To add one it doesn't have, look up its number in the "
+                "hymn panel and type the title in — it is saved for good."
+            ) if _bundled else (
+                "Hymn titles are stored locally. Add them from the hymn panel's "
+                "Lookup tab."
+            ))
         page.add(hymn_grp)
 
-        self._hymn_dl_status = Gtk.Label(label=f"{_n} titles cached")
+        self._hymn_dl_status = Gtk.Label(label=f"{_n} titles stored")
         self._hymn_dl_status.add_css_class("dim-label"); self._hymn_dl_status.add_css_class("caption")
         self._hymn_dl_status.set_xalign(0)
-        self._hymn_dl_bar = Gtk.ProgressBar(); self._hymn_dl_bar.set_visible(False)
-        self._hymn_dl_bar.set_show_text(True)
 
-        status_row = Adw.ActionRow(title="Cached titles")
+        status_row = Adw.ActionRow(title="Stored titles")
         status_row.add_suffix(self._hymn_dl_status)
-        # Clearing the cache used to be a row above the element palette. It's a
-        # maintenance action, so it belongs next to the cache it maintains.
-        _clear_btn = Gtk.Button(label="Clear", valign=Gtk.Align.CENTER)
+        _clear_btn = Gtk.Button(label="Reset", valign=Gtk.Align.CENTER)
         _clear_btn.add_css_class("flat")
+        _clear_btn.connect("clicked", self._on_hymn_cache_clear)
+        status_row.add_suffix(_clear_btn)
+        hymn_grp.add(status_row)
 
-        def _on_clear(_b):
+    def _on_hymn_cache_clear(self, _btn):
+        """Confirm first — the database holds hand-typed titles too."""
+        dlg = Adw.MessageDialog(
+            transient_for=self,
+            heading="Reset the hymn title database?",
+            body="This deletes every stored title, including any you typed in "
+                 "yourself. The titles that ship with Rubric come back the next "
+                 "time it starts.")
+        dlg.add_response("cancel", "Cancel")
+        dlg.add_response("clear", "Reset")
+        dlg.set_response_appearance("clear", Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response("cancel")
+        dlg.set_close_response("cancel")
+
+        def on_resp(_d, r):
+            if r != "clear":
+                return
             try:
-                from rubric_package.db import hymn_clear, hymn_count as _hc
+                from rubric_package.db import (
+                    hymn_clear, hymn_seed_bundled, hymn_count as _hc,
+                )
                 hymn_clear()
+                # Restore the bundled titles straight away rather than making the
+                # user restart to get back to a working search.
+                hymn_seed_bundled()
                 n = _hc()
             except Exception:
                 n = 0
-            self._hymn_dl_status.set_text(f"{n} titles cached")
-        _clear_btn.connect("clicked", _on_clear)
-        status_row.add_suffix(_clear_btn)
-        hymn_grp.add(status_row)
-        hymn_grp.add(self._hymn_dl_bar)
-
-        for book, label, max_n in [("VU", "Voices United (VU)", 961),
-                                    ("MV", "More Voices (MV)",   217),
-                                    ("LUS","Let Us Sing (LUS)",  150)]:
-            btn = Gtk.Button(label=f"Download {label}", valign=Gtk.Align.CENTER)
-            btn.add_css_class("flat")
-            btn.connect("clicked", lambda _b, bk=book, mn=max_n: self._start_hymn_prefetch(bk, mn))
-            row = Adw.ActionRow(title=f"Download {label}")
-            row.add_suffix(btn); hymn_grp.add(row)
-
-    def _start_hymn_prefetch(self, book: str, max_n: int):
-        self._hymn_dl_bar.set_visible(True)
-        self._hymn_dl_bar.set_fraction(0)
-        self._hymn_dl_status.set_text(f"Downloading {book}…")
-
-        def on_progress(n, total):
-            self._hymn_dl_bar.set_fraction(n / total)
-            self._hymn_dl_bar.set_text(f"{book} {n}/{total}")
-            return False
-
-        def on_done(added):
-            self._hymn_dl_bar.set_visible(False)
-            try:
-                from rubric_package.db import hymn_count as _hcount
-                n = _hcount()
-            except Exception:
-                n = added
-            self._hymn_dl_status.set_text(f"{n} titles cached — {added} new from {book}")
-            return False
-
-        prefetch_hymnal(book, on_progress=on_progress, on_done=on_done)
-
-    def _build_dates_page(self):
-        """Preferences page: manage custom justice and religious dates."""
-        _MONTH_NAMES = ["January","February","March","April","May","June",
-                        "July","August","September","October","November","December"]
-
-        page = Adw.PreferencesPage(title="Dates", icon_name="x-office-calendar-symbolic")
-        self.add(page)
-        self._dates_page = page
-        self._dates_groups: list = []
-
-        intro_grp = Adw.PreferencesGroup(
-            title="Custom observances",
-            description="Dates you add here appear in the justice/custom dates bar "
-                        "below the main status bar, alongside the built-in Canadian "
-                        "and social justice calendar. Built-in dates (e.g. National "
-                        "Indigenous Peoples Day, World Refugee Day) are not editable "
-                        "here — they live in observances.py."
-        )
-        page.add(intro_grp)
-        self._dates_groups.append(intro_grp)
-
-        self._refresh_dates_page()
-
-    def _refresh_dates_page(self):
-        """Rebuild the custom-dates list in the Dates page."""
-        page = getattr(self, "_dates_page", None)
-        if page is None:
-            return
-
-        _MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun",
-                        "Jul","Aug","Sep","Oct","Nov","Dec"]
-        _MONTH_FULL  = ["January","February","March","April","May","June",
-                        "July","August","September","October","November","December"]
-
-        # Remove all rebuilable groups (keep intro group at index 0)
-        for grp in getattr(self, "_dates_groups", [])[1:]:
-            try: page.remove(grp)
-            except Exception: pass
-        self._dates_groups = self._dates_groups[:1]
-
-        for category, cat_title, cat_desc in [
-            ("justice",
-             "Social Justice & Canadian Observances",
-             "Shown in the justice dates bar. Use this to add dates not in the "
-             "built-in calendar — local events, diocesan days, etc."),
-            ("religious",
-             "Religious & Liturgical Dates",
-             "Custom feast days, saints' days, or observances specific to your "
-             "tradition. These also appear in the justice/custom dates bar."),
-        ]:
-            custom = [cd for cd in config.custom_dates if cd.get("category") == category]
-            grp = Adw.PreferencesGroup(title=cat_title, description=cat_desc)
-            page.add(grp); self._dates_groups.append(grp)
-
-            if not custom:
-                empty_row = Adw.ActionRow(title="No custom dates yet")
-                empty_row.add_css_class("dim-label")
-                grp.add(empty_row)
-
-            for i, cd in enumerate(config.custom_dates):
-                if cd.get("category") != category:
-                    continue
-                month = cd.get("month", 1); day = cd.get("day", 1)
-                name = cd.get("name", "")
-                try:
-                    month_name = _MONTH_NAMES[month - 1]
-                except (IndexError, TypeError):
-                    month_name = str(month)
-                row = Adw.ActionRow(title=name, subtitle=f"{month_name} {day}")
-                del_btn = Gtk.Button(icon_name="user-trash-symbolic",
-                                     valign=Gtk.Align.CENTER,
-                                     tooltip_text="Remove this date")
-                del_btn.add_css_class("flat")
-
-                def _on_delete(_b, idx=i):
-                    config.custom_dates.pop(idx)
-                    config.save()
-                    self._refresh_dates_page()
-                    win = self.get_transient_for()
-                    if win and hasattr(win, "_refresh_justice_row") and getattr(win, "selected_date", None):
-                        win._refresh_justice_row(win.selected_date)
-
-                del_btn.connect("clicked", _on_delete)
-                row.add_suffix(del_btn)
-                grp.add(row)
-
-            # Add-date row for this category
-            add_grp = Adw.PreferencesGroup(title=f'Add to “{cat_title}”')
-            page.add(add_grp); self._dates_groups.append(add_grp)
-
-            # Month row
-            month_row = Adw.ActionRow(title="Month")
-            month_spin = Gtk.SpinButton.new_with_range(1, 12, 1)
-            month_spin.set_valign(Gtk.Align.CENTER)
-            month_spin.set_tooltip_text("Month (1–12)")
-            month_row.add_suffix(month_spin)
-            add_grp.add(month_row)
-
-            # Day row
-            day_row = Adw.ActionRow(title="Day")
-            day_spin = Gtk.SpinButton.new_with_range(1, 31, 1)
-            day_spin.set_valign(Gtk.Align.CENTER)
-            day_spin.set_tooltip_text("Day of month (1–31)")
-            day_row.add_suffix(day_spin)
-            add_grp.add(day_row)
-
-            # Name row
-            try:
-                name_entry = Adw.EntryRow(title="Name")
-                add_grp.add(name_entry)
-                _get_name = lambda e=name_entry: e.get_text().strip()
-                _clear_name = lambda e=name_entry: e.set_text("")
-            except AttributeError:
-                name_action = Adw.ActionRow(title="Name")
-                name_field = Gtk.Entry(valign=Gtk.Align.CENTER)
-                name_field.set_hexpand(True)
-                name_action.add_suffix(name_field)
-                add_grp.add(name_action)
-                _get_name = lambda f=name_field: f.get_text().strip()
-                _clear_name = lambda f=name_field: f.set_text("")
-
-            add_btn_row = Adw.ActionRow(title="Add date")
-            add_btn = Gtk.Button(label="Add", valign=Gtk.Align.CENTER)
-            add_btn.add_css_class("suggested-action")
-            add_btn_row.add_suffix(add_btn)
-            add_grp.add(add_btn_row)
-
-            def _on_add(_b, cat=category, ms=month_spin, ds=day_spin,
-                        get_n=_get_name, clr_n=_clear_name):
-                name = get_n()
-                if not name:
-                    return
-                month = int(ms.get_value())
-                day = int(ds.get_value())
-                config.custom_dates.append({"month": month, "day": day,
-                                            "name": name, "category": cat})
-                config.save()
-                clr_n()
-                ms.set_value(1); ds.set_value(1)
-                self._refresh_dates_page()
-                win = self.get_transient_for()
-                if win and hasattr(win, "_refresh_justice_row") and getattr(win, "selected_date", None):
-                    win._refresh_justice_row(win.selected_date)
-
-            add_btn.connect("clicked", _on_add)
-
-    def _build_typst_files(self):
-        """Preferences page: view and edit the bundled Typst template files."""
-        page = Adw.PreferencesPage(title="Typst Files", icon_name="text-x-generic-symbolic")
-        self.add(page)
-
-        _TEMPLATES = [
-            ("bulletin_print",   "Bulletin — print/booklet",  "Half-letter (5.5×8.5in), fold for saddle-stitch"),
-            ("bulletin_digital", "Bulletin — digital/screen", "Full letter, colour hyperlinks"),
-            ("manuscript",       "Manuscript",                "Leader copy, full-letter"),
-            ("_shared",          "Shared functions",          "Rubric function definitions included in all documents"),
-        ]
-
-        info_grp = Adw.PreferencesGroup(
-            title="Typst preamble templates",
-            description="User overrides go in ~/.config/rubric/templates/. "
-                        "Edit a template here to create an override; Reset restores the bundled default.",
-        )
-        page.add(info_grp)
-
-        for fname, label, subtitle in _TEMPLATES:
-            row = Adw.ActionRow(title=label, subtitle=subtitle)
-            edit_btn = Gtk.Button(label="Edit…", valign=Gtk.Align.CENTER)
-            edit_btn.add_css_class("flat")
-            edit_btn.connect("clicked", lambda _b, fn=fname, lbl=label: self._open_typst_template_editor(fn, lbl))
-            row.add_suffix(edit_btn)
-            info_grp.add(row)
-
-    def _open_typst_template_editor(self, fname: str, label: str):
-        """Open an in-app editor for a .typ template file."""
-        user_path = Path.home() / ".config/rubric/templates" / f"{fname}.typ"
-        bundled   = Path(__file__).resolve().parent.parent / "templates" / f"{fname}.typ"
-
-        # Read user override, or bundled default
-        if user_path.exists():
-            text = user_path.read_text(encoding="utf-8")
-            is_override = True
-        elif bundled.exists():
-            text = bundled.read_text(encoding="utf-8")
-            is_override = False
-        else:
-            text = ""
-            is_override = False
-
-        # ── Dialog ────────────────────────────────────────────────────────────
-        win = Adw.Window(transient_for=self, modal=True, title=f"Edit: {label}")
-        win.set_default_size(680, 520)
-        tv = Adw.ToolbarView()
-        hdr = Adw.HeaderBar()
-        hdr.set_show_end_title_buttons(False)
-
-        # Status label (shows override vs bundled)
-        _loc = "User override (~/.config/rubric/templates/)" if is_override else "Bundled default (read-only copy)"
-        status_lbl = Gtk.Label(label=_loc)
-        status_lbl.add_css_class("caption"); status_lbl.add_css_class("dim-label")
-
-        cancel_btn = Gtk.Button(label="Cancel"); cancel_btn.add_css_class("flat")
-        cancel_btn.connect("clicked", lambda _: win.close())
-        save_btn = Gtk.Button(label="Save override"); save_btn.add_css_class("suggested-action")
-        reset_btn = Gtk.Button(label="Reset to default"); reset_btn.add_css_class("destructive-action")
-        reset_btn.set_visible(is_override)
-
-        hdr.pack_start(cancel_btn)
-        hdr.pack_end(save_btn)
-        hdr.pack_end(reset_btn)
-        tv.add_top_bar(hdr)
-
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        vbox.set_margin_top(4); vbox.set_margin_bottom(8)
-        vbox.set_margin_start(12); vbox.set_margin_end(12)
-        vbox.append(status_lbl)
-
-        sw = Gtk.ScrolledWindow()
-        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        sw.set_vexpand(True)
-
-        # Try GtkSourceView for syntax highlighting
-        try:
-            gi.require_version("GtkSource", "5")
-            from gi.repository import GtkSource as _GS
-            from rubric_package.views.element_content import _get_typst_language, _init_source_language_manager
-            _init_source_language_manager()
-            src_buf = _GS.Buffer()
-            lang = _get_typst_language()
-            if lang:
-                src_buf.set_language(lang)
-            sm = _GS.StyleSchemeManager.get_default()
-            scheme = sm.get_scheme("classic") or sm.get_scheme("tango")
-            if scheme:
-                src_buf.set_style_scheme(scheme)
-            src_buf.set_highlight_syntax(True)
-            src_buf.set_text(text, -1)
-            editor = _GS.View.new_with_buffer(src_buf)
-            editor.set_show_line_numbers(True)
-            editor.set_tab_width(2)
-            _buf = src_buf
-        except Exception:
-            editor = Gtk.TextView()
-            _buf = editor.get_buffer()
-            _buf.set_text(text, -1)
-
-        editor.set_wrap_mode(Gtk.WrapMode.NONE)
-        editor.add_css_class("monospace")
-        editor.set_top_margin(8); editor.set_bottom_margin(8)
-        editor.set_left_margin(10); editor.set_right_margin(10)
-        sw.set_child(editor)
-        vbox.append(sw)
-        tv.set_content(vbox)
-        win.set_content(tv)
-
-        def _save(_b):
-            s, e = _buf.get_bounds()
-            content = _buf.get_text(s, e, False)
-            user_path.parent.mkdir(parents=True, exist_ok=True)
-            user_path.write_text(content, encoding="utf-8")
-            status_lbl.set_text("User override (~/.config/rubric/templates/)")
-            reset_btn.set_visible(True)
-
-        def _reset(_b):
-            if bundled.exists():
-                bundled_text = bundled.read_text(encoding="utf-8")
-                try:
-                    user_path.unlink()
-                except FileNotFoundError:
-                    pass
-                _buf.set_text(bundled_text, -1)
-                status_lbl.set_text("Bundled default (read-only copy)")
-                reset_btn.set_visible(False)
-
-        save_btn.connect("clicked", _save)
-        reset_btn.connect("clicked", _reset)
-        win.present()
+            self._hymn_dl_status.set_text(f"{n} titles stored")
+        dlg.connect("response", on_resp)
+        dlg.present()
 
     def _build_github(self):
         page = Adw.PreferencesPage(title="GitHub", icon_name="network-server-symbolic")

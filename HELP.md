@@ -50,7 +50,7 @@ Rubric launches in **Simple mode** by default. This keeps the interface clean fo
 | Responsive reading builder | — | ✓ |
 | CSV export | — | ✓ |
 
-Toggle simple mode with the **SIMPLE** button in the status bar (bottom of the window), or in **Preferences → View → Simple mode**. All keyboard shortcuts work regardless of mode.
+Toggle simple mode with the **Simple** button in the status bar (bottom of the window), or in **Preferences → View → Feature level**. All keyboard shortcuts work regardless of mode.
 
 ---
 
@@ -69,16 +69,22 @@ The header bar shows (left to right):
 
 ## Status Bar
 
-A persistent bar at the bottom of the window. All buttons remain accessible even in Focus mode.
+A persistent bar at the bottom of the window. It remains visible in Focus mode.
 
 | Button | Purpose |
 |--------|---------|
-| **SIMPLE** | Toggle Simple mode. Bold = on. |
-| **GOST** | Toggle GOST Type B engineering font globally. Bold = on. |
-| *Observance chips* (centre) | Feast days and commemorations for the service date. Click any chip to open its Wikipedia article. |
+| **Simple** | Toggle Simple mode. Bold = on. |
 | **Focus** | Hide the palette and element list. Bold = on. |
+| **Services** | Browse past services, the element library, and the planner. |
+| **Typst** | Switch the content editor to raw Typst source. Only shown when developer mode is on. |
+| *Observance chips* (centre) | Feast days and commemorations for the service date. Click any chip to open its Wikipedia article. |
+| *Word count* (right) | Approximate spoken word count and reading time. |
+| **● Unsaved** | Appears when the current service has unsaved changes. |
 | **Git** | Commit and push the current service to GitHub (pull --rebase first). |
 | **v0.x.x** | Current version. Click to open the changelog. |
+
+The GOST font and developer mode are set in **Preferences → View → Advanced**
+rather than from the status bar.
 
 ### Observance chips
 
@@ -100,7 +106,7 @@ When the service date is a Sunday, observances falling on weekdays within that s
 
 ### GOST Type B
 
-Toggles a Soviet engineering standard monoline font across the entire interface. The font is bundled — no separate installation required. The setting persists between sessions.
+Toggles a Soviet engineering standard monoline font across the entire interface. The font is bundled — no separate installation required. The setting persists between sessions. Turn it on in **Preferences → View → Advanced** (visible only when Simple mode is off).
 
 ### Focus mode
 
@@ -161,7 +167,7 @@ Weekday dates default to the next Sunday's readings with a ← → stepper. Usef
 ## Hymn Suggestions Strip
 
 When a date is set, suggested hymns for the RCL week appear (VU, MV, LUS):
-- **Left-click** a chip → opens inline Hymnary preview or browser
+- **Click** a chip → adds that hymn to the selected element (right-click does the same)
 - **▶ button** → YouTube search
 - **Right-click** a chip → injects `VU 16 — Mary, woman of the promise` into the **currently selected element's** Notes/Content
 
@@ -215,7 +221,19 @@ ESV requires a free API key from api.esv.org. Ministry and bulletin use is expli
 
 ## Hymn Lookup
 
-Select a hymn-type element, type `VU 16` (or `MV 120`, `LUS 5`) in the **Hymn** field and press Enter or click the search button. The title is fetched from Hymnary.org and prepended to Notes/Content as `VU 16 — Mary, woman of the promise`. Results are cached.
+Select a hymn-type element, type `VU 16` (or `MV 120`, `LUS 5`) in the **Hymn** field and press Enter or click **Look up**. The title is prepended to Notes/Content as `VU 16 — O come, O come, Emmanuel`.
+
+Everything comes from Rubric's own hymn database — there is no network lookup and nothing to wait for. Rubric ships with the Voices United titles, so lookup and the **By Title** tab work offline from the first launch.
+
+### Adding a title Rubric doesn't have
+
+Look the number up anyway. Rubric will say it doesn't have that one and offer a box to type the title into. What you type is stored permanently, is used the next time you look up that number, and appears in the **By Title** search from then on. This is how More Voices and Let Us Sing titles accumulate — they are not included, because they were never collected before the source Rubric used closed to automated access, and a guessed hymn number is worse than none.
+
+A number outside a hymnal's range (`VU 5000`) is rejected straight away.
+
+### Hymn database
+
+**Preferences → Scripture → Hymn title database** shows how many titles are stored and offers **Reset**, which asks first — it removes titles you typed in yourself, and restores the bundled ones immediately.
 
 ---
 
@@ -334,13 +352,21 @@ Rubric exports bulletins and manuscripts as Typst (`.typ`) files compiled by the
 
 ### Editing templates
 
-**Preferences → Typst Files** shows the four template files:
-- **Bulletin — print/booklet** (`bulletin_print.typ`) — page size, margins, fonts for folded bulletins
-- **Bulletin — digital/screen** (`bulletin_digital.typ`) — full-letter layout with coloured hyperlinks
-- **Manuscript** (`manuscript.typ`) — leader copy layout
-- **Shared functions** (`_shared.typ`) — Rubric's custom Typst functions (`#movement`, `#sverse`, `#scripture`, `#leader-note`, etc.)
+Fonts, margins, and page layout are set in the **document template** editor —
+**Edit Document Template…** in the menu (Simple mode off). That covers the
+settings most people want to change.
 
-Click **Edit…** to open the template in an in-app editor with Typst syntax highlighting. Click **Save override** to write your version to `~/.config/rubric/templates/`. Rubric checks that folder before the bundled copies, so your overrides persist across upgrades. Click **Reset to default** to remove your override and restore the bundled version.
+For anything beyond that, Rubric reads Typst template overrides from
+`~/.config/rubric/templates/`. Drop a file there with one of these names and it
+takes precedence over the bundled copy:
+- `bulletin_print.typ` — page size, margins, fonts for folded bulletins
+- `bulletin_digital.typ` — full-letter layout with coloured hyperlinks
+- `manuscript.typ` — leader copy layout
+- `_shared.typ` — Rubric's custom Typst functions (`#movement`, `#sverse`, `#scripture`, `#leader-note`, etc.)
+
+Overrides persist across upgrades; delete the file to go back to the bundled
+version. Start by copying the bundled template out of the installed
+`rubric_package/templates/` directory.
 
 ### Custom Typst in element content
 

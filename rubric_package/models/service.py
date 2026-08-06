@@ -83,6 +83,27 @@ class ServiceItem:
         return _content.blocks_to_typst(self.content)
 
     @property
+    def content_typst_bulletin(self) -> str:
+        """The content as Typst for the *bulletin*, with leader notes dropped.
+
+        Leader notes are for whoever is presiding, never for the congregation.
+        Keeping that exclusion in a named accessor means the bulletin exporter
+        cannot forget it, which is how they leaked into printed bulletins once
+        already.
+        """
+        return _content.blocks_to_typst(self.content, include_leader=False)
+
+    @property
+    def content_plain_bulletin(self) -> str:
+        """The content as readable text with leader notes dropped.
+
+        For deciding what the bulletin shows — emptiness checks, hymn-reference
+        matching — where an element holding nothing but a leader note must read
+        as empty. See :attr:`content_typst_bulletin`.
+        """
+        return _content.blocks_to_plain(self.content, include_leader=False)
+
+    @property
     def content_plain(self) -> str:
         """The content as readable text, for word counts and previews."""
         return _content.blocks_to_plain(self.content)

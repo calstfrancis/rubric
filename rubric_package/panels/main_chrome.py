@@ -268,19 +268,6 @@ class MainChrome:
         self._main._services_status_btn.connect("clicked", lambda _: self._main.open_archive())
         _left_box.append(self._main._services_status_btn)
 
-        self._main._gost_status_btn, self._main._gost_status_lbl = _status_toggle_btn(
-            "GOST font", "Switch UI font to GOST Type B — a Cyrillic engineering typeface. Toggle off to return to the system font.")
-        self._main._gost_status_btn.connect("clicked", self._main._on_gost_status_clicked)
-
-        self._main._compact_status_btn, self._main._compact_status_lbl = _status_toggle_btn(
-            "Compact", "Compact view — reduces spacing between service elements so more fit on screen at once")
-        self._main._compact_status_btn.connect("clicked", self._main._on_compact_status_clicked)
-
-        self._main._dev_status_btn, self._main._dev_status_lbl = _status_toggle_btn(
-            "Dev", "Developer mode — shows a 'Copy Typst source' button in the preview panel for debugging bulletin layout")
-        self._main._dev_status_btn.connect("clicked", self._main._on_dev_status_clicked)
-        self._main._dev_mode = False
-
         self._main._typst_edit_btn, self._main._typst_edit_lbl = _status_toggle_btn(
             "Typst", "Switch the content editor to raw Typst source mode")
         self._main._typst_edit_btn.connect("clicked", self._main._on_typst_edit_clicked)
@@ -288,13 +275,12 @@ class MainChrome:
         self._main._typst_edit_active = False
         _left_box.append(self._main._typst_edit_btn)
 
-        self._main._preamble_btn, self._main._preamble_lbl = _status_toggle_btn(
-            "Template", "Document template — set fonts, margins, and layout for generated PDFs")
-        self._main._preamble_btn.connect("clicked", self._main._on_preamble_clicked)
+        # GOST and developer mode are rare, advanced toggles — they live in
+        # Preferences → View rather than sitting in the status bar full time.
+        # The document template opens from the menu ("Edit Document Template…"),
+        # so this only tracks whether that pane is currently showing.
         self._main._preamble_active = False
 
-        # GOST, Dev and Template are rare, advanced toggles — they live in the
-        # hamburger menu now rather than sitting in the status bar full time.
         status_bar.append(_left_box)
 
         # Centre: single events popover button (replaces prev/dot/next layout)
@@ -416,3 +402,6 @@ class MainChrome:
 
         self._main._apply_simple_mode()
         self._main._apply_gost_mode()
+        # Developer mode persists across sessions now, so it has to be applied
+        # at startup rather than only when its switch is flipped.
+        self._main._apply_dev_mode()

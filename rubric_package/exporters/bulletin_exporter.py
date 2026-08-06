@@ -44,7 +44,9 @@ except Exception:
 from rubric_package.models.config import config
 from rubric_package.models.service import ServiceItem, SectionDivider
 from rubric_package.utils.helpers import flatpak_git_prefix
-from rubric_package.models.content import blocks_to_html
+from rubric_package.models.content import (
+    blocks_to_html, blocks_to_typst, normalise as _normalise_blocks,
+)
 from rubric_package.utils.typst import (
     typst_escape as _typst_escape,
     note_for_typst as _note_for_typst,
@@ -52,7 +54,6 @@ from rubric_package.utils.typst import (
     escape_unmatched_brackets,
     strip_typst_for_html,
     strip_typst_plain,
-    strip_leader_notes,
     TYPST_SHARED,
     format_typst_error,
 )
@@ -386,8 +387,15 @@ h2           { font-size: 10.5pt; font-variant: small-caps; letter-spacing: 0.08
                                if si.leader else "")
                 parts.append(f"<div class='el'>"
                              f"<div class='el-name'>{esc(si.name)}{leader_html}</div>")
-                if si.content_typst:
-                    clean = si.content_plain
+                if si.has_content():
+                    # blocks_to_html escapes the text and keeps bold, italic,
+                    # headings and lists, and omits leader notes by default.
+                    # This used to interpolate si.content_plain raw, which lost
+                    # every one of those: formatting was flattened, a leader
+                    # note printed for the congregation, and text like
+                    # "<office@church.ca>" was parsed by WebKit as a tag and
+                    # dropped from the page.
+                    clean = blocks_to_html(si.content)
                     parts.append(f"<div class='note'>"
                                  f"{clean.replace(chr(10), '<br>')}</div>")
                 parts.append("</div>")
@@ -927,28 +935,40 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                 return
             _summary = getattr(si, "bulletin_summary", "")
             if _summary:
-                target.append(linebreak_fix(_summary))
+                target.append(linebreak_fix(_typst_escape(_summary)))
                 return
             _name_lower = si.name.lower()
             _is_hymn = any(k in _name_lower
                            for k in ("hymn", "psalm", "sung", "song", "anthem", "gloria"))
-            _content = si.content_plain
-            if _is_hymn and _content:
+            # Leader notes belong to whoever is presiding and must not reach the
+            # congregation's bulletin, so they are dropped before anything else
+            # looks at the content.
+            _blocks = [b for b in _normalise_blocks(si.content) if b["type"] != "leader"]
+            _plain = si.content_plain_bulletin
+            _typ = linebreak_fix(escape_unmatched_brackets(si.content_typst_bulletin))
+            if _is_hymn and _blocks:
+                # Match the reference against the first line only. Matching the
+                # whole content with DOTALL and then keeping `.split("\n")[0]`
+                # silently dropped everything the leader wrote underneath it —
+                # "verses 1, 3 and 5 only", "please stand" — from the printed
+                # bulletin, while the preview and the manuscript still showed it.
+                _first = "".join(r["text"] for r in _blocks[0]["runs"]).strip()
                 _hm = re.match(
-                    r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)',
-                    _content, re.DOTALL)
+                    r'^((?:VU|MV|LUS|TLUS|MWS)\s+\d+)\s*[—–-]?\s*(.*)$', _first)
                 if _hm:
                     _ref  = _typst_escape(_hm.group(1).strip())
-                    _rest = _typst_escape(
-                        _hm.group(2).strip().split("\n")[0]) if _hm.group(2).strip() else ""
+                    _rest = _typst_escape(_hm.group(2).strip())
                     if _rest:
                         target.append(f'#hymnref("{_ref}", [_{_rest}_])')
                     else:
                         target.append(f'*{_ref}*')
-                else:
-                    target.append(linebreak_fix(strip_leader_notes(_content)))
-            elif _content:
-                target.append(linebreak_fix(strip_leader_notes(_content)))
+                    _tail = linebreak_fix(
+                        escape_unmatched_brackets(blocks_to_typst(_blocks[1:])))
+                    if _tail.strip():
+                        target.append(_tail)
+                    return
+            if _plain:
+                target.append(_typ)
 
         # Collect all service-order content into one list so that section
         # headings flow inside the columns block rather than breaking out of it.

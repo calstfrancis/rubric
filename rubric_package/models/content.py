@@ -119,7 +119,18 @@ def concat(a, b) -> list[Block]:
 
 # ── Typst output ──────────────────────────────────────────────────────────────
 
-_TYPST_SPECIAL = re.compile(r'([#$\\])')
+# Every character Typst reads as markup rather than text. This used to be just
+# ``#$\``, which left six more live: an email address in an announcement made
+# Typst read ``@church`` as a reference, ``*stand*`` came out bold, ``~``
+# silently became a non-breaking space, and ``<John 3:16>`` was parsed as a
+# label. Emphasis in the document is carried by run styling, never by
+# characters in the text, so escaping all of them costs nothing.
+#
+# Square brackets are deliberately absent: a bare ``[`` is harmless in markup,
+# and an unmatched ``]`` is handled downstream by escape_unmatched_brackets(),
+# which both exporters apply. Escaping them here would also break the
+# ``#leader-note[…]`` pattern that typst_to_blocks() uses to read older files.
+_TYPST_SPECIAL = re.compile(r'([#$\\*_~`<>@])')
 
 
 def _escape(text: str) -> str:
@@ -154,13 +165,20 @@ def _runs_to_typst(runs) -> str:
     return "".join(out)
 
 
-def blocks_to_typst(blocks) -> str:
+def blocks_to_typst(blocks, include_leader: bool = True) -> str:
     """Render blocks as Typst markup, for export and preview only.
 
     Output matches what Rubric wrote before the model change — headings as
     ``=``/``==``/``===``, lists as ``-``/``+``, hard breaks as a trailing
     ``\\``, leader blocks wrapped in ``#leader-note[…]`` — so templates and
     exporters keep working unchanged.
+
+    ``include_leader=False`` drops leader blocks entirely, for the bulletin.
+    It mirrors :func:`blocks_to_html`'s parameter of the same name, and exists
+    because the bulletin used to drop them by running ``strip_leader_notes()``
+    over the rendered string — which stopped working the moment the bulletin
+    started rendering plain text, where the ``#leader-note[…]`` marker it looks
+    for never appears. Excluding them here cannot silently stop working.
     """
     blocks = normalise(blocks)
     out: list[str] = []
@@ -179,7 +197,8 @@ def blocks_to_typst(blocks) -> str:
         inline = _runs_to_typst(b["runs"])
         btype = b["type"]
         if btype == "leader":
-            pending_leader.append(inline + (" \\" if inline.strip() else ""))
+            if include_leader:
+                pending_leader.append(inline + (" \\" if inline.strip() else ""))
             continue
         _flush_leader()
         if btype == "h1":
@@ -258,10 +277,15 @@ def blocks_to_html(blocks, include_leader: bool = False) -> str:
 _LEADER_RE = re.compile(r'#leader-note\[(.*?)\]', re.DOTALL)
 _STRONG_RE = re.compile(r'#strong\[(.*?)\]', re.DOTALL)
 _EMPH_RE = re.compile(r'#emph\[(.*?)\]', re.DOTALL)
-_INLINE_RE = re.compile(r'\*(.+?)\*|_(.+?)_')
+# Emphasis markers only count when they are markup. A ``\*`` written by
+# blocks_to_typst is a literal asterisk the user typed, so the lookbehinds stop
+# it being read back as the start or end of a bold span.
+_INLINE_RE = re.compile(r'(?<!\\)\*(.+?)(?<!\\)\*|(?<!\\)_(.+?)(?<!\\)_')
 
 
-_UNESCAPE_RE = re.compile(r'\\([#$\\])')
+# Must stay in step with _TYPST_SPECIAL, or text → Typst → text accumulates
+# backslashes on every save/load cycle.
+_UNESCAPE_RE = re.compile(r'\\([#$\\*_~`<>@])')
 
 
 def _inline_to_runs(text: str) -> list[Run]:

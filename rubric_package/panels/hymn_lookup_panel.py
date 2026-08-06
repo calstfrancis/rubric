@@ -1,11 +1,17 @@
 """HymnLookupPanel — hymn number lookup, title/theme search, and injection for Rubric.
 
-Owns the unified hymn lookup/search popover: number-based lookup against the
-Hymnary API (or manual title entry when that fails), the local hymn-cache
+Owns the unified hymn lookup/search popover: number-based lookup against
+Rubric's own hymn database, adding a title the database doesn't have yet, the
 title search, theme-based browsing, and injecting a chosen hymn line into the
 currently selected service item. Constructed with a reference to the
 MainWindow instance it serves, the same composition pattern used by
 BulletinExporter, BulletinPreview, and PreamblePanel.
+
+Lookup is a local database read, so it is synchronous. It used to be an async
+request to Hymnary.org, which meant the target element had to be captured when
+the lookup was fired and re-checked when the reply arrived, in case the user
+had selected something else or deleted it in the meantime. None of that is
+needed now — the title is on screen before the click finishes.
 """
 
 from __future__ import annotations
@@ -18,7 +24,10 @@ from gi.repository import Gtk, Adw
 from rubric_package.models.service import ServiceItem
 
 try:
-    from hymn_lookup import lookup_hymn, parse_hymn_ref, search_hymns
+    from hymn_lookup import (
+        lookup_hymn, parse_hymn_ref, search_hymns, remember_hymn,
+        is_in_range, hymn_range, hymnal_name,
+    )
     _HYMN_OK = True
 except ImportError:
     _HYMN_OK = False
@@ -41,50 +50,46 @@ class HymnLookupPanel:
         self._main = main_window
 
     def _do_hymn_lookup(self):
-        if not _HYMN_OK: self._main.hymn_status.set_label("hymn_lookup.py not found"); return
+        if not _HYMN_OK:
+            self._main.hymn_status.set_label("hymn_lookup.py not found")
+            return
         text = self._main.hymn_entry.get_text().strip()
-        if not text: return
+        if not text:
+            return
         result = parse_hymn_ref(text)
-        if not result: self._main.hymn_status.set_label("Format: VU 16  MV 120  LUS 5"); return
+        if not result:
+            self._main.hymn_status.set_label("Format: VU 16  MV 120  LUS 5")
+            self._hide_manual_entry()
+            return
         prefix, number = result
-        self._main.hymn_status.set_label("Looking up…")
+        if not is_in_range(prefix, number):
+            top = hymn_range(prefix)
+            self._main.hymn_status.set_label(
+                f"{hymnal_name(prefix)} only goes up to {top}")
+            self._hide_manual_entry()
+            return
+
+        title = lookup_hymn(prefix, number)
+        if title is None:
+            # Not an error — Rubric simply doesn't have this one yet. Typing it
+            # in is the way titles get added now that there is nothing to fetch
+            # from, and it is kept for good.
+            self._main.hymn_status.set_label(
+                f"{prefix} {number} isn't in the hymn database yet — add its title:")
+            self._main._hymn_manual_box.set_visible(True)
+            self._main._hymn_manual_entry.grab_focus()
+            self._main._hymn_manual_ref = (prefix, number)
+            return
+
+        self._hide_manual_entry()
+        hymn_line = f"{prefix} {number} — {title}"
+        self._main.hymn_status.set_label(hymn_line)
+        self._insert_hymn_into_selection(hymn_line)
+
+    def _hide_manual_entry(self):
         if hasattr(self._main, "_hymn_manual_box"):
             self._main._hymn_manual_box.set_visible(False)
             self._main._hymn_manual_entry.set_text("")
-        # Capture the target item now, at the moment the lookup is triggered —
-        # not later when the async reply lands, by which point the user may
-        # have selected a different item.
-        start_idx = self._main._selected_index()
-        target_entry = (self._main.service_entries[start_idx]
-                         if 0 <= start_idx < len(self._main.service_entries) else None)
-        self._main._hymn_manual_target = target_entry
-        def on_result(title, error):
-            if error:
-                self._main.hymn_status.set_label(f"Couldn't fetch — enter the title manually:")
-                self._main._hymn_manual_box.set_visible(True)
-                self._main._hymn_manual_entry.grab_focus()
-                self._main._hymn_manual_ref = (prefix, number)
-                return
-            # Short format: "VU 16 — O Come, O Come, Emmanuel"
-            short_ref = f"{prefix.upper()} {number}"
-            hymn_line = f"{short_ref} — {title}"
-            self._main.hymn_status.set_label(hymn_line)
-            entry = target_entry
-            if entry is None or not isinstance(entry, ServiceItem):
-                return
-            idx = next((i for i, e in enumerate(self._main.service_entries) if e is entry), -1)
-            if idx < 0:
-                return  # target item was deleted while the lookup was in flight
-            self._main._push_undo()
-            entry.prepend_text(hymn_line)
-            self._main._content_widget.set_blocks(entry.content)
-            row = self._main._find_row_for_index(idx)
-            if isinstance(row, Adw.ActionRow):
-                preview = self._main._note_preview(entry.content_plain) or self._main._scripture_inline_preview(entry.name)
-                sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
-                row.set_subtitle(sub)
-            self._main._mark_modified()
-        lookup_hymn(prefix, number, on_result)
 
     def _save_manual_hymn(self):
         title = self._main._hymn_manual_entry.get_text().strip()
@@ -94,30 +99,31 @@ class HymnLookupPanel:
         if not ref:
             return
         prefix, number = ref
-        key = f"{prefix}{number}"
-        try:
-            from rubric_package.db import hymn_set as _hset
-            _hset(key, title)
-        except Exception:
-            pass
-        short_ref = f"{prefix} {number}"
-        hymn_line = f"{short_ref} — {title}"
+        # Stored before it is inserted, so the title survives even if no element
+        # is selected to receive it — and shows up in the By Title search after.
+        remember_hymn(prefix, number, title)
+        hymn_line = f"{prefix} {number} — {title}"
         self._main.hymn_status.set_label(hymn_line)
-        self._main._hymn_manual_box.set_visible(False)
-        self._main._hymn_manual_entry.set_text("")
-        entry = getattr(self._main, "_hymn_manual_target", None)
-        if entry is None or not isinstance(entry, ServiceItem):
+        self._hide_manual_entry()
+        self._insert_hymn_into_selection(hymn_line)
+
+    def _insert_hymn_into_selection(self, hymn_line: str):
+        """Prepend a hymn line to the selected element, if one is selected."""
+        idx = self._main._selected_index()
+        if not (0 <= idx < len(self._main.service_entries)):
             return
-        idx = next((i for i, e in enumerate(self._main.service_entries) if e is entry), -1)
-        if idx < 0:
-            return  # target item was deleted while the manual-entry box was open
+        entry = self._main.service_entries[idx]
+        if not isinstance(entry, ServiceItem):
+            return
         self._main._push_undo()
         entry.prepend_text(hymn_line)
         self._main._content_widget.set_blocks(entry.content)
         row = self._main._find_row_for_index(idx)
         if isinstance(row, Adw.ActionRow):
-            preview = self._main._note_preview(entry.content_plain) or self._main._scripture_inline_preview(entry.name)
-            sub = f"{entry.leader} · {preview}" if entry.leader and preview else (entry.leader or preview)
+            preview = (self._main._note_preview(entry.content_plain)
+                       or self._main._scripture_inline_preview(entry.name))
+            sub = (f"{entry.leader} · {preview}" if entry.leader and preview
+                   else (entry.leader or preview))
             row.set_subtitle(sub)
         self._main._mark_modified()
 
@@ -207,7 +213,7 @@ class HymnLookupPanel:
         scroll.set_child(self._main._hymn_search_list)
         title_page.append(scroll)
 
-        hint = Gtk.Label(label="Searches your local hymn cache. Use the Lookup tab to fetch and cache individual hymns by number.")
+        hint = Gtk.Label(label="Searches the hymn database that ships with Rubric, plus any titles you have added. Use the Lookup tab to add one it doesn't have.")
         hint.add_css_class("caption"); hint.add_css_class("dim-label")
         hint.set_wrap(True); hint.set_xalign(0)
         hint.set_margin_start(8); hint.set_margin_end(8); hint.set_margin_bottom(8)
@@ -271,7 +277,7 @@ class HymnLookupPanel:
         results = search_hymns(query) if len(query) >= 2 else search_hymns("")
         if not results:
             row = Gtk.ListBoxRow(); row.set_activatable(False)
-            lbl = Gtk.Label(label="No hymns cached yet — use the Lookup tab to fetch by number")
+            lbl = Gtk.Label(label="No matching hymns — use the Lookup tab to add one by number")
             lbl.add_css_class("dim-label"); lbl.add_css_class("caption")
             lbl.set_margin_top(8); lbl.set_margin_bottom(8)
             row.set_child(lbl); self._main._hymn_search_list.append(row)
@@ -318,14 +324,9 @@ class HymnLookupPanel:
             self._main._theme_hymn_list.append(row)
 
     def _inject_hymn_line(self, hymn_line: str):
+        """Add a hymn picked from the By Title or By Theme lists."""
         self._main._hymn_search_pop.popdown()
-        idx = self._main._selected_index()
-        if not (0 <= idx < len(self._main.service_entries)): return
-        entry = self._main.service_entries[idx]
-        if not isinstance(entry, ServiceItem): return
-        entry.prepend_text(hymn_line)
-        self._main._content_widget.set_blocks(entry.content)
-        row = self._main._find_row_for_index(idx)
-        if isinstance(row, Adw.ActionRow):
-            row.set_subtitle(self._main._note_preview(entry.content_plain))
-        self._main._mark_modified()
+        # Shares _insert_hymn_into_selection with the Lookup tab, so all three
+        # routes push undo and refresh the row the same way. This one used to
+        # have its own copy that skipped the undo stack.
+        self._insert_hymn_into_selection(hymn_line)

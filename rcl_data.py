@@ -63,6 +63,9 @@ READINGS: dict[tuple, tuple] = {
 
     # ===== CHRISTMAS (shared across years) =====
 
+    # Christmas Eve — the RCL's Nativity Proper I, the same propers Christmas
+    # Day carries below.
+    ("ALL", "ChristmasEve"): ("Isa 9:2–7",           "Ps 96",    "Titus 2:11–14",    "Luke 2:1–14, (15–20)"),
     ("ALL", "Christmas1A"): ("Isa 63:7–9",          "Ps 148",   "Heb 2:10–18",      "Matt 2:13–23"),
     ("ALL", "Christmas1B"): ("Isa 61:10–62:3",       "Ps 148",   "Gal 4:4–7",        "Luke 2:22–40"),
     ("ALL", "Christmas1C"): ("1 Sam 2:18–20, 26",    "Ps 148",   "Col 3:12–17",      "Luke 2:41–52"),
@@ -137,6 +140,13 @@ READINGS: dict[tuple, tuple] = {
 
     ("ALL", "HolyThursday"): ("Exod 12:1–4, 11–14", "Ps 116:1–2, 12–19", "1 Cor 11:23–26", "John 13:1–17, 31b–35"),
     ("ALL", "GoodFriday"):   ("Isa 52:13–53:12",     "Ps 22",             "Heb 10:16–25",   "John 18:1–19:42"),
+
+    # Easter Vigil. The RCL sets a long series of Old Testament lessons for the
+    # Vigil; the one given here is the Exodus reading that is never omitted.
+    # The gospel is the only part that varies by year.
+    ("A", "EasterVigil"): ("Exod 14:10–31; 15:20–21", "Exod 15:1b–13, 17–18", "Rom 6:3–11", "Matt 28:1–10"),
+    ("B", "EasterVigil"): ("Exod 14:10–31; 15:20–21", "Exod 15:1b–13, 17–18", "Rom 6:3–11", "Mark 16:1–8"),
+    ("C", "EasterVigil"): ("Exod 14:10–31; 15:20–21", "Exod 15:1b–13, 17–18", "Rom 6:3–11", "Luke 24:1–12"),
 
     # ===== EASTER =====
 
@@ -336,6 +346,11 @@ def _nearest_sunday(d: date) -> date:
         return d + timedelta(days=7 - wd)
 
 
+def _sunday_after(d: date) -> date:
+    """The first Sunday strictly after d."""
+    return d + timedelta(days=7 - (d.weekday() + 1) % 7)
+
+
 def _sunday_on_or_before(d: date) -> date:
     wd = (d.weekday() + 1) % 7
     return d - timedelta(days=wd)
@@ -454,6 +469,8 @@ def get_liturgical_info(d: date) -> dict:
         return _result("Good Friday", "Good Friday", "GoodFriday")
     if d == holy_thu:
         return _result("Holy Thursday", "Maundy Thursday", "HolyThursday")
+    if d == e - timedelta(days=1):
+        return _result("Easter", "Easter Vigil", "EasterVigil")
     if d == ash_wed:
         return _result("Lent", "Ash Wednesday", "AshWednesday")
 
@@ -464,6 +481,14 @@ def get_liturgical_info(d: date) -> dict:
         if d == adv_sun:
             return _result("Advent", f"Advent {week_num}, Year {lec_year}",
                            f"Advent{week_num}")
+
+    # Christmas Eve. Checked after the Advent Sundays deliberately: when
+    # 24 December is itself a Sunday it is Advent 4 in the morning and Christmas
+    # Eve only in the evening, and the morning service is the one being planned.
+    # On every other year Dec 24 is a weekday and this is the only thing it can
+    # be — it used to fall through to Ordinary Time with no readings at all.
+    if d == date(year, 12, 24):
+        return _result("Christmas", "Christmas Eve", "ChristmasEve")
 
     # ── Christmas ─────────────────────────────────────────────────────────────
 
@@ -516,7 +541,14 @@ def get_liturgical_info(d: date) -> dict:
             "found": True,
         }
 
-    if d == _nearest_sunday(epiphany):
+    # Baptism of the Lord is the First Sunday *after* the Epiphany. This used to
+    # use the Sunday *nearest* 6 January, which lands before it whenever 6 Jan
+    # falls Sun–Wed — and a Sunday of 1–5 January is caught by the Christmas 2
+    # branch above, so Baptism of the Lord disappeared entirely in most years
+    # (2025, 2026, 2027, 2030, 2031, 2032 among them), taking its readings with
+    # it and shifting every Epiphany Sunday number down by one.
+    baptism = _sunday_after(epiphany)
+    if d == baptism:
         return _result("Baptism", f"Baptism of the Lord, Year {lec_year}", "Epiphany1")
 
     # Transfiguration = Sunday before Ash Wednesday
@@ -525,8 +557,8 @@ def get_liturgical_info(d: date) -> dict:
         return _result("Transfiguration", f"Transfiguration, Year {lec_year}", "Transfiguration")
 
     if epiphany < d < ash_wed and (d.weekday() + 1) % 7 == 0:
-        # Count Epiphany Sundays
-        ep1 = _nearest_sunday(epiphany)
+        # Count Epiphany Sundays from Baptism of the Lord, which is Epiphany 1.
+        ep1 = baptism
         weeks_after = (d - ep1).days // 7
         ep_num = weeks_after + 1
         if 1 <= ep_num <= 8:

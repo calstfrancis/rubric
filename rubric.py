@@ -25,7 +25,7 @@ try:
     from rubric_package.utils.typst import (
         typst_escape, note_for_typst, linebreak_fix, escape_unmatched_brackets,
         passage_to_typst,
-        strip_typst_for_html, strip_typst_plain, strip_leader_notes, TYPST_SHARED,
+        strip_typst_for_html, strip_typst_plain, TYPST_SHARED,
         format_typst_error,
     )
     from rubric_package.utils.colors import (
@@ -100,12 +100,11 @@ def _item_type_icon(name: str) -> str | None:
     return None
 
 try:
-    from hymn_lookup import lookup_hymn, parse_hymn_ref, search_hymns, prefetch_hymnal
+    from hymn_lookup import lookup_hymn, parse_hymn_ref, search_hymns
     _HYMN_OK = True
 except ImportError:
     _HYMN_OK = False
     def search_hymns(q): return []
-    def prefetch_hymnal(book, on_progress=None, on_done=None): pass
 
 try:
     from bible_api import fetch_passage
@@ -131,7 +130,7 @@ try:
 except ImportError:
     _SNIP_OK = False
 
-# Optional WebKit for inline Hymnary preview
+# Optional WebKit — used for the bulletin preview and printing
 _WEBKIT_OK = False
 try:
     gi.require_version("WebKit", "6.0")
@@ -153,7 +152,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.21.0-dev1"
+APP_VERSION = "0.21.0-dev2"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -234,7 +233,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._order = OrderPanel(self)
         self._chrome = MainChrome(self)
         self._palette = PalettePanel(self)
-        self._setup_actions(); self._chrome._build_ui(); self._apply_density(); self._update_title(); self._exporter._update_tex_btn()
+        self._setup_actions(); self._chrome._build_ui(); self._update_title(); self._exporter._update_tex_btn()
         self.connect("destroy", self._on_main_destroy)
         # Seed from default template on first launch
         items = config.templates.get(config.default_template,
@@ -278,14 +277,6 @@ class MainWindow(Adw.ApplicationWindow):
                 self._simple_status_lbl.set_text("Simple")
         if hasattr(self, "_simple_status_btn"):
             self._toggle_chip(self._simple_status_btn, simple)
-        if hasattr(self, "_dev_status_btn"):
-            self._dev_status_btn.set_visible(not simple)
-        if hasattr(self, "_gost_status_btn"):
-            self._gost_status_btn.set_visible(not simple)
-        if hasattr(self, "_compact_status_btn"):
-            self._compact_status_btn.set_visible(not simple)
-        if hasattr(self, "_preamble_btn"):
-            self._preamble_btn.set_visible(not simple)
         if hasattr(self, "_git_btn"):
             self._git_btn.set_visible(bool(config.github_repo))
         if hasattr(self, "_time_bar"):
@@ -296,13 +287,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._refresh_menu()
 
     def _apply_gost_mode(self):
-        if hasattr(self, "_gost_status_lbl"):
-            if config.gost_mode:
-                self._gost_status_lbl.set_markup("<b>GOST</b>")
-            else:
-                self._gost_status_lbl.set_text("GOST")
-        if hasattr(self, "_gost_status_btn"):
-            self._toggle_chip(self._gost_status_btn, config.gost_mode)
         # One provider drives every font override. GOST wins if it's on;
         # otherwise an explicit UI font applies; otherwise the system font.
         if config.gost_mode:
@@ -325,26 +309,9 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             btn.remove_css_class("fond-toggle-active")
 
-    def _on_compact_status_clicked(self, _btn):
-        config.compact_mode = not config.compact_mode
-        config.save()
-        self._apply_density()
-
-    def _apply_density(self):
-        if config.compact_mode:
-            self.add_css_class("compact-mode")
-        else:
-            self.remove_css_class("compact-mode")
-        if hasattr(self, "_compact_status_lbl"):
-            if config.compact_mode:
-                self._compact_status_lbl.set_markup("<b>Compact</b>")
-            else:
-                self._compact_status_lbl.set_text("Compact")
-        if hasattr(self, "_compact_status_btn"):
-            self._toggle_chip(self._compact_status_btn, config.compact_mode)
-
     def _on_dev_status_clicked(self, _btn):
-        self._dev_mode = not getattr(self, "_dev_mode", False)
+        config.dev_mode = not config.dev_mode
+        config.save()
         self._apply_dev_mode()
 
     def _on_typst_edit_clicked(self, _btn):
@@ -358,14 +325,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._content_widget.set_typst_mode(self._typst_edit_active)
 
     def _apply_dev_mode(self):
-        dev = getattr(self, "_dev_mode", False)
-        if hasattr(self, "_dev_status_lbl"):
-            if dev:
-                self._dev_status_lbl.set_markup("<b>Dev</b>")
-            else:
-                self._dev_status_lbl.set_text("Dev")
-        if hasattr(self, "_dev_status_btn"):
-            self._toggle_chip(self._dev_status_btn, dev)
+        dev = config.dev_mode
         if hasattr(self, "_preview_copy_typst_bar"):
             self._preview_copy_typst_bar.set_visible(dev)
         if hasattr(self, "_typst_edit_btn"):
@@ -409,7 +369,7 @@ class MainWindow(Adw.ApplicationWindow):
         written into the labels - GTK renders them from the action's registered
         accel, so typing them in duplicated them and made every label longer.
 
-        View toggles (compact view, developer mode, the interface font) live in
+        View toggles (developer mode, the interface font, the theme) live in
         Preferences rather than here: a menu item that toggles something has to
         show its state, and a column of them is a settings page wearing a menu.
         """
@@ -434,6 +394,7 @@ class MainWindow(Adw.ApplicationWindow):
         svc_sec = Gio.Menu()
         svc_sec.append("Service Notes\u2026", "win.service-notes")
         svc_sec.append("Liturgical Calendar\u2026", "win.liturgical-events")
+        svc_sec.append("Custom Dates\u2026", "win.open-dates")
         if not simple:
             svc_sec.append("Snippets\u2026", "win.snippets")
             svc_sec.append("Save Order as Template\u2026", "win.save-template")
@@ -494,13 +455,10 @@ class MainWindow(Adw.ApplicationWindow):
             ("redo",          self.redo,              "<Ctrl><Shift>z"),
             ("preferences",   self.open_preferences,  "<Ctrl>comma"),
             ("ui-help",       self._show_ui_help_popover, None),
-            # Toggles moved off the status bar into the hamburger menu
-            ("toggle-gost",     lambda: self._on_gost_status_clicked(None),    None),
-            ("toggle-compact",  lambda: self._on_compact_status_clicked(None), None),
             ("liturgical-events", self._show_liturgical_events, None),
             ("service-notes",     self._open_planning_notes,   None),
-            ("toggle-dev",      lambda: self._on_dev_status_clicked(None),     None),
             ("toggle-template", lambda: self._on_preamble_clicked(None),       None),
+            ("open-dates",      self._open_dates_window,                       None),
             ("clear-recent",       self._clear_recent,      None),
             ("tab-rename",         self._tab_rename_action, None),
             ("tab-delete",         self._tab_delete_action, None),
@@ -559,15 +517,13 @@ class MainWindow(Adw.ApplicationWindow):
 
     # ── Preamble panel toggle ─────────────────────────────────────────────────
     # (The template editor UI/state itself now lives in PreamblePanel,
-    #  rubric_package/panels/preamble_panel.py; this status-bar click handler
+    #  rubric_package/panels/preamble_panel.py; this menu action handler
     #  stayed here because it's really about switching _main_stack/_preview
     #  mode, not about editing template fields.)
 
     def _on_preamble_clicked(self, _btn):
         self._preamble_active = not self._preamble_active
-        self._toggle_chip(self._preamble_btn, self._preamble_active)
         if self._preamble_active:
-            self._preamble_lbl.set_markup("<b>Template</b>")
             self._main_stack.set_visible_child_name("preamble")
             # Sync preview mode to whichever sub-toggle is active
             active_key = (
@@ -586,7 +542,6 @@ class MainWindow(Adw.ApplicationWindow):
             else:
                 self._preview._do_preview_update()
         else:
-            self._preamble_lbl.set_text("Template")
             self._main_stack.set_visible_child_name("order")
 
     # ── Order panel ───────────────────────────────────────────────────────────
@@ -739,8 +694,8 @@ class MainWindow(Adw.ApplicationWindow):
         bx = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         bx.set_margin_start(12); bx.set_margin_end(10)
         # Vertical spacing is CSS-only (see row.fond-row > box): setting it here
-        # as well made widget margins and stylesheet padding stack, and compact
-        # mode ended up taller than normal.
+        # as well made widget margins and stylesheet padding stack, and rows
+        # ended up around 58px tall for a single line of text.
 
         # Type cue: one dot, coloured by kind. Custom per-element icons still
         # apply everywhere else (the bulletin, the palette); the list itself
@@ -2510,56 +2465,7 @@ class MainWindow(Adw.ApplicationWindow):
         browse1_btn.connect("clicked", _on_browse1)
         setup1_btn.connect("clicked", _on_setup1)
 
-        # ── Step 2: Hymn downloads ─────────────────────────────────────────────
-        p2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        p2.set_margin_start(24); p2.set_margin_end(24)
-        p2.set_margin_top(20); p2.set_margin_bottom(20)
-
-        icon2 = Gtk.Image(icon_name="audio-x-generic-symbolic"); icon2.set_pixel_size(48); icon2.set_margin_bottom(6)
-        p2.append(icon2)
-        lbl2 = Gtk.Label(label="Download hymn titles (optional)")
-        lbl2.add_css_class("title-2"); lbl2.set_margin_bottom(2)
-        p2.append(lbl2)
-        sub2 = Gtk.Label(label="Cache hymn titles from Hymnary.org for faster offline lookup.\n"
-                                "This downloads titles only — no audio. You can skip this and do it later in Preferences.")
-        sub2.set_wrap(True); sub2.set_justify(Gtk.Justification.CENTER)
-        sub2.add_css_class("dim-label"); sub2.set_margin_bottom(10)
-        p2.append(sub2)
-
-        hymn_grp = Adw.PreferencesGroup()
-        p2_dl_bar = Gtk.ProgressBar(); p2_dl_bar.set_visible(False)
-        p2_dl_status = Gtk.Label(label=""); p2_dl_status.add_css_class("caption"); p2_dl_status.add_css_class("dim-label")
-        _wizard_open = [True]   # flipped to False when wizard closes
-
-        for bk, bk_label, max_n in [("VU","Voices United (VU)",961),("MV","More Voices (MV)",217),("LUS","Let Us Sing (LUS)",150)]:
-            dl_row = Adw.ActionRow(title=f"Download {bk_label}")
-            dl_btn = Gtk.Button(label="Download", valign=Gtk.Align.CENTER); dl_btn.add_css_class("flat")
-            def _start_dl(_b, book=bk, btn=dl_btn):
-                btn.set_sensitive(False)
-                if _wizard_open[0]:
-                    p2_dl_bar.set_visible(True); p2_dl_bar.set_fraction(0)
-                    p2_dl_status.set_label(f"Downloading {book}… (continues in background if you close)")
-                def _prog(done, total):
-                    if _wizard_open[0]:
-                        p2_dl_bar.set_fraction(done / total)
-                        p2_dl_bar.set_text(f"{book} {done}/{total}")
-                    return False
-                def _done(added):
-                    if _wizard_open[0]:
-                        p2_dl_bar.set_visible(False)
-                        p2_dl_status.set_label(f"✓ {added} titles cached from {book}")
-                    msg = (f"✓ {added} {book} hymn titles downloaded"
-                           if added else f"{book} download complete — check your network if titles are missing")
-                    self._show_toast(msg, timeout=6)
-                    return False
-                prefetch_hymnal(book, on_progress=_prog, on_done=_done)
-            dl_btn.connect("clicked", _start_dl)
-            dl_row.add_suffix(dl_btn); hymn_grp.add(dl_row)
-        p2.append(hymn_grp)
-        p2.append(p2_dl_bar); p2.append(p2_dl_status)
-        stack.add_named(p2, "hymns")
-
-        # ── Step 3: GitHub ────────────────────────────────────────────────────
+        # ── Step 2: GitHub ────────────────────────────────────────────────────
         p3 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         p3.set_margin_start(24); p3.set_margin_end(24)
         p3.set_margin_top(20); p3.set_margin_bottom(20)
@@ -2706,8 +2612,10 @@ class MainWindow(Adw.ApplicationWindow):
         stack.add_named(p3, "github")
 
         # ── Navigation bar ────────────────────────────────────────────────────
-        pages = ["folder", "hymns", "github"]
-        page_titles = ["Step 1 of 3 — Folder", "Step 2 of 3 — Hymn Titles", "Step 3 of 3 — GitHub"]
+        # The hymn-title step is gone: the database ships with Rubric, so
+        # there is nothing to download and nothing to decide.
+        pages = ["folder", "github"]
+        page_titles = ["Step 1 of 2 — Folder", "Step 2 of 2 — GitHub"]
         _cur = [0]
 
         nav = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -2742,7 +2650,6 @@ class MainWindow(Adw.ApplicationWindow):
             win.close()  # close-request handler schedules on_done
 
         def _on_wizard_close(_w):
-            _wizard_open[0] = False
             if on_done:
                 GLib.idle_add(on_done)
             return False  # always allow close
@@ -2847,9 +2754,10 @@ class MainWindow(Adw.ApplicationWindow):
              "Live bulletin or manuscript preview. Bulletin mode compiles a PDF via Typst. "
              "Live mode shows an instant HTML version while you type."),
             ("view-more-horizontal-symbolic", "Status bar (bottom)",
-             "SIMPLE hides advanced features. Compact tightens spacing. "
-             "Dev shows Typst source. Focus hides the palette. "
-             "The ● Unsaved chip appears when you have unsaved changes."),
+             "Simple hides advanced features. Focus hides the palette. "
+             "Services browses past liturgies. Typst (developer mode) switches "
+             "the editor to raw source. On the right: word count, the ● Unsaved "
+             "chip, Git push, and the version number — click it for the changelog."),
             ("preferences-system-symbolic", "Menu (top-right ☰)",
              "Settings, bulletin options, GitHub sync, scripture lookup, snippets, and the changelog."),
         ]
@@ -3190,8 +3098,7 @@ class MainWindow(Adw.ApplicationWindow):
             "**Add content** — select any element to see the item toolbar: Leader name, "
             "Scripture lookup, Hymn number lookup (VU/MV/LUS), and Snippets.\n\n"
             "**Hymn suggestions** — when a date is set, suggested hymns appear below the "
-            "order list. Left-click to view on Hymnary.org; right-click to inject into the "
-            "selected element.\n\n"
+            "order list. Click one to add it to the selected element.\n\n"
             "**Export** — click the document icon (Ctrl+E) to export to Typst. "
             "Click the print icon (Ctrl+Shift+P) to compile to PDF via typst.\n\n"
             "## First steps\n\n"
@@ -3267,17 +3174,33 @@ class MainWindow(Adw.ApplicationWindow):
         tv.set_content(outer)
         win.present()
 
+    def _has_restorable_work(self) -> bool:
+        """Whether the current service holds anything an autosave could restore."""
+        return bool(self.service_entries
+                    or self.service_title_entry.get_text().strip()
+                    or getattr(self, "service_planning_notes", "").strip())
+
     def _do_autosave(self):
-        if self.modified and self.service_entries:
-            try:
-                d = self._service_data(); d["_autosave"]=True
-                # Also atomic — the safety net must not be destroyed by the
-                # same crash that makes you need it.
-                atomic_write_text(AUTOSAVE_PATH, json.dumps(d, indent=2, ensure_ascii=False))
-            except Exception as e:
-                toast = Adw.Toast.new(f"Autosave failed: {e}")
-                toast.set_timeout(5)
-                self._toast_overlay.add_toast(toast)
+        if not self.modified:
+            return True
+        # Emptying a service is an edit like any other. This used to require
+        # service_entries, so deleting them all skipped the autosave and left the
+        # *previous* snapshot on disk — a crash then offered to restore elements
+        # that had been deliberately removed. An emptied service has nothing to
+        # restore, so the stale snapshot is cleared rather than rewritten: that
+        # fixes the wrong-restore without prompting to restore an empty file.
+        if not self._has_restorable_work():
+            self._clear_autosave()
+            return True
+        try:
+            d = self._service_data(); d["_autosave"]=True
+            # Also atomic — the safety net must not be destroyed by the
+            # same crash that makes you need it.
+            atomic_write_text(AUTOSAVE_PATH, json.dumps(d, indent=2, ensure_ascii=False))
+        except Exception as e:
+            toast = Adw.Toast.new(f"Autosave failed: {e}")
+            toast.set_timeout(5)
+            self._toast_overlay.add_toast(toast)
         return True
 
     def _check_autosave(self):
@@ -3408,9 +3331,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def new_service(self):
         def do_new():
-            self._reset_state()
             if len(config.templates) <= 1:
                 # Zero or one template — just apply it silently
+                self._reset_state()
                 items = config.templates.get(config.default_template,
                         next(iter(config.templates.values()), None))
                 if items:
@@ -3443,17 +3366,26 @@ class MainWindow(Adw.ApplicationWindow):
                 dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
                 dlg.set_default_response("ok")
 
+                dlg.set_close_response("cancel")
+
                 def on_resp(d, r):
-                    if r == "ok":
-                        if blank_sw.get_active():
-                            self._add_recurring_elements()
-                            self._refresh_order_list()
-                        else:
-                            name = names[combo.get_selected()]
-                            items = config.templates.get(name, [])
-                            if items:
-                                self._apply_template(items)
-                        GLib.idle_add(self._open_sidebar)
+                    # Clearing the current service is deferred until a template
+                    # is actually chosen. It used to happen before this dialog
+                    # opened, so backing out of the template picker — by Cancel
+                    # or by Escape — left you staring at an empty service you
+                    # never asked to discard.
+                    if r != "ok":
+                        return
+                    self._reset_state()
+                    if blank_sw.get_active():
+                        self._add_recurring_elements()
+                        self._refresh_order_list()
+                    else:
+                        name = names[combo.get_selected()]
+                        items = config.templates.get(name, [])
+                        if items:
+                            self._apply_template(items)
+                    GLib.idle_add(self._open_sidebar)
 
                 dlg.connect("response", on_resp); dlg.present()
 
@@ -3832,9 +3764,12 @@ class MainWindow(Adw.ApplicationWindow):
         for e in self.service_entries:
             if not isinstance(e, ServiceItem):
                 continue
-            text = e.content_plain
-            # strip leader notes (not spoken by congregation)
-            text = strip_leader_notes(text)
+            # Leader notes are not spoken aloud, so they must not inflate the
+            # word count or the reading-time estimate. This used to run
+            # strip_leader_notes() over content_plain, which stopped excluding
+            # anything once content became blocks: the "#leader-note[…]" marker
+            # it looks for only exists in rendered Typst.
+            text = e.content_plain_bulletin
             words = _re.split(r'\s+', text.strip())
             total += sum(1 for w in words if w)
         if total < 10:
@@ -3881,10 +3816,11 @@ class MainWindow(Adw.ApplicationWindow):
             pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
             pill.add_css_class("linked"); pill.add_css_class("sugg-pill")
 
-            # Main chip: title only — number shown in tooltip and Hymnary popup
+            # Main chip: title only — the number is in the tooltip.
             chip = Gtk.Button()
             chip.add_css_class("flat")
-            chip.set_tooltip_text(f"{prefix} {number} — {title}\nClick to open on Hymnary  ·  Right-click to add to service")
+            chip.set_tooltip_text(
+                f"{prefix} {number} — {title}\nClick to add to the selected element")
             title_lbl = Gtk.Label(label=title)
             title_lbl.set_margin_start(6); title_lbl.set_margin_end(4)
             title_lbl.set_wrap(False)
@@ -3892,14 +3828,12 @@ class MainWindow(Adw.ApplicationWindow):
             title_lbl.set_ellipsize(Pango.EllipsizeMode.END)  # PANGO_ELLIPSIZE_END
             chip.set_child(title_lbl)
 
-            hymnal_id = HYMNALS.get(prefix, (prefix, ""))[0]
-            hymnary_url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"
-            hymn_label = f"{prefix} {number} — {title}"
-            if _WEBKIT_OK:
-                chip.connect("clicked", lambda _b, u=hymnary_url, lbl=hymn_label:
-                             self._show_hymnary_preview(u, lbl))
-            else:
-                chip.connect("clicked", lambda _b, u=hymnary_url: Gtk.show_uri(None, u, 0))
+            # Clicking a suggestion uses it. It used to open the hymn's page on
+            # Hymnary.org — which no longer loads for us at all — leaving
+            # right-click as the only way to actually add the hymn, which is not
+            # where anyone looks for a primary action. Right-click still works.
+            chip.connect("clicked", lambda _b, p=prefix, n=number, t=title:
+                         self._add_hymn_from_suggestion(p, n, t))
 
             rg = Gtk.GestureClick(); rg.set_button(3)
             def on_right(_g, _n, _x, _y, p=prefix, n=number, t=title):
@@ -3951,34 +3885,6 @@ class MainWindow(Adw.ApplicationWindow):
             and getattr(self, "_hymn_mode_btn", None) is not None
             and self._hymn_mode_btn.get_active()
         )
-
-    def _show_hymnary_preview(self, url: str, title: str):
-        """Open an inline WebKit window showing the Hymnary page."""
-        win = Adw.Window(transient_for=self, modal=False)
-        win.set_title(title)
-        win.set_default_size(780, 620)
-        tv = Adw.ToolbarView()
-        hdr = Adw.HeaderBar()
-        # Open in browser button
-        ext_btn = Gtk.Button(icon_name="web-browser-symbolic",
-                             tooltip_text="Open in browser")
-        ext_btn.add_css_class("flat")
-        ext_btn.connect("clicked", lambda _: Gtk.show_uri(None, url, 0))
-        hdr.pack_end(ext_btn)
-        tv.add_top_bar(hdr)
-        try:
-            webview = _WebKit.WebView()
-            webview.load_uri(url)
-            webview.set_vexpand(True)
-            tv.set_content(webview)
-        except Exception as e:
-            fallback = Adw.StatusPage(title="WebKit unavailable",
-                                      description=str(e),
-                                      icon_name="web-browser-symbolic")
-            tv.set_content(fallback)
-            Gtk.show_uri(None, url, 0)
-        win.set_content(tv)
-        win.present()
 
     def _add_hymn_from_suggestion(self, prefix: str, number: int, title: str):
         """
@@ -4986,9 +4892,11 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         dlg.present()
 
     def open_preferences(self, page: str | None = None):
+        # Dates are not a Preferences page — they have their own editor.
+        if page == "dates":
+            self._open_dates_window()
+            return
         prefs = PreferencesWindow(transient_for=self, modal=True)
-        if page == "dates" and hasattr(prefs, "_dates_page"):
-            prefs.set_visible_page(prefs._dates_page)
         def on_destroy(_):
             self._palette._fill_palette_inner(); self._apply_tab_mode()
             # A repository may have just been configured, which is what decides
@@ -5099,9 +5007,13 @@ class LiturgyPlannerApp(Adw.Application):
         if self._first_activate:
             self._first_activate = False
             try:
-                from rubric_package.db import init_db, migrate_from_json
+                from rubric_package.db import (
+                    init_db, migrate_from_json, hymn_seed_bundled,
+                )
                 init_db()
                 migrate_from_json()
+                # Idempotent, and never overwrites a title the user already has.
+                hymn_seed_bundled()
             except Exception:
                 pass
             _ensure_gost_font()
@@ -5121,20 +5033,12 @@ class LiturgyPlannerApp(Adw.Application):
 
             css = Gtk.CssProvider()
             css.load_from_data(b"""
-/* Default (non-compact): give rows comfortable breathing room */
 /* These give ordinary Adw.ActionRows room to breathe. They must not reach the
    suite's single-line rows: fond.css is loaded first so app rules can override
    it, which means an unscoped rule here silently beats fond-row's own padding
    and every element row grows by 20px. */
 row.activatable:not(.fond-row) { min-height: 52px; }
 row.activatable:not(.fond-row) > box { padding-top: 10px; padding-bottom: 10px; }
-/* Compact mode: very tight rows */
-.compact-mode row.activatable:not(.fond-row) { min-height: 22px; }
-.compact-mode row.activatable:not(.fond-row) > box { padding-top: 1px; padding-bottom: 1px; }
-.compact-mode row.activatable title { font-size: 0.8em; }
-.compact-mode row.activatable subtitle { font-size: 0.7em; }
-.compact-mode .fond-list row.activatable { min-height: 24px; }
-.compact-mode .fond-list row.activatable title { font-size: 0.8em; margin-top: 0; margin-bottom: 0; }
 /* Status bar: slim height */
 .toolbar { min-height: 18px; padding-top: 0; padding-bottom: 0; }
 .toolbar button.flat { min-height: 0; padding-top: 1px; padding-bottom: 1px; }

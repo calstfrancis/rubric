@@ -152,6 +152,58 @@ def init_db() -> None:
 
 # ── Hymn cache ────────────────────────────────────────────────────────────────
 
+def hymn_seed_bundled() -> int:
+    """Load the hymn titles shipped with Rubric into the cache. Returns rows added.
+
+    Hymnary.org now serves a JavaScript bot-protection challenge, so fetching
+    titles over the network fails and a fresh install would otherwise start with
+    an empty hymn cache and an empty title search. These titles were fetched from
+    Hymnary while that still worked, and ship with the app so lookup and search
+    work offline and immediately.
+
+    ``INSERT OR IGNORE`` means a title already in the cache always wins: anything
+    the user typed by hand, or fetched themselves, is never overwritten by the
+    bundle. That also makes this safe to run on every startup.
+    """
+    try:
+        import json
+        from pathlib import Path as _Path
+        data_file = _Path(__file__).resolve().parent / "data" / "hymn_titles.json"
+        if not data_file.is_file():
+            return 0
+        titles = json.loads(data_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(titles, dict):
+        return 0
+    rows = [(k, v) for k, v in titles.items()
+            if isinstance(k, str) and isinstance(v, str) and k and v.strip()]
+    if not rows:
+        return 0
+    con = _open()
+    try:
+        before = con.execute("SELECT COUNT(*) FROM hymn_cache").fetchone()[0]
+        con.executemany(
+            "INSERT OR IGNORE INTO hymn_cache (key, title) VALUES (?, ?)", rows
+        )
+        con.commit()
+        after = con.execute("SELECT COUNT(*) FROM hymn_cache").fetchone()[0]
+        return after - before
+    finally:
+        con.close()
+
+
+def hymn_bundled_count() -> int:
+    """How many titles the shipped bundle contains (0 if it is missing)."""
+    try:
+        import json
+        from pathlib import Path as _Path
+        data_file = _Path(__file__).resolve().parent / "data" / "hymn_titles.json"
+        return len(json.loads(data_file.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return 0
+
+
 def hymn_get(key: str) -> str | None:
     """Return a cached hymn title for key (e.g. 'VU16'), or None if not cached."""
     con = _open()
@@ -193,15 +245,39 @@ def hymn_clear() -> None:
         con.close()
 
 
-def hymn_search(query: str, limit: int = 30) -> list[dict]:
-    """Return cached hymns whose title or key contains query."""
+# The hymn key is a book prefix followed by a number, so ordering by the raw key
+# sorts it as text: VU 1, VU 10, VU 100, VU 101, VU 11, VU 2. Splitting the book
+# from the number and sorting the number numerically puts a hymnal back in the
+# order it is printed in — which matters most when the LIMIT below decides which
+# results a search returns at all.
+_HYMN_BOOK_SQL = (
+    "CASE WHEN key LIKE 'LUS%' THEN 'LUS' "
+    "     WHEN key LIKE 'VU%'  THEN 'VU' "
+    "     WHEN key LIKE 'MV%'  THEN 'MV' "
+    "     ELSE key END"
+)
+_HYMN_NUM_SQL = (
+    "CAST(REPLACE(REPLACE(REPLACE(key,'LUS',''),'VU',''),'MV','') AS INTEGER)"
+)
+
+
+def hymn_search(query: str, limit: int = 100) -> list[dict]:
+    """Return cached hymns whose title or key contains query.
+
+    Results lead with titles that *start* with the query, so searching "Amazing"
+    surfaces "Amazing grace" ahead of hymns that merely mention the word, and
+    then run in hymnal order.
+    """
     con = _open()
     try:
         q = f"%{_like_escape(query)}%"
+        starts = f"{_like_escape(query)}%"
         rows = con.execute(
-            "SELECT key, title FROM hymn_cache WHERE title LIKE ? ESCAPE '\\' "
-            "OR key LIKE ? ESCAPE '\\' ORDER BY key LIMIT ?",
-            (q, q, limit),
+            "SELECT key, title FROM hymn_cache "
+            "WHERE title LIKE ? ESCAPE '\\' OR key LIKE ? ESCAPE '\\' "
+            "ORDER BY (title LIKE ? ESCAPE '\\') DESC, "
+            f"{_HYMN_BOOK_SQL}, {_HYMN_NUM_SQL} LIMIT ?",
+            (q, q, starts, limit),
         ).fetchall()
         return [{"key": r["key"], "title": _html.unescape(r["title"])} for r in rows]
     finally:

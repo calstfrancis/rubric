@@ -1,137 +1,64 @@
 """
-hymn_lookup.py — Asynchronous hymn title lookup via Hymnary.org
+hymn_lookup.py — Hymn title lookup from Rubric's own database.
 
 Supported hymnals:
   VU  — Voices United (United Church of Canada, 1996)
   MV  — More Voices (United Church of Canada, 2007)
   LUS — Let Us Sing! (United Church of Canada supplement)
 
-Results are cached in the Rubric SQLite database (~/.local/share/rubric/rubric.db).
+Titles live in the Rubric SQLite database (~/.local/share/rubric/rubric.db) and
+are seeded on first run from the list that ships with the app
+(rubric_package/data/hymn_titles.json).
 
-Network requests use curl (via subprocess) rather than Python's urllib to avoid
-TLS fingerprint blocking that Hymnary.org applies to non-browser HTTP stacks.
-Inside a Flatpak sandbox, requests are routed through flatpak-spawn --host curl.
+There is no network here. Rubric used to fetch titles from Hymnary.org, first
+with urllib and then with curl and browser headers to get past its TLS
+fingerprinting. Hymnary now answers with a JavaScript bot-protection challenge
+that no desktop app can pass, so every lookup failed and the bulk download
+worked through an entire hymnal — some 1,900 requests for Voices United — to
+add nothing at all. Reading only from the database means lookup is instant,
+works offline, and behaves the same on every machine.
+
+A title Rubric does not have is added by typing it in once. It is stored beside
+the bundled titles, is searchable from then on, and is never overwritten.
 """
 
-import html as _html
-import subprocess
-import threading
-import time
 import re
-from pathlib import Path
-
-import gi
-gi.require_version("GLib", "2.0")
-from gi.repository import GLib
 
 try:
-    from rubric_package.db import hymn_get, hymn_set, hymn_search as _hymn_search
+    from rubric_package.db import (
+        hymn_get, hymn_set, hymn_search as _hymn_search,
+    )
     _DB_OK = True
 except ImportError:
     _DB_OK = False
-    def _hymn_search(q, limit=30): return []
 
-# Use flatpak-spawn --host when running inside the sandbox
-_IS_FLATPAK = Path("/.flatpak-info").exists()
-_CURL = ["flatpak-spawn", "--host", "curl"] if _IS_FLATPAK else ["curl"]
+    def hymn_get(key): return None
 
-_CURL_HEADERS = [
-    "-H", "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "-H", "Accept-Language: en-US,en;q=0.9",
-]
+    def hymn_set(key, title): pass
 
-# Hymnary.org book identifiers
-HYMNALS: dict[str, tuple[str, str]] = {
-    "VU":  ("VU1996",   "Voices United"),
-    "MV":  ("MV2007",   "More Voices"),
-    "LUS": ("LUS2022",  "Let Us Sing"),
+    def _hymn_search(q, limit=100): return []
+
+
+# Hymnal code → full name, for messages and labels.
+HYMNALS: dict[str, str] = {
+    "VU":  "Voices United",
+    "MV":  "More Voices",
+    "LUS": "Let Us Sing",
 }
 
-
-def _curl_get(url: str, extra_headers: list[str] | None = None) -> tuple[str | None, int]:
-    """Run curl and return (body, http_code). http_code=0 on curl failure."""
-    headers = _CURL_HEADERS + (extra_headers or [])
-    cmd = _CURL + [
-        "--silent", "--max-time", "20", "--location",
-        "--write-out", "\n__HTTP_CODE__%{http_code}",
-        *headers, url,
-    ]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
-    except Exception:
-        return None, 0
-    if result.returncode != 0:
-        return None, 0
-    body, _, code_str = result.stdout.rpartition("\n__HTTP_CODE__")
-    code = int(code_str.strip()) if code_str.strip().isdigit() else 0
-    return body, code
+# Highest hymn number in each book, used to reject impossible references before
+# they reach the database.
+_BOOK_MAX = {"VU": 961, "MV": 217, "LUS": 150}
 
 
-def _wayback_url(url: str) -> str | None:
-    """Return the most recent Wayback Machine snapshot URL for url, or None."""
-    api = (
-        "http://archive.org/wayback/available?url="
-        + url.replace("https://", "").replace("http://", "")
-    )
-    body, code = _curl_get(api, extra_headers=["-H", "Accept: application/json"])
-    if not body or code not in (200, 0):
-        return None
-    m = re.search(r'"url"\s*:\s*"(https?://web\.archive\.org/web/[^"]+)"', body)
-    return m.group(1) if m else None
+def hymnal_name(prefix: str) -> str:
+    """Full name of a hymnal code, or the code itself if unknown."""
+    return HYMNALS.get(prefix.upper(), prefix)
 
 
-def _fetch_url(url: str) -> tuple[str | None, str | None]:
-    """Fetch a Hymnary.org page, falling back to Wayback Machine on 403.
-    Returns (html_text, error_message)."""
-    body, code = _curl_get(url)
-    if code == 200 and body:
-        return body, None
-    if code == 404:
-        return None, "404"
-
-    # 403 or any block — try Wayback Machine archive
-    wayback = _wayback_url(url)
-    if wayback:
-        body, code = _curl_get(wayback)
-        if code == 200 and body:
-            return body, None
-
-    if code == 403:
-        return None, "HTTP 403 — Hymnary.org blocked the request"
-    return None, f"HTTP {code}" if code else "Network error"
-
-
-def _extract_hymn_title(html_text: str) -> str:
-    """Extract and clean the hymn title from a Hymnary.org page."""
-    title = ""
-
-    # 1. og:title meta tag — most reliable, set server-side
-    og = re.search(
-        r'<meta\s[^>]*property=["\']og:title["\']\s*[^>]*content=["\']([^"\']+)["\']'
-        r'|<meta\s[^>]*content=["\']([^"\']+)["\']\s*[^>]*property=["\']og:title["\']',
-        html_text, re.IGNORECASE)
-    if og:
-        title = (og.group(1) or og.group(2) or "").strip()
-        clean = re.match(r'^.*?\d+\.\s+(.+)$', title)
-        if clean:
-            title = clean.group(1).strip()
-
-    # 2. JSON-LD structured data
-    if not title:
-        jld = re.search(r'"name"\s*:\s*"([^"]{3,120})"', html_text)
-        if jld:
-            title = jld.group(1).strip()
-
-    # 3. <title> tag fallback
-    if not title:
-        t = re.search(r"<title[^>]*>([^<]+)</title>", html_text, re.IGNORECASE)
-        if t:
-            raw = t.group(1).strip().split("|")[0].strip()
-            clean = re.match(r'^.*?\d+\.\s+(.+)$', raw)
-            title = clean.group(1).strip() if clean else raw
-
-    return _html.unescape(title)
+def hymn_range(prefix: str) -> int | None:
+    """Highest valid hymn number for a book, or None if the book is unknown."""
+    return _BOOK_MAX.get(prefix.upper())
 
 
 def parse_hymn_ref(text: str) -> tuple[str, int] | None:
@@ -149,115 +76,51 @@ def parse_hymn_ref(text: str) -> tuple[str, int] | None:
     return prefix, number
 
 
-def lookup_hymn(prefix: str, number: int, callback):
+def is_in_range(prefix: str, number: int) -> bool:
+    """Whether number could exist in that hymnal at all."""
+    top = hymn_range(prefix)
+    if top is None:
+        return False
+    try:
+        number = int(number)
+    except (TypeError, ValueError):
+        return False
+    return 1 <= number <= top
+
+
+def lookup_hymn(prefix: str, number: int) -> str | None:
+    """Return the stored title for a hymn, or None if Rubric doesn't have it.
+
+    Synchronous: this is a single indexed read from a local database, so there
+    is nothing to wait for. It used to run on a background thread and call back
+    on the GLib main loop because it was a network request.
     """
-    Asynchronously look up a hymn title on Hymnary.org.
+    if not _DB_OK:
+        return None
+    return hymn_get(f"{prefix.upper()}{number}")
 
-    callback(title: str | None, error: str | None) is called on the
-    GLib main loop when the result is ready.
-    """
-    def fetch():
-        key = f"{prefix}{number}"
 
-        if _DB_OK:
-            cached = hymn_get(key)
-            if cached is not None:
-                GLib.idle_add(callback, cached, None)
-                return
-
-        hymnal_id, hymnal_name = HYMNALS.get(prefix, (None, None))
-        if not hymnal_id:
-            GLib.idle_add(callback, None, f"Unknown hymnal '{prefix}'")
-            return
-
-        url = f"https://hymnary.org/hymn/{hymnal_id}/{number}"
-        html_text, err = _fetch_url(url)
-        if err == "404":
-            GLib.idle_add(callback, None, f"#{number} not found in {hymnal_name}")
-            return
-        if err:
-            GLib.idle_add(callback, None, err)
-            return
-
-        title = _extract_hymn_title(html_text)
-        if not title or "hymnary" in title.lower() or len(title) <= 2:
-            dbg = None
-            try:
-                import os
-                cache_dir = os.path.join(GLib.get_user_cache_dir(), "rubric")
-                os.makedirs(cache_dir, exist_ok=True)
-                dbg = os.path.join(cache_dir, "hymn_debug.html")
-                # O_EXCL-free but user-private (~/.cache/rubric is not shared with
-                # other local users, unlike the system temp dir) — avoids the
-                # symlink/TOCTOU risk of writing a fixed name into /tmp.
-                fd = os.open(dbg, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(html_text[:8192])
-            except Exception:
-                dbg = None
-            hint = f" (debug: {dbg})" if dbg else ""
-            GLib.idle_add(callback, None,
-                          f"#{number} not found in {hymnal_name}{hint}")
-            return
-
-        if _DB_OK:
-            hymn_set(key, title)
-        GLib.idle_add(callback, title, None)
-
-    threading.Thread(target=fetch, daemon=True).start()
+def remember_hymn(prefix: str, number: int, title: str) -> bool:
+    """Store a title the user supplied. Returns False if it wasn't saved."""
+    title = (title or "").strip()
+    if not _DB_OK or not title or not is_in_range(prefix, number):
+        return False
+    hymn_set(f"{prefix.upper()}{number}", title)
+    return True
 
 
 def search_hymns(query: str) -> list[dict]:
-    """Search cached hymn titles by keyword. Returns [{book, number, title}]."""
-    results = _hymn_search(query)
+    """Search stored hymn titles by keyword. Returns [{book, number, title}]."""
     out = []
-    for r in results:
+    for r in _hymn_search(query):
         key = r["key"]
-        for prefix in HYMNALS:
+        # Longest prefix first, so a book whose code starts with another book's
+        # code can never be misread.
+        for prefix in sorted(HYMNALS, key=len, reverse=True):
             if key.startswith(prefix):
-                out.append({"book": prefix, "number": key[len(prefix):], "title": r["title"]})
+                num = key[len(prefix):]
+                out.append({"book": prefix,
+                            "number": int(num) if num.isdigit() else num,
+                            "title": r["title"]})
                 break
     return out
-
-
-# Maximum hymn numbers per book (Hymnary-based)
-_BOOK_MAX = {"VU": 961, "MV": 217, "LUS": 150}
-
-
-def prefetch_hymnal(book: str, on_progress=None, on_done=None):
-    """Background-fetch all hymn titles for one book and cache them.
-
-    on_progress(n, total) — called on GLib main thread after each hymn
-    on_done(n_added)      — called when the fetch is complete
-    """
-    book = book.upper()
-    max_n = _BOOK_MAX.get(book, 200)
-    hymnal_id = HYMNALS.get(book, (None, None))[0]
-    if not hymnal_id:
-        if on_done:
-            GLib.idle_add(on_done, 0)
-        return
-
-    def run():
-        added = 0
-        for n in range(1, max_n + 1):
-            key = f"{book}{n}"
-            if _DB_OK and hymn_get(key) is not None:
-                if on_progress:
-                    GLib.idle_add(on_progress, n, max_n)
-                continue
-            url = f"https://hymnary.org/hymn/{hymnal_id}/{n}"
-            html_text, err = _fetch_url(url)
-            if not err and html_text:
-                title = _extract_hymn_title(html_text)
-                if title and "hymnary" not in title.lower() and len(title) > 2:
-                    if _DB_OK:
-                        hymn_set(key, title)
-                    added += 1
-            time.sleep(0.4)
-            if on_progress:
-                GLib.idle_add(on_progress, n, max_n)
-        if on_done:
-            GLib.idle_add(on_done, added)
-
-    threading.Thread(target=run, daemon=True).start()

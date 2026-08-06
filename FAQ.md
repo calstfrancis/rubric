@@ -31,10 +31,6 @@ User data (config, saved services, hymn cache) stays in `~/.config/rubric/` and 
 
 No. Flatpak bundles all dependencies in a sandbox. GTK4, libadwaita, Python, and all libraries are included.
 
-**Q: I want the inline Hymnary preview but it opens in the browser instead.**
-
-WebKit is bundled in the Flatpak and should work automatically. If the preview opens in the browser anyway, try relaunching Rubric.
-
 ---
 
 ## Simple Mode
@@ -43,7 +39,7 @@ WebKit is bundled in the Flatpak and should work automatically. If the preview o
 
 Simple mode is the default experience. It hides GitHub sync, CSV export, snippets, and responsive reading builder, keeping the interface focused on planning and writing. PDF and HTML bulletin export are available in both modes.
 
-Toggle it with the **SIMPLE** button in the status bar at the bottom of the window, or in **Preferences → View → Simple mode**.
+Toggle it with the **Simple** button in the status bar at the bottom of the window, or in **Preferences → View → Feature level**.
 
 **Q: I turned off Simple mode. Where is everything?**
 
@@ -59,16 +55,19 @@ The status bar (bottom of the window) contains:
 
 | Button | Function |
 |--------|---------|
-| SIMPLE | Toggle Simple mode (bold = on) |
-| GOST | Toggle GOST Type B engineering font globally (bold = on) |
-| *Observance chips* (centre) | Feast days and commemorations for the service date — click to open Wikipedia |
+| Simple | Toggle Simple mode (bold = on) |
 | Focus | Hide the palette and element list for distraction-free editing (bold = on) |
+| Services | Browse past services, the element library, and the planner |
+| Typst | Switch the content editor to raw Typst source (only shown when developer mode is on) |
+| *Observance chips* (centre) | Feast days and commemorations for the service date — click to open Wikipedia |
+| *Word count* (right) | Approximate spoken word count and reading time |
+| ● Unsaved | Shown when the current service has unsaved changes |
 | Git | Commit and push the current service to GitHub |
 | v0.x.x | Version — click to open the changelog |
 
 **Q: What is the GOST Type B font?**
 
-GOST Type B is a Soviet engineering standard monoline lettering font. Toggling it applies the font to the entire Rubric interface. It is bundled and requires no separate installation.
+GOST Type B is a Soviet engineering standard monoline lettering font. Toggling it applies the font to the entire Rubric interface. It is bundled and requires no separate installation. Turn it on in **Preferences → View → Advanced**, which appears once Simple mode is off.
 
 **Q: What are the observance chips in the centre of the status bar?**
 
@@ -88,7 +87,9 @@ Yes. Toggle any element to **Typst mode** (the **Typst** button at the top right
 
 **Q: Where are the Typst template files?**
 
-Bundled templates live inside the application package (read-only). Go to **Preferences → Typst Files**, click **Edit…** on any template, and **Save override** to create an editable copy at `~/.config/rubric/templates/<name>.typ`. Rubric checks that folder on every compile, so your changes persist across upgrades. Click **Reset to default** to remove an override.
+Bundled templates live inside the application package (read-only). For fonts, margins, and page layout, use **Edit Document Template…** in the menu (Simple mode off) — that covers most of what people want to change.
+
+For deeper changes, Rubric checks `~/.config/rubric/templates/` on every compile and prefers a file there over the bundled copy. Copy the bundled template out of the installed `rubric_package/templates/` directory, save it as `~/.config/rubric/templates/<name>.typ`, and edit it. Delete the file to go back to the bundled version.
 
 **Q: The four template names are bulletin_print, bulletin_digital, manuscript, and _shared. What does _shared contain?**
 
@@ -130,17 +131,25 @@ Go to **Preferences → Scripture**, choose ESV from the dropdown, and paste you
 
 ## Hymns
 
-**Q: Right-clicking a hymn chip creates a new element instead of filling in the selected one.**
+**Q: Clicking a hymn chip creates a new element instead of filling in the selected one.**
 
-Make sure you have an element selected in the order list *before* right-clicking the chip. If nothing is selected, the fallback behaviour is to create a new "Hymn" element.
+Make sure you have an element selected in the order list *before* clicking the chip. If nothing is selected, the fallback behaviour is to create a new "Hymn" element.
 
-**Q: The hymn lookup returns the full book name in the title.**
+**Q: Where do hymn titles come from?**
 
-Clear the hymn cache and re-fetch: `rm ~/.local/share/rubric/hymn_cache.json`. The title cleaning regex strips the book name prefix.
+Rubric's own database, which ships with the app. Nothing is fetched over the network, so lookup is instant and works offline. Rubric used to read titles from Hymnary.org; that site now answers automated requests with a bot-protection challenge no desktop app can pass, so the connection was removed rather than left to fail.
 
-**Q: Hymnary says "not found" for a hymn I know exists.**
+**Q: Rubric says a hymn isn't in its database.**
 
-Hymnary's coverage is incomplete for LUS (Let Us Sing, 2022). Try the Hymnary website directly at hymnary.org. For VU and MV the coverage is generally good.
+Type the title into the box it offers. It is saved permanently, used for that number from then on, and becomes searchable in the **By Title** tab.
+
+**Q: Which hymnals are included?**
+
+Voices United. More Voices and Let Us Sing are not — their titles were never collected before the source closed off, and Rubric will not guess at hymn numbers, because a wrong number sends a congregation to the wrong page. Add those as you use them and they accumulate.
+
+**Q: Clicking a hymn suggestion used to open Hymnary.**
+
+It adds the hymn to the selected element now. The Hymnary page no longer loads, and adding the hymn was previously buried on right-click.
 
 **Q: The suggestion chips show the same hymns every week in Ordinary Time.**
 
@@ -207,7 +216,7 @@ Check that it's set as default in **Preferences → Templates** (look for the �
 
 **Q: I don't see the Snippets option in the menu.**
 
-Snippets are hidden in simple mode. Turn off simple mode (SIMPLE button in the status bar, or **Preferences → View**) to access them.
+Snippets are hidden in simple mode. Turn off simple mode (**Simple** button in the status bar, or **Preferences → View → Feature level**) to access them.
 
 ---
 
@@ -220,7 +229,7 @@ Snippets are hidden in simple mode. Turn off simple mode (SIMPLE button in the s
 | Service files | Wherever you save them (`.liturgy`); defaults to `repo/liturgy/` if GitHub is configured |
 | Config | `~/.config/rubric/config.json` |
 | Snippets | `~/.config/rubric/snippets.json` |
-| Hymn cache | `~/.local/share/rubric/hymn_cache.json` |
+| Hymn cache | `~/.local/share/rubric/rubric.db` (table `hymn_cache`) |
 | Autosave | `~/.local/share/rubric/autosave.liturgy` |
 
 **Q: Can I undo and redo changes?**

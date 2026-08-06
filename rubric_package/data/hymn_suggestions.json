@@ -3,22 +3,17 @@
     "Advent": [
       [
         "VU",
-        1,
+        2,
         "Come, thou long-expected Jesus"
       ],
       [
         "VU",
-        2,
-        "Come, thou long-expected Jesus (alt.)"
-      ],
-      [
-        "VU",
-        4,
+        25,
         "Lo, he comes with clouds descending"
       ],
       [
         "VU",
-        5,
+        1,
         "O come, O come, Emmanuel"
       ],
       [
@@ -48,7 +43,7 @@
       ],
       [
         "VU",
-        12,
+        883,
         "Comfort, comfort now my people"
       ],
       [
@@ -58,12 +53,12 @@
       ],
       [
         "VU",
-        14,
+        20,
         "On Jordan's bank the Baptist's cry"
       ],
       [
         "VU",
-        22,
+        44,
         "It came upon the midnight clear"
       ],
       [
@@ -95,7 +90,7 @@
     "Christmas": [
       [
         "VU",
-        28,
+        48,
         "Hark! The herald angels sing"
       ],
       [
@@ -105,7 +100,7 @@
       ],
       [
         "VU",
-        36,
+        60,
         "O come, all ye faithful"
       ],
       [
@@ -130,17 +125,12 @@
       ],
       [
         "VU",
-        46,
+        47,
         "Still, still, still"
       ],
       [
         "VU",
-        48,
-        "Joy to the world"
-      ],
-      [
-        "VU",
-        55,
+        35,
         "Good Christian friends, rejoice"
       ],
       [
@@ -155,13 +145,8 @@
       ],
       [
         "VU",
-        60,
-        "Once in royal David's city"
-      ],
-      [
-        "VU",
         62,
-        "In the bleak midwinter"
+        "Once in royal David's city"
       ],
       [
         "MV",
@@ -177,33 +162,28 @@
     "Epiphany": [
       [
         "VU",
-        72,
+        81,
         "As with gladness men of old"
       ],
       [
         "VU",
-        74,
+        79,
         "Arise, your light is come"
       ],
       [
         "VU",
-        75,
+        101,
         "Songs of thankfulness and praise"
       ],
       [
         "VU",
-        79,
+        100,
         "When Jesus comes to be baptized"
       ],
       [
         "VU",
         80,
         "When Christ's appearing was made known"
-      ],
-      [
-        "VU",
-        81,
-        "Hail to the Lord who comes"
       ],
       [
         "VU",
@@ -234,7 +214,7 @@
     "Baptism": [
       [
         "VU",
-        79,
+        100,
         "When Jesus comes to be baptized"
       ],
       [
@@ -266,7 +246,7 @@
     "Transfiguration": [
       [
         "VU",
-        82,
+        102,
         "Jesus on the mountain peak"
       ],
       [
@@ -281,7 +261,7 @@
       ],
       [
         "VU",
-        315,
+        264,
         "Immortal, invisible, God only wise"
       ],
       [
@@ -308,7 +288,7 @@
       ],
       [
         "VU",
-        100,
+        114,
         "Forty days and forty nights"
       ],
       [
@@ -318,12 +298,12 @@
       ],
       [
         "VU",
-        102,
+        115,
         "Jesus, tempted in the desert"
       ],
       [
         "VU",
-        107,
+        271,
         "There's a wideness in God's mercy"
       ],
       [
@@ -338,7 +318,7 @@
       ],
       [
         "VU",
-        115,
+        149,
         "When I survey the wondrous cross"
       ],
       [
@@ -353,7 +333,7 @@
       ],
       [
         "VU",
-        144,
+        142,
         "Jesus, keep me near the cross"
       ],
       [
@@ -380,17 +360,12 @@
     "Palm Sunday": [
       [
         "VU",
-        122,
+        123,
         "Hosanna, loud hosanna"
       ],
       [
         "VU",
-        123,
-        "All glory, laud, and honour"
-      ],
-      [
-        "VU",
-        124,
+        127,
         "Ride on! Ride on in majesty!"
       ],
       [
@@ -402,7 +377,7 @@
     "Holy Thursday": [
       [
         "VU",
-        127,
+        130,
         "An upper room did our Lord prepare"
       ],
       [
@@ -449,7 +424,7 @@
       ],
       [
         "VU",
-        115,
+        149,
         "When I survey the wondrous cross"
       ],
       [
@@ -469,7 +444,7 @@
       ],
       [
         "VU",
-        125,
+        135,
         "Beneath the cross of Jesus"
       ],
       [
@@ -486,7 +461,7 @@
       ],
       [
         "VU",
-        157,
+        164,
         "The day of resurrection"
       ],
       [
@@ -506,18 +481,13 @@
       ],
       [
         "VU",
-        162,
+        169,
         "Good Christians all, rejoice and sing"
       ],
       [
         "VU",
-        163,
+        177,
         "This joyful Eastertide"
-      ],
-      [
-        "VU",
-        164,
-        "Christ the Lord is risen today"
       ],
       [
         "VU",
@@ -536,12 +506,12 @@
       ],
       [
         "VU",
-        169,
+        211,
         "Crown him with many crowns"
       ],
       [
         "VU",
-        170,
+        189,
         "Hail the day that sees him rise"
       ],
       [
@@ -563,12 +533,12 @@
     "Pentecost": [
       [
         "VU",
-        196,
+        379,
         "O Holy Spirit, root of life"
       ],
       [
         "VU",
-        197,
+        376,
         "Spirit of the living God"
       ],
       [
@@ -578,17 +548,17 @@
       ],
       [
         "VU",
-        199,
+        385,
         "Spirit divine, attend our prayers"
       ],
       [
         "VU",
-        200,
+        382,
         "Breathe on me, breath of God"
       ],
       [
         "VU",
-        201,
+        205,
         "Like the murmur of the dove's song"
       ],
       [
@@ -598,7 +568,7 @@
       ],
       [
         "VU",
-        207,
+        196,
         "Wind who makes all winds that blow"
       ],
       [
@@ -635,7 +605,7 @@
     "Trinity": [
       [
         "VU",
-        315,
+        264,
         "Immortal, invisible, God only wise"
       ],
       [
@@ -645,7 +615,7 @@
       ],
       [
         "VU",
-        317,
+        313,
         "God, whose almighty word"
       ],
       [
@@ -672,27 +642,22 @@
     "Christ the King": [
       [
         "VU",
-        211,
+        213,
         "Rejoice, the Lord is King"
       ],
       [
         "VU",
-        213,
-        "Jesus shall reign"
-      ],
-      [
-        "VU",
-        217,
+        211,
         "Crown him with many crowns"
       ],
       [
         "VU",
-        220,
+        334,
         "All hail the power of Jesus' name"
       ],
       [
         "VU",
-        330,
+        686,
         "God of grace and God of glory"
       ],
       [
@@ -709,7 +674,7 @@
       ],
       [
         "VU",
-        264,
+        242,
         "Let all things now living"
       ],
       [
@@ -724,17 +689,17 @@
       ],
       [
         "VU",
-        288,
+        409,
         "Morning has broken"
       ],
       [
         "VU",
-        296,
+        226,
         "For the beauty of the earth"
       ],
       [
         "VU",
-        306,
+        229,
         "God of the sparrow"
       ],
       [
@@ -744,17 +709,12 @@
       ],
       [
         "VU",
-        326,
-        "A mighty fortress is our God"
-      ],
-      [
-        "VU",
-        331,
+        686,
         "God of grace and God of glory"
       ],
       [
         "VU",
-        332,
+        677,
         "O God of every nation"
       ],
       [
@@ -769,12 +729,12 @@
       ],
       [
         "VU",
-        374,
+        120,
         "O Jesus, I have promised"
       ],
       [
         "VU",
-        376,
+        506,
         "Take my life and let it be"
       ],
       [
@@ -801,11 +761,6 @@
         "MV",
         86,
         "God of the Bible"
-      ],
-      [
-        "VU",
-        509,
-        "I, the Lord of sea and sky"
       ]
     ]
   },
@@ -823,7 +778,7 @@
       ],
       [
         "VU",
-        575,
+        508,
         "Just as I am, without one plea"
       ],
       [
@@ -835,12 +790,12 @@
     "Advent 1": [
       [
         "VU",
-        4,
+        25,
         "Lo, he comes with clouds descending"
       ],
       [
         "VU",
-        5,
+        1,
         "O come, O come, Emmanuel"
       ],
       [
@@ -850,7 +805,7 @@
       ],
       [
         "VU",
-        14,
+        20,
         "On Jordan's bank the Baptist's cry"
       ],
       [
@@ -862,12 +817,12 @@
     "Advent 2": [
       [
         "VU",
-        5,
+        1,
         "O come, O come, Emmanuel"
       ],
       [
         "VU",
-        12,
+        883,
         "Comfort, comfort now my people"
       ],
       [
@@ -906,7 +861,7 @@
     "Advent 4": [
       [
         "VU",
-        1,
+        2,
         "Come, thou long-expected Jesus"
       ],
       [
@@ -916,7 +871,7 @@
       ],
       [
         "VU",
-        22,
+        44,
         "It came upon the midnight clear"
       ],
       [
@@ -928,7 +883,7 @@
     "Christmas Day": [
       [
         "VU",
-        36,
+        60,
         "O come, all ye faithful"
       ],
       [
@@ -955,7 +910,7 @@
     "Baptism of the Lord": [
       [
         "VU",
-        79,
+        100,
         "When Jesus comes to be baptized"
       ],
       [
@@ -982,7 +937,7 @@
     "Transfiguration": [
       [
         "VU",
-        82,
+        102,
         "Jesus on the mountain peak"
       ],
       [
@@ -1004,7 +959,7 @@
       ],
       [
         "VU",
-        157,
+        164,
         "The day of resurrection"
       ],
       [
@@ -1036,7 +991,7 @@
       ],
       [
         "VU",
-        163,
+        177,
         "This joyful Eastertide"
       ],
       [
@@ -1048,12 +1003,12 @@
     "Pentecost": [
       [
         "VU",
-        196,
+        379,
         "O Holy Spirit, root of life"
       ],
       [
         "VU",
-        197,
+        376,
         "Spirit of the living God"
       ],
       [
@@ -1072,20 +1027,15 @@
         "O Holy Spirit breathe on me"
       ]
     ],
-    "Palm Sunday": [
+    "Palm / Passion": [
       [
         "VU",
-        122,
+        123,
         "Hosanna, loud hosanna"
       ],
       [
         "VU",
-        123,
-        "All glory, laud, and honour"
-      ],
-      [
-        "VU",
-        124,
+        127,
         "Ride on! Ride on in majesty!"
       ],
       [
@@ -1097,7 +1047,7 @@
     "Trinity Sunday": [
       [
         "VU",
-        315,
+        264,
         "Immortal, invisible, God only wise"
       ],
       [
@@ -1111,15 +1061,15 @@
         "Bring many names"
       ]
     ],
-    "Reign of Christ Sunday": [
+    "Reign of Christ": [
       [
         "VU",
-        211,
+        213,
         "Rejoice, the Lord is King"
       ],
       [
         "VU",
-        220,
+        334,
         "All hail the power of Jesus' name"
       ],
       [
@@ -1136,7 +1086,7 @@
       ],
       [
         "VU",
-        115,
+        149,
         "When I survey the wondrous cross"
       ],
       [
@@ -1182,7 +1132,7 @@
     "4": [
       [
         "VU",
-        326,
+        262,
         "A mighty fortress is our God"
       ],
       [
@@ -1199,12 +1149,12 @@
     "5": [
       [
         "VU",
-        288,
+        409,
         "Morning has broken"
       ],
       [
         "VU",
-        296,
+        226,
         "For the beauty of the earth"
       ],
       [
@@ -1216,7 +1166,7 @@
     "6": [
       [
         "VU",
-        374,
+        120,
         "O Jesus, I have promised"
       ],
       [
@@ -1267,12 +1217,12 @@
     "9": [
       [
         "VU",
-        331,
+        686,
         "God of grace and God of glory"
       ],
       [
         "VU",
-        332,
+        677,
         "O God of every nation"
       ],
       [
@@ -1284,7 +1234,7 @@
     "10": [
       [
         "VU",
-        306,
+        229,
         "God of the sparrow"
       ],
       [
@@ -1301,7 +1251,7 @@
     "11": [
       [
         "VU",
-        376,
+        506,
         "Take my life and let it be"
       ],
       [
@@ -1391,7 +1341,7 @@
       ],
       [
         "VU",
-        288,
+        409,
         "Morning has broken"
       ],
       [
@@ -1454,7 +1404,7 @@
     "20": [
       [
         "VU",
-        374,
+        120,
         "O Jesus, I have promised"
       ],
       [
@@ -1505,7 +1455,7 @@
     "23": [
       [
         "VU",
-        332,
+        677,
         "O God of every nation"
       ],
       [
@@ -1522,7 +1472,7 @@
     "24": [
       [
         "VU",
-        107,
+        271,
         "There's a wideness in God's mercy"
       ],
       [
@@ -1544,7 +1494,7 @@
       ],
       [
         "VU",
-        331,
+        686,
         "God of grace and God of glory"
       ],
       [
@@ -1556,7 +1506,7 @@
     "26": [
       [
         "VU",
-        376,
+        506,
         "Take my life and let it be"
       ],
       [
@@ -1573,7 +1523,7 @@
     "27": [
       [
         "VU",
-        306,
+        229,
         "God of the sparrow"
       ],
       [
@@ -1607,7 +1557,7 @@
     "29": [
       [
         "VU",
-        211,
+        213,
         "Rejoice, the Lord is King"
       ],
       [
@@ -1899,7 +1849,7 @@
       ],
       [
         "VU",
-        208,
+        204,
         "Come, Holy Spirit (Veni Sancte Spiritus)"
       ],
       [
@@ -2333,7 +2283,7 @@
       ],
       [
         "VU",
-        455,
+        120,
         "O Jesus, I have promised"
       ],
       [
@@ -2985,7 +2935,7 @@
       ],
       [
         "VU",
-        412,
+        400,
         "Lord, listen to your children praying"
       ],
       [

@@ -51,8 +51,18 @@ _patchers = []
 
 
 def setUpModule():
-    # Never let a test write the user's real config or hymn-cache DB to disk.
+    # Never let a test write the user's real config or hymn database to disk.
+    # The hymn half of that promise was not actually kept: only config.save was
+    # patched, and the one test that writes a hymn title relied on its own local
+    # patch of rubric_package.db.hymn_set — which stopped intercepting anything
+    # once hymn_lookup began importing that name at module load.
     _patchers.append(patch.object(config, "save", lambda: None))
+    _patchers.append(patch("rubric_package.db.hymn_set", lambda *a, **k: None))
+    try:
+        import hymn_lookup  # noqa: F401
+        _patchers.append(patch("hymn_lookup.hymn_set", lambda *a, **k: None))
+    except ImportError:
+        pass
     for p in _patchers:
         p.start()
 
@@ -261,15 +271,29 @@ class TestHymnLookupPanelLogic(unittest.TestCase):
     def test_save_manual_hymn_writes_via_db_layer_not_real_disk(self):
         main = MagicMock()
         main._hymn_manual_entry.get_text.return_value = "Test Hymn Title"
-        main._hymn_manual_ref = ("VU", "1")
+        # parse_hymn_ref yields an int, so the stored ref carries an int.
+        main._hymn_manual_ref = ("VU", 1)
         main._selected_index.return_value = -1  # skip the injection half
         panel = HymnLookupPanel(main)
 
-        with patch("rubric_package.db.hymn_set") as mock_hset:
+        # hymn_lookup imports hymn_set at module load, so that is the name the
+        # panel actually reaches through.
+        with patch("hymn_lookup.hymn_set") as mock_hset:
             panel._save_manual_hymn()
             mock_hset.assert_called_once_with("VU1", "Test Hymn Title")
 
         main.hymn_status.set_label.assert_called_with("VU 1 — Test Hymn Title")
+
+    def test_save_manual_hymn_refuses_a_number_outside_the_hymnal(self):
+        main = MagicMock()
+        main._hymn_manual_entry.get_text.return_value = "Not a real hymn"
+        main._hymn_manual_ref = ("VU", 5000)
+        main._selected_index.return_value = -1
+        panel = HymnLookupPanel(main)
+
+        with patch("hymn_lookup.hymn_set") as mock_hset:
+            panel._save_manual_hymn()
+            mock_hset.assert_not_called()
 
 
 @unittest.skipUnless(_GTK_OK, _SKIP_REASON)
@@ -593,14 +617,13 @@ class TestMainWindowConstruction(unittest.TestCase):
         self.assertTrue(win._git_btn.get_visible())
 
     def test_element_rows_are_single_line_height(self):
-        """Row height comes from one place, and compact is shorter than normal.
+        """Row height comes from one place: the stylesheet.
 
-        Two stylesheet bugs lived here. `row.activatable > box` adds 10px of
-        padding top and bottom, which no `.elem-row` rule was overriding — rows
-        were 58px for one line of text. Fixing that with widget margins then
-        made compact mode *taller* than normal, because the compact rules
-        out-specify the elem-row ones and the margins stacked on the padding.
-        Spacing is CSS-only now.
+        Two bugs lived here. `row.activatable > box` adds 10px of padding top
+        and bottom, which no `.elem-row` rule was overriding — rows were 58px
+        for one line of text. Fixing that with widget margins then made the
+        rows taller still, because the margins stacked on top of the padding
+        rather than replacing it. Spacing is CSS-only now.
         """
         win = self._make_window(use_tabs=False)
         item = ServiceItem("Prelude", "Gathering", leader="Music Director")

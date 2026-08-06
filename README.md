@@ -17,8 +17,8 @@ Rubric integrates the Revised Common Lectionary, hymn lookup for Voices United, 
 - **Git push** — commit and push the current service to GitHub with the **Git** button in the status bar
 - **RCL integration** — lectionary readings, liturgical colour, and season for any Sunday; weekday services default to the coming Sunday with a stepper
 - **Lectionary year tracker** — persistent Year A/B/C and season indicator in the header, updated daily
-- **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; left-click to view on Hymnary.org, right-click to inject into the selected element
-- **Hymn lookup** — type `VU 16` or `MV 120` to fetch the title from Hymnary.org; inline Hymnary preview with WebKit (bundled)
+- **Hymn suggestions** — season and Proper-specific suggestions (Propers 4–29) from VU, MV, and LUS; click one to add it to the selected element
+- **Hymn lookup** — type `VU 16` or `MV 120` to look the title up in Rubric's bundled hymn database; entirely offline, with titles you add yourself kept alongside
 - **Bible viewer** — fetch passages in WEB, KJV, ASV, or ESV (ESV requires a free API key from api.esv.org)
 - **HTML export** — generates a clean, print-ready HTML file and opens it in the browser
 - **Bulletin PDF export** — compiled with the bundled [Typst](https://typst.app/) typesetter; no LaTeX required
@@ -109,7 +109,7 @@ CI runs them in a separate job that installs those packages.
 ```
 rubric.py              Main application
 rcl_data.py            RCL lectionary database and calendar logic
-hymn_lookup.py         Hymnary.org title fetcher (VU, MV, LUS)
+hymn_lookup.py         Hymn title lookup from the local database (VU, MV, LUS)
 hymn_suggestions.py    Season and Proper-specific hymn suggestions
 bible_api.py           Bible passage fetcher (WEB, KJV, ASV, ESV)
 snippets.py            Default liturgical text snippets
@@ -134,7 +134,7 @@ Please open an issue before starting significant work.
 ## Acknowledgements
 
 - Lectionary data from the [Revised Common Lectionary](https://lectionary.library.vanderbilt.edu/)
-- Hymn data from [Hymnary.org](https://hymnary.org/)
+- Hymn titles originally indexed from [Hymnary.org](https://hymnary.org/)
 - Bible text from the [World English Bible](https://worldenglish.bible/) (public domain), [King James Version](https://www.kingjamesbibleonline.org/) (public domain), [American Standard Version](https://www.biblegateway.com/versions/American-Standard-Version-ASV-Bible/) (public domain), and [ESV](https://api.esv.org/) (free ministry API)
 - Built with [GTK4](https://gtk.org/) and [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/)
 

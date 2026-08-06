@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.21.0-dev1] — New elements from the sidebar; styling moves onto the suite's shared stylesheet
+## [0.21.0-dev2] — Hymns work entirely offline; leader notes stay out of the bulletin; a preferences audit
 
 ### Added
 
@@ -38,6 +38,160 @@ All notable changes are documented here, newest first.
     is not carried into a flatpak or a pip install. The flatpak manifest and `install.sh`
     now place it where the app looks, and a missing stylesheet degrades to an unstyled
     window instead of a failure to start.
+
+- **Preferences is organised around what the settings do.** Simple mode now leads the View
+  page, since it decides what the rest of the app shows. Theme (System / Light / Dark) joins
+  it there instead of living only in the menu's Appearance submenu, and the two stay in step
+  with each other. Recurring elements and element defaults moved to their own **Elements**
+  page — they are about what goes into a service, not how it is displayed. Search is enabled,
+  so you can type for a row rather than hunting through seven pages.
+
+
+
+- **Clicking a hymn suggestion adds it to the service.** Clicking a chip used to open the hymn's
+  page on Hymnary — which no longer loads — leaving right-click as the only way to actually use
+  a suggestion, which is not where anyone looks for a primary action. Right-click still works.
+
+- **The hymn-download screens are gone.** The setup wizard's "Download hymn titles" step and the
+  download buttons in Preferences had nothing left to download. Preferences now just reports how
+  many titles are stored, with a **Reset** that asks first — it removes titles you typed in
+  yourself, and puts the bundled ones back straight away.
+
+- **Hymn search results run in hymnal order.** They were sorted as text — VU 1, VU 10, VU 100,
+  VU 11, VU 2 — which also meant the result limit returned an arbitrary alphabetical slice
+  rather than the closest matches. Titles beginning with what you typed now come first.
+
+
+- **Leader notes no longer print in the congregation's bulletin.** A leader note is a private
+  instruction for whoever is presiding — "pause here", "nod to the organist" — and has never
+  been meant to leave the leader's copy. Since 0.20.0 they were printed in the bulletin, in the
+  bulletin PDF, in the HTML export and in the live preview.
+  - The cause was a single substitution in the 0.20.0 content-model rewrite. The bulletin
+    removed leader notes by running `strip_leader_notes()` over its rendered Typst, which finds
+    the literal `#leader-note[…]` marker. That release switched the bulletin to render plain
+    text instead, where the marker never appears, so the call went on succeeding while removing
+    nothing. The exclusion now happens in the renderer, where it cannot silently stop working.
+  - The same bug inflated the word count and reading-time estimate, which counted every private
+    note as spoken words.
+
+- **The bulletin keeps its formatting again.** Bold, italic, headings and bullet lists were
+  flattened to unformatted text in the bulletin while the manuscript kept them — the same
+  element printed differently in the two documents.
+
+- **Text that looks like Typst markup survives into print.** Element content was passed into the
+  bulletin unescaped, so an email address in an announcement made Typst read `@church` as a
+  cross-reference, `*stand*` came out bold, `~` became an invisible non-breaking space, and a
+  stray `]` could close the bulletin's two-column block early. The content model now escapes
+  every character Typst treats as markup, not just three of them, and the bulletin applies the
+  same unmatched-bracket protection the manuscript always had. Emphasis you apply in the editor
+  is unaffected: it is carried by the text's styling, never by characters in the text.
+
+- **Angle brackets no longer delete text from the bulletin preview.** Content was interpolated
+  into the preview's HTML without escaping, so `<office@church.ca>` was parsed as an unknown
+  tag and dropped from the page, and pasted HTML rendered as markup.
+
+- **Cancelling "New Service" keeps your service.** With more than one template saved, the
+  current service was cleared *before* the template picker appeared, and neither Cancel nor
+  Escape put it back. Nothing is discarded now until a template is actually chosen.
+
+- **Deleting every element no longer leaves a stale autosave.** Autosave skipped an emptied
+  service, leaving the previous snapshot on disk, so a crash offered to "restore unsaved work"
+  that brought back the elements you had just deleted.
+
+- **Christmas Eve has its readings.** 24 December fell through to Ordinary Time with no
+  readings at all, unlike Ash Wednesday, Maundy Thursday and Good Friday. It now returns the
+  RCL's Nativity Proper I. When 24 December is itself a Sunday it stays Advent 4, since that is
+  the morning service. Easter Vigil was likewise missing and has been added, with the gospel
+  that follows the lectionary year.
+
+
+- **Simple mode is no longer reverted by closing Preferences.** Preferences wrote its cached
+  switch state on close, so toggling Simple from the status bar while the window was open was
+  silently undone the moment you closed it. The switch now applies immediately, and close
+  writes nothing.
+
+- **GOST font and developer mode were unreachable.** Both rows were built only if Simple mode
+  was already off when Preferences opened, so switching Simple off there left them absent
+  until you closed and reopened the window — and since neither has had a status-bar button
+  for some time, that was the only route to them. They are now always built and shown or
+  hidden as Simple mode changes.
+
+- **Developer mode persists between sessions.** It was window state only, so it reset on every
+  launch while every other toggle on the page was remembered.
+
+- **Element and template names containing "&" render again.** Preferences row titles are
+  parsed as Pango markup, so a name like "Welcome & Announcements" produced an empty row and
+  a GTK warning instead of the name. Every user-supplied name in the window is escaped now.
+
+- **Announcements can be turned off.** The bulletin exporter has always honoured an
+  `include_announcements` setting, but nothing in the interface set it — turning announcements
+  off meant hand-editing `config.json`. It is a switch in Bulletin Settings now.
+
+### Fixed
+
+- **Hymns work entirely offline.** Rubric no longer talks to Hymnary.org at all. That site now
+  answers automated requests with a JavaScript bot-protection challenge no desktop app can get
+  past, so every lookup failed and a "download all titles" worked through an entire hymnal —
+  around 1,900 requests for Voices United — to add nothing. The connection has been removed
+  rather than left to fail.
+  - Rubric ships with 877 Voices United titles. Lookup and the **By Title** search work from
+    the first launch, on any machine, with no network.
+  - Lookup is now instant. It was a background request with a callback; it is a single read
+    from a local database.
+  - A title Rubric doesn't have is typed in once, from the same Lookup box, and kept for good —
+    it is used for that number from then on and becomes searchable.
+  - More Voices and Let Us Sing are not included. Their titles were never collected before
+    Hymnary closed off access, and guessing at hymn numbers would be worse than having none —
+    a wrong number sends a whole congregation to the wrong page.
+  - A number outside a hymnal's range is rejected immediately instead of being looked up.
+
+- **Suggested hymns had wrong numbers.** 94 of the curated suggestions pointed at the wrong
+  hymn — the titles were real but the numbers were not, so "O come, O come, Emmanuel" was
+  offered as VU 5 (it is VU 1) and "It came upon the midnight clear" as VU 22 (it is VU 44).
+  Every suggestion whose title can be checked against a verified one has been corrected, and a
+  test now holds them to it. 334 entries — the More Voices ones, and Voices United titles
+  worded differently from Hymnary's — cannot be verified and were left untouched rather than
+  guessed at.
+
+- **Baptism of the Lord was missing from most years.** It was taken to be the Sunday *nearest*
+  6 January rather than the first Sunday *after* it, so whenever 6 January fell Sunday–Wednesday
+  it landed on a date already claimed by Christmas 2 and disappeared — 2025, 2026, 2027, 2030,
+  2031 and 2032 among them, taking its readings with it and shifting every Epiphany Sunday
+  number down by one.
+
+- **Hymn elements lost their notes in the printed bulletin.** For an element like "Opening Hymn",
+  everything written under the hymn reference — "verses 1, 3 and 5 only", "please stand" — was
+  dropped from the bulletin PDF, while the preview and the leader's manuscript still showed it.
+
+- **Two sets of curated hymns could never appear.** The Palm Sunday and Reign of Christ
+  suggestions were keyed on wording the lectionary never produces, so both silently fell back to
+  generic seasonal hymns. A test now checks every curated override against a real year.
+
+- **Adding a hymn from By Title or By Theme can be undone.** It was the one hymn-insertion path
+  that skipped the undo stack, so picking the wrong search result could not be taken back.
+
+### Removed
+
+- **Compact view.** It appeared three times and worked in none of them properly: two switches
+  on the same Preferences page, where the first applied live and was then overwritten by the
+  second on close, plus a status-bar button that was built but never added to the status bar.
+  The row-height rules it drove are gone with it.
+
+- **The Preferences Dates page.** It read and wrote `config.custom_dates`, which nothing has
+  consumed since custom observances moved to `config.all_dates` — every date added through it
+  was written to disk and never read again. Custom dates are edited in the dates editor, which
+  works; it is now reachable from the menu as **Custom Dates…** as well as from the "Edit
+  dates…" button in the liturgical events popover.
+
+- **The hidden Typst Files page.** Roughly 130 lines of an in-app template editor that had been
+  commented out of the constructor, while HELP and the FAQ went on documenting it in detail.
+  Both now describe the `~/.config/rubric/templates/` override mechanism, which is what
+  actually works.
+
+- **Dead status-bar buttons and actions.** The GOST, Compact, Dev, and Template buttons were
+  constructed and wired but never added to any container; `toggle-gost`, `toggle-compact`, and
+  `toggle-dev` were registered as actions with no menu item and no accelerator. Also removed
+  the `include_scripture` config key, which nothing ever read.
 
 ---
 
