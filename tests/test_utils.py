@@ -3,6 +3,7 @@ Tests for rubric_package utilities.
 """
 
 import os
+import subprocess
 import tempfile
 import unittest
 import shutil
@@ -22,7 +23,7 @@ from rubric_package.utils.typst import (
 )
 from rubric_package.utils.colors import section_colour, hex_to_rgb, SECTION_COLORS
 from rubric_package.utils.helpers import (
-    is_hymn_element, HYMN_KEYWORDS, atomic_write_text)
+    is_hymn_element, HYMN_KEYWORDS, atomic_write_text, git_no_sign_args)
 from rubric_package.utils.rich_typst import process_inline, TAG_BOLD, TAG_ITALIC
 
 
@@ -473,6 +474,38 @@ class TestAtomicWriteText(unittest.TestCase):
 # The editor-leak tests that lived here moved to tests/test_content.py when the
 # editor stopped speaking Typst: the constructs they guarded against are now
 # handled by the migration parser, not by the editor.
+
+
+class TestGitNoSignArgs(unittest.TestCase):
+    """`-c commit.gpgsign=false` must actually stop git from trying to sign,
+    given a repo-local config that would otherwise attempt it — the exact
+    setup (commit.gpgsign on, no usable key) that made background sync fail
+    with a raw gpg/pinentry error instead of committing."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        subprocess.run(["git", "init", "-q"], cwd=self.dir, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.dir, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.dir, check=True)
+        # Repo-local, not global — never touches the real machine's git config.
+        subprocess.run(["git", "config", "commit.gpgsign", "true"], cwd=self.dir, check=True)
+        (self.dir / "f.txt").write_text("hello")
+        subprocess.run(["git", "add", "."], cwd=self.dir, check=True)
+
+    def test_returns_the_override_flag(self):
+        self.assertEqual(git_no_sign_args(), ["-c", "commit.gpgsign=false"])
+
+    def test_commit_with_override_produces_no_gpgsig_header(self):
+        r = subprocess.run(
+            ["git"] + git_no_sign_args() + ["commit", "-m", "test"],
+            cwd=self.dir, capture_output=True, text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        show = subprocess.run(["git", "cat-file", "commit", "HEAD"], cwd=self.dir,
+                               capture_output=True, text=True, check=True)
+        self.assertNotIn("gpgsig", show.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

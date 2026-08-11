@@ -22,7 +22,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw, GLib
 
 from rubric_package.models.config import config, get_palette, SECTIONS
-from rubric_package.utils.helpers import flatpak_git_prefix, git_credential_args
+from rubric_package.utils.helpers import flatpak_git_prefix, git_credential_args, git_no_sign_args
+from rubric_package.utils.dialogs import notice
 from rubric_package.utils.git_conflicts import (
     list_conflicted_files, abort_merge, resolve_conflicts_interactive,
 )
@@ -666,7 +667,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             description="Run the setup wizard to configure your folder, download hymn titles, and connect to GitHub."
         )
         page.add(wizard_grp)
-        wizard_row = Adw.ActionRow(title="Initialize Rubric",
+        wizard_row = Adw.ActionRow(title="Set Up Rubric",
                                    subtitle="Walk through folder, hymn download, and GitHub setup")
         wizard_btn = Gtk.Button(label="Run wizard", valign=Gtk.Align.CENTER)
         wizard_btn.add_css_class("suggested-action")
@@ -679,11 +680,11 @@ class PreferencesWindow(Adw.PreferencesWindow):
         wizard_row.add_suffix(wizard_btn)
         wizard_grp.add(wizard_row)
 
-        # ── Repository folder ──────────────────────────────────────────────
+        # ── Local folder ─────────────────────────────────────────────────
         loc_grp = Adw.PreferencesGroup(
-            title="Repository folder",
-            description="A folder on this computer that is (or will become) a git repository. "
-                        "Rubric will save liturgy files, Typst exports, and PDFs in subfolders here."
+            title="Local Folder",
+            description="The folder on this computer where Rubric keeps your files — this is what gets "
+                        "backed up online. Liturgy files, Typst exports, and PDFs are saved in subfolders here."
         )
         page.add(loc_grp)
 
@@ -695,15 +696,15 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._repo_row.add_suffix(browse_btn)
         loc_grp.add(self._repo_row)
 
-        # ── New repository setup ───────────────────────────────────────────
+        # ── Start backing this up ───────────────────────────────────────────
         setup_grp = Adw.PreferencesGroup(
-            title="New repository",
-            description="Creates liturgy/, tex/, and pdf/ subfolders and initialises git in the selected folder."
+            title="Start Backing This Up",
+            description="Turns the folder above into something Rubric can save versions of and back up online."
         )
         page.add(setup_grp)
 
         setup_row = Adw.ActionRow(
-            title="Set up selected folder as a repository",
+            title="Set up the selected folder",
             subtitle="Run this once after choosing a folder above"
         )
         setup_btn = Gtk.Button(label="Set up", valign=Gtk.Align.CENTER)
@@ -715,7 +716,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         # ── GitHub sign-in ────────────────────────────────────────────────
         signin_grp = Adw.PreferencesGroup(
             title="Connect to GitHub",
-            description="Sign in once and Rubric handles repository creation and authentication for you.",
+            description="Sign in once and Rubric handles creating your online copy and staying connected.",
         )
         page.add(signin_grp)
 
@@ -733,11 +734,12 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self._connected_row.add_suffix(self._disconnect_btn)
         signin_grp.add(self._connected_row)
 
-        self._repo_name_row = Adw.EntryRow(title="Repository name")
+        self._repo_name_row = Adw.EntryRow(title="What to call it online")
         signin_grp.add(self._repo_name_row)
-        self._repo_private_row = Adw.SwitchRow(title="Private repository", active=True)
+        self._repo_private_row = Adw.SwitchRow(
+            title="Private", subtitle="Only you can see it", active=True)
         signin_grp.add(self._repo_private_row)
-        create_row = Adw.ActionRow(title="Create a new repository on GitHub")
+        create_row = Adw.ActionRow(title="Create the online copy")
         self._create_repo_btn = Gtk.Button(label="Create", valign=Gtk.Align.CENTER)
         self._create_repo_btn.add_css_class("suggested-action")
         self._create_repo_btn.connect("clicked", self._on_github_create_repo)
@@ -746,16 +748,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # ── Manual fallback ───────────────────────────────────────────────
         remote_grp = Adw.PreferencesGroup(
-            title="Or connect an existing repository manually",
-            description="Paste the URL of your GitHub repository (e.g. https://github.com/yourname/liturgy).",
+            title="Or Use an Online Copy You Already Have",
+            description="Paste its address (e.g. https://github.com/yourname/liturgy).",
         )
         page.add(remote_grp)
 
-        self._remote_entry = Adw.EntryRow(title="GitHub repository URL")
+        self._remote_entry = Adw.EntryRow(title="Address")
         self._remote_entry.set_text(self._detect_remote())
         remote_grp.add(self._remote_entry)
 
-        connect_row = Adw.ActionRow(title="Save remote URL")
+        connect_row = Adw.ActionRow(title="Save")
         connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER)
         connect_btn.connect("clicked", self._on_remote_connect)
         connect_row.add_suffix(connect_btn)
@@ -763,13 +765,14 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
         # ── Pull ───────────────────────────────────────────────────────────
         pull_grp = Adw.PreferencesGroup(
-            title="Pull from GitHub",
-            description="Download changes from GitHub — use when you have worked on another machine or a collaborator has pushed changes."
+            title="Get the Latest Version",
+            description="Downloads the latest version from your online copy — use this if you worked on "
+                        "another computer, or someone else made changes."
         )
         page.add(pull_grp)
 
-        pull_row = Adw.ActionRow(title="Pull latest changes")
-        pull_btn = Gtk.Button(label="Pull", valign=Gtk.Align.CENTER)
+        pull_row = Adw.ActionRow(title="Get latest changes")
+        pull_btn = Gtk.Button(label="Get Latest", valign=Gtk.Align.CENTER)
         pull_btn.connect("clicked", self._on_prefs_pull)
         pull_row.add_suffix(pull_btn)
         pull_grp.add(pull_row)
@@ -780,8 +783,8 @@ class PreferencesWindow(Adw.PreferencesWindow):
         for title, subtitle in [
             ("1. Set up a folder above",       "Browse to an empty folder, then click Set up"),
             ("2. Sign in with GitHub",         "Click Sign in above and approve in your browser"),
-            ("3. Create a repository",         'Pick a name (e.g. "liturgy") and click Create'),
-            ("4. Click Push ⟳",                "Use the ⟳ button in the main toolbar to push files"),
+            ("3. Create your online copy",     'Pick a name (e.g. "liturgy") and click Create'),
+            ("4. Click Back Up ⟳",             "Use the ⟳ button in the main toolbar to save and back up your files"),
         ]:
             r = Adw.ActionRow(title=title, subtitle=subtitle)
             r.set_sensitive(False)
@@ -806,7 +809,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
         """Points the configured folder's origin remote at url. Returns an error string, or None on success."""
         repo = config.github_repo
         if not repo:
-            return "Set up a repository folder first."
+            return "Set up a folder first."
         try:
             chk = subprocess.run(_GIT + ["-C", repo, "remote", "get-url", "origin"],
                                  capture_output=True, text=True, timeout=5)
@@ -842,9 +845,8 @@ class PreferencesWindow(Adw.PreferencesWindow):
 
     def _on_github_create_repo(self, _btn):
         if not config.github_repo:
-            dlg = Adw.MessageDialog(transient_for=self, heading="No folder selected",
-                body="Browse to a folder and click Set up first.")
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "No folder chosen", "Choose a folder above and click Set up first.")
+            return
         token = secret_store.load_github_token()
         if not token:
             return
@@ -858,8 +860,7 @@ class PreferencesWindow(Adw.PreferencesWindow):
             except github_auth.GithubAuthError as e:
                 def fail():
                     self._create_repo_btn.set_sensitive(True)
-                    dlg = Adw.MessageDialog(transient_for=self, heading="Couldn't create repository", body=str(e))
-                    dlg.add_response("ok", "OK"); dlg.present()
+                    notice(self, "Couldn't create your online copy", str(e))
                 GLib.idle_add(fail)
                 return
             err = self._set_remote(clone_url)
@@ -868,17 +869,16 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 self._create_repo_btn.set_sensitive(True)
                 self._remote_entry.set_text(self._detect_remote())
                 if err:
-                    dlg = Adw.MessageDialog(transient_for=self, heading="Repository created, but couldn't connect it", body=err)
+                    notice(self, "Created online, but couldn't connect it here", err)
                 else:
-                    dlg = Adw.MessageDialog(transient_for=self, heading="Connected to GitHub",
-                        body=f"Repository created and connected:\n{clone_url}\n\n"
-                             "Use the ⟳ Push button in the main toolbar to upload your files.")
-                dlg.add_response("ok", "OK"); dlg.present()
+                    notice(self, "Connected to GitHub",
+                        f"Your online copy is ready:\n{clone_url}\n\n"
+                        "Use the ⟳ button in the main toolbar to back up your files.")
             GLib.idle_add(finish)
         threading.Thread(target=run, daemon=True).start()
 
     def _on_repo_browse(self, _btn):
-        dlg = Gtk.FileDialog(title="Choose repository folder")
+        dlg = Gtk.FileDialog(title="Choose a folder")
         dlg.select_folder(self, None, self._on_repo_folder_chosen)
 
     def _on_repo_folder_chosen(self, dlg, result):
@@ -894,9 +894,8 @@ class PreferencesWindow(Adw.PreferencesWindow):
     def _on_repo_setup(self, _btn):
         repo = config.github_repo
         if not repo:
-            dlg = Adw.MessageDialog(transient_for=self, heading="No folder selected",
-                body="Browse to a folder first, then click Set up.")
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "No folder chosen", "Browse to a folder first, then click Set up.")
+            return
 
         repo_path = Path(repo)
         errors = []
@@ -927,30 +926,22 @@ class PreferencesWindow(Adw.PreferencesWindow):
             errors.append(str(e))
 
         if errors:
-            dlg = Adw.MessageDialog(transient_for=self, heading="Setup error",
-                body="\n".join(errors))
-            dlg.add_response("ok", "OK"); dlg.present()
+            notice(self, "Couldn't set up that folder", "\n".join(errors))
         else:
-            dlg = Adw.MessageDialog(
-                transient_for=self,
-                heading="Repository ready",
-                body=f"Created liturgy/, tex/, pdf/, and bulletins/ folders in:\n{repo}\n\n"
-                     "Next: create a private repository on github.com, copy its URL, "
-                     "and paste it in the field below."
-            )
-            dlg.add_response("ok", "OK"); dlg.present()
+            notice(self, "Folder ready",
+                f"Created liturgy/, tex/, pdf/, and bulletins/ folders in:\n{repo}\n\n"
+                "Next: on github.com, create a new repository (keep it private), "
+                "copy its address, and paste it in the field below.")
 
     def _on_remote_connect(self, _btn):
         repo = config.github_repo
         url  = self._remote_entry.get_text().strip()
         if not repo:
-            dlg = Adw.MessageDialog(transient_for=self, heading="No repository configured",
-                body="Set up a folder first.")
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "No folder set up yet", "Set up a folder first.")
+            return
         if not url:
-            dlg = Adw.MessageDialog(transient_for=self, heading="No URL entered",
-                body="Paste your GitHub repository URL in the field above.")
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "No address entered", "Paste its address in the field above.")
+            return
         try:
             check = subprocess.run(_GIT + ["-C", repo, "remote", "get-url", "origin"],
                                    capture_output=True, text=True, timeout=5)
@@ -959,45 +950,36 @@ class PreferencesWindow(Adw.PreferencesWindow):
                    "origin", url]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except Exception as e:
-            dlg = Adw.MessageDialog(transient_for=self, heading="Error", body=str(e))
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "Error", str(e))
+            return
 
         if r.returncode != 0:
-            dlg = Adw.MessageDialog(transient_for=self, heading="Could not connect",
-                body=r.stderr.strip() or "Unknown error")
-            dlg.add_response("ok", "OK"); dlg.present()
+            notice(self, "Could not connect", r.stderr.strip() or "Unknown error")
         else:
-            dlg = Adw.MessageDialog(
-                transient_for=self,
-                heading="Connected to GitHub",
-                body=f"Remote set to:\n{url}\n\n"
-                     "Use the ⟳ Push button in the main toolbar to upload your files."
-            )
-            dlg.add_response("ok", "OK"); dlg.present()
+            notice(self, "Connected to GitHub",
+                f"Now backing up to:\n{url}\n\n"
+                "Use the ⟳ button in the main toolbar to back up your files.")
 
     def _on_prefs_pull(self, _btn):
         repo = config.github_repo
         if not repo:
-            dlg = Adw.MessageDialog(transient_for=self, heading="No repository configured",
-                body="Set up a folder and connect to GitHub first.")
-            dlg.add_response("ok", "OK"); dlg.present(); return
+            notice(self, "No folder set up yet", "Set up a folder and connect to GitHub first.")
+            return
 
         progress = Adw.MessageDialog(transient_for=self,
-            heading="Pulling from GitHub…", body="Please wait.")
+            heading="Getting the latest version…", body="Please wait.")
         progress.present()
 
         def on_conflicts_resolved(success: bool):
-            d = Adw.MessageDialog(
-                transient_for=self,
-                heading="Pull complete" if success else "Pull cancelled",
-                body="Conflicts resolved." if success else "No changes were made.")
-            d.add_response("ok", "OK"); d.present()
+            notice(self, "Done" if success else "Cancelled",
+                   "Conflicts resolved." if success else "No changes were made.")
 
         def run():
             try:
                 with git_credential_args(secret_store.load_github_token()) as cred:
-                    r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
-                                       capture_output=True, text=True, timeout=60)
+                    r = subprocess.run(
+                        _GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
+                        capture_output=True, text=True, timeout=60)
                 if r.returncode != 0 and list_conflicted_files(repo):
                     def start_resolution():
                         progress.destroy()
@@ -1010,18 +992,15 @@ class PreferencesWindow(Adw.PreferencesWindow):
                     if r.returncode != 0:
                         abort_merge(repo)
                         err = (r.stderr or r.stdout or "Unknown error").strip()
-                        d = Adw.MessageDialog(transient_for=self, heading="Pull failed", body=err[:400])
-                        d.add_response("ok", "OK"); d.present()
+                        notice(self, "Couldn't get the latest version", err[:400])
                     else:
                         out = r.stdout.strip() or "Already up to date."
-                        d = Adw.MessageDialog(transient_for=self, heading="Pull complete", body=out[:400])
-                        d.add_response("ok", "OK"); d.present()
+                        notice(self, "Done", out[:400])
                 GLib.idle_add(on_done)
             except Exception as e:
                 def on_err():
                     progress.destroy()
-                    d = Adw.MessageDialog(transient_for=self, heading="Pull error", body=str(e))
-                    d.add_response("ok", "OK"); d.present()
+                    notice(self, "Couldn't get the latest version", str(e))
                 GLib.idle_add(on_err)
 
         threading.Thread(target=run, daemon=True).start()

@@ -39,6 +39,17 @@ modules:
       - install -Dm755 typst-bin/typst /app/bin/typst
       - install -Dm644 io.github.calstfrancis.rubric.desktop /app/share/applications/io.github.calstfrancis.rubric.desktop
       - install -Dm644 rubric.svg /app/share/icons/hicolor/scalable/apps/io.github.calstfrancis.rubric.svg
+      # A launcher that doesn't invoke an SVG loader shows a blank or generic
+      # icon for an SVG-only app (Zerkalo and Gost hit this for real in their
+      # flatpak builds). install.sh doesn't rasterise PNGs either, so there's
+      # no existing convention to match here — using the same size set as the
+      # rest of the suite's flatpak manifests.
+      - |
+        for SIZE in 16 24 32 48 64 96 128 256; do
+          mkdir -p "/app/share/icons/hicolor/${SIZE}x${SIZE}/apps"
+          rsvg-convert -w "${SIZE}" -h "${SIZE}" rubric.svg \
+            -o "/app/share/icons/hicolor/${SIZE}x${SIZE}/apps/io.github.calstfrancis.rubric.png"
+        done
       - sed -i 's/^Icon=io.github.calstfrancis.rubric$/Icon=io.github.calstfrancis.rubric/' /app/share/applications/io.github.calstfrancis.rubric.desktop
       - install -Dm644 io.github.calstfrancis.rubric.metainfo.xml /app/share/metainfo/io.github.calstfrancis.rubric.metainfo.xml
       - install -Dm644 rubric_package/data/fonts/gosttypeb.ttf /app/share/fonts/gosttypeb.ttf

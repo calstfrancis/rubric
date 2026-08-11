@@ -41,6 +41,20 @@ def flatpak_git_prefix() -> list[str]:
     return ["flatpak-spawn", "--host", "git"] if Path("/.flatpak-info").exists() else ["git"]
 
 
+def git_no_sign_args() -> list[str]:
+    """Extra `-c` args that make one git invocation skip commit signing.
+
+    Rubric's commits (and the merge commit `pull` can create) run from a
+    background thread with no terminal attached — if the user's global git
+    config has `commit.gpgsign` on, git tries to launch an interactive
+    prompt to unlock the signing key, which can't work headless, and the
+    whole sync fails with a raw gpg/pinentry error ("Inappropriate ioctl
+    for device"). This overrides signing for Rubric's own git invocations
+    only, leaving the global config — and commits made by hand — untouched.
+    """
+    return ["-c", "commit.gpgsign=false"]
+
+
 @contextlib.contextmanager
 def git_credential_args(token: str | None):
     """Yields extra `-c` args that inject a short-lived GitHub credential for

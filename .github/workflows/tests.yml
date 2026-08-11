@@ -21,10 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      # Uses the runner's system Python (no actions/setup-python) so the
+      # apt-installed PyGObject bindings below are actually importable —
+      # setup-python's isolated interpreter can't see system dist-packages
+      # (same gotcha the gtk-panels job below already works around). Needed
+      # here too because `tests/` discovery pulls in rubric.py and
+      # bulletin_exporter.py, which import gi, even though most of this
+      # job's own tests don't touch GTK.
+      - name: Install GTK4/libadwaita
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1
 
       - name: Run backend/data-layer tests
         run: |

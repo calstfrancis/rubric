@@ -161,7 +161,7 @@ class MainChrome:
         # Advanced-mode buttons — kept as instance vars for sensitivity/tooltip code
         # but not packed into the header. Use keyboard shortcuts or the hamburger menu.
         self._main.push_btn = Gtk.Button(icon_name="folder-remote-symbolic",
-                                   tooltip_text="Push to GitHub (Ctrl+Shift+G)")
+                                   tooltip_text="Save & Back Up (Ctrl+Shift+G)")
         self._main.push_btn.connect("clicked", lambda _: self._main.git_push())
 
         self._main.tex_btn = Gtk.Button(icon_name="text-x-generic-symbolic",
@@ -332,13 +332,13 @@ class MainChrome:
         self._main._save_state_lbl.set_tooltip_text("Unsaved changes — press Ctrl+S to save")
         _right_box.append(self._main._save_state_lbl)
 
-        _git_btn = Gtk.Button(label="Git")
+        _git_btn = Gtk.Button(label="Backup")
         _git_btn.add_css_class("flat"); _git_btn.add_css_class("caption")
         _git_btn_lbl = _git_btn.get_child()
         if _git_btn_lbl:
             _git_btn_lbl.set_margin_top(1); _git_btn_lbl.set_margin_bottom(1)
         _git_btn.set_tooltip_text(
-            "Save, commit and push this service to GitHub (Ctrl+Shift+G)")
+            "Save and back up this service online (Ctrl+Shift+G)")
         _git_btn.set_margin_start(1); _git_btn.set_margin_end(1)
         _git_btn.connect("clicked", lambda _: self._main.git_push())
         self._main._git_btn = _git_btn

@@ -43,7 +43,7 @@ except Exception:
 
 from rubric_package.models.config import config
 from rubric_package.models.service import ServiceItem, SectionDivider
-from rubric_package.utils.helpers import flatpak_git_prefix
+from rubric_package.utils.helpers import flatpak_git_prefix, git_no_sign_args
 from rubric_package.models.content import (
     blocks_to_html, blocks_to_typst, normalise as _normalise_blocks,
 )
@@ -712,7 +712,7 @@ h2     { font-size: 12pt; font-weight: bold; font-variant: small-caps; text-alig
                     _GIT + ["-C", repo, "add", "bulletins/"],
                     check=True, capture_output=True, timeout=30)
                 subprocess.run(
-                    _GIT + ["-C", repo, "commit", "-m", f"Bulletin {date_str}"],
+                    _GIT + ["-C", repo] + git_no_sign_args() + ["commit", "-m", f"Bulletin {date_str}"],
                     check=True, capture_output=True, timeout=30)
                 subprocess.run(
                     _GIT + ["-C", repo, "push"],

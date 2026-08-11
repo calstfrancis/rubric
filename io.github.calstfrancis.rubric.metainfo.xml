@@ -17,13 +17,14 @@
     <p>Features include:</p>
     <ul>
       <li>Revised Common Lectionary readings, liturgical colour, and per-Proper hymn suggestions</li>
-      <li>Hymn lookup from Voices United, More Voices, and Let Us Sing via Hymnary.org</li>
+      <li>Hymn lookup for 877 Voices United titles, bundled and searchable entirely offline</li>
       <li>Bible passage viewer (WEB, KJV, ASV, ESV) with one-click scripture insertion</li>
       <li>Rich text and raw Typst editing per service element</li>
       <li>Live PDF bulletin preview with bundled Typst compiler</li>
       <li>HTML bulletin export — print to PDF directly from your browser</li>
       <li>Service Planner to browse and open all your saved services</li>
-      <li>GitHub sync to back up and share services across machines</li>
+      <li>GitHub sync to back up and share services across machines — once set up, backups also
+      happen automatically in the background and once more on quit, with no button to remember</li>
       <li>Snippets library and responsive reading builder</li>
       <li>Named service order templates</li>
     </ul>
@@ -48,6 +49,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.21.0" date="2026-08-11">
+      <description>
+        <p>0.21.0 "Sure Keep" — backups that happen on their own, hymns that work entirely offline, and a bulletin that prints what you wrote.</p>
+      </description>
+    </release>
     <release version="0.20.0" date="2026-08-04">
       <description>
         <p>0.20.0 "Plain Chant" - content becomes a document instead of markup, and the interface is rebuilt around it.</p>

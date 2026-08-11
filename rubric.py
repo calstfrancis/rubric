@@ -34,11 +34,12 @@ try:
     )
     from rubric_package.utils.helpers import (
         is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
-        atomic_write_text,
+        git_no_sign_args, atomic_write_text,
     )
     from rubric_package.utils.git_conflicts import (
         list_conflicted_files, abort_merge, resolve_conflicts_interactive,
     )
+    from rubric_package.utils.dialogs import notice
     from rubric_package import github_auth, secret_store
     from rubric_package.views import github_signin
     from rubric_package.views.element_content import ElementContentWidget
@@ -152,7 +153,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.21.0-dev3"
+APP_VERSION = "0.21.0"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -243,6 +244,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self.service_entries.append(_entry_from_dict(d))
             self._refresh_order_list()
         GLib.timeout_add_seconds(AUTOSAVE_SECS, self._do_autosave)
+        GLib.timeout_add_seconds(12 * 60, self._auto_backup_tick)
         GLib.idle_add(self._check_welcome)
         threading.Thread(target=self._background_index_scan, daemon=True).start()
 
@@ -412,8 +414,8 @@ class MainWindow(Adw.ApplicationWindow):
         # -- Library and sync ------------------------------------------------
         lib_sec = Gio.Menu()
         if config.github_repo:
-            lib_sec.append("Push to GitHub", "win.git-push")
-            lib_sec.append("Pull from GitHub", "win.git-pull")
+            lib_sec.append("Back Up", "win.git-push")
+            lib_sec.append("Get Latest Version", "win.git-pull")
         menu.append_section(None, lib_sec)
 
         # -- The app ---------------------------------------------------------
@@ -2410,7 +2412,7 @@ class MainWindow(Adw.ApplicationWindow):
         lbl1.add_css_class("title-2"); lbl1.set_margin_bottom(2)
         p1.append(lbl1)
         sub1 = Gtk.Label(label="Rubric will store your liturgy files, Typst exports, and PDFs here.\n"
-                                "Choose an empty folder — it will become your liturgy repository.")
+                                "Choose an empty folder — this is what gets backed up online.")
         sub1.set_wrap(True); sub1.set_justify(Gtk.Justification.CENTER)
         sub1.add_css_class("dim-label"); sub1.set_margin_bottom(10)
         p1.append(sub1)
@@ -2421,7 +2423,7 @@ class MainWindow(Adw.ApplicationWindow):
         browse1_btn.add_css_class("flat")
         p1_path_row.add_suffix(browse1_btn)
         folder_grp.add(p1_path_row)
-        setup1_row = Adw.ActionRow(title="Create subfolders & initialise git",
+        setup1_row = Adw.ActionRow(title="Set up this folder",
                                    subtitle="Creates liturgy/, tex/, pdf/, bulletins/ inside chosen folder")
         setup1_btn = Gtk.Button(label="Set up", valign=Gtk.Align.CENTER)
         setup1_btn.add_css_class("suggested-action")
@@ -2461,7 +2463,7 @@ class MainWindow(Adw.ApplicationWindow):
                 if r.returncode != 0: errors.append(r.stderr.strip())
             except Exception as e: errors.append(str(e))
             if errors: p1_status.set_label("Errors: " + "; ".join(errors))
-            else: p1_status.set_label("✓ Folder ready — subfolders and git initialised")
+            else: p1_status.set_label("✓ Folder ready")
         browse1_btn.connect("clicked", _on_browse1)
         setup1_btn.connect("clicked", _on_setup1)
 
@@ -2475,7 +2477,7 @@ class MainWindow(Adw.ApplicationWindow):
         lbl3 = Gtk.Label(label="Connect to GitHub (optional)")
         lbl3.add_css_class("title-2"); lbl3.set_margin_bottom(2)
         p3.append(lbl3)
-        sub3 = Gtk.Label(label="Back up and sync your liturgy files with a private GitHub repository.\n"
+        sub3 = Gtk.Label(label="Rubric can save a copy of your liturgy files online, and keep every earlier version.\n"
                                 "Sign in once and Rubric handles the rest. You can skip this and connect later in Preferences.")
         sub3.set_wrap(True); sub3.set_justify(Gtk.Justification.CENTER)
         sub3.add_css_class("dim-label"); sub3.set_margin_bottom(10)
@@ -2502,11 +2504,11 @@ class MainWindow(Adw.ApplicationWindow):
         connected_row.add_suffix(disconnect_btn)
         connected_grp.add(connected_row)
 
-        name_row = Adw.EntryRow(title="Repository name")
+        name_row = Adw.EntryRow(title="What to call it online")
         connected_grp.add(name_row)
-        private_row = Adw.SwitchRow(title="Private repository", active=True)
+        private_row = Adw.SwitchRow(title="Private", subtitle="Only you can see it", active=True)
         connected_grp.add(private_row)
-        create_row = Adw.ActionRow(title="Create a new repository on GitHub")
+        create_row = Adw.ActionRow(title="Create the online copy")
         create_btn = Gtk.Button(label="Create", valign=Gtk.Align.CENTER)
         create_btn.add_css_class("suggested-action")
         create_row.add_suffix(create_btn)
@@ -2515,12 +2517,12 @@ class MainWindow(Adw.ApplicationWindow):
 
         # ── Manual fallback ──
         manual_grp = Adw.PreferencesGroup(
-            title="Or connect an existing repository manually",
+            title="Or Use an Online Copy You Already Have",
         )
-        gh_entry = Adw.EntryRow(title="GitHub repository URL (https://…)")
+        gh_entry = Adw.EntryRow(title="Address (https://…)")
         gh_entry.set_text(config.github_repo and self._detect_github_remote() or "")
         manual_grp.add(gh_entry)
-        connect_row = Adw.ActionRow(title="Save and connect")
+        connect_row = Adw.ActionRow(title="Save")
         connect_btn = Gtk.Button(label="Connect", valign=Gtk.Align.CENTER)
         connect_row.add_suffix(connect_btn); manual_grp.add(connect_row)
         p3.append(manual_grp)
@@ -2552,7 +2554,7 @@ class MainWindow(Adw.ApplicationWindow):
                     name_row.set_text(default_name)
                 remote = self._detect_github_remote()
                 if remote:
-                    p3_status.set_label(f"✓ Connected to {remote}")
+                    p3_status.set_label(f"✓ Backing up to {remote}")
 
         def _on_signin(_b):
             def on_connected(token, username):
@@ -2586,7 +2588,7 @@ class MainWindow(Adw.ApplicationWindow):
                 try:
                     clone_url = github_auth.create_repo(token, name, private)
                 except github_auth.GithubAuthError as e:
-                    GLib.idle_add(lambda: (p3_status.set_label(f"Couldn't create repository: {e}"),
+                    GLib.idle_add(lambda: (p3_status.set_label(f"Couldn't create your online copy: {e}"),
                                            create_btn.set_sensitive(True)))
                     return
                 err = _set_remote(clone_url)
@@ -2594,18 +2596,18 @@ class MainWindow(Adw.ApplicationWindow):
                 def finish():
                     create_btn.set_sensitive(True)
                     if err:
-                        p3_status.set_label(f"Repository created, but couldn't connect it: {err}")
+                        p3_status.set_label(f"Created online, but couldn't connect it here: {err}")
                     else:
-                        p3_status.set_label(f"✓ Created and connected: {clone_url}")
+                        p3_status.set_label(f"✓ Your online copy is ready: {clone_url}")
                 GLib.idle_add(finish)
             threading.Thread(target=run, daemon=True).start()
         create_btn.connect("clicked", _on_create)
 
         def _on_connect3(_b):
             url = gh_entry.get_text().strip()
-            if not url: p3_status.set_label("Paste your GitHub repository URL first."); return
+            if not url: p3_status.set_label("Paste its address first."); return
             err = _set_remote(url)
-            p3_status.set_label(f"Error: {err}" if err else f"✓ Connected to {url}")
+            p3_status.set_label(f"Error: {err}" if err else f"✓ Now backing up to {url}")
         connect_btn.connect("clicked", _on_connect3)
 
         _refresh_p3()
@@ -3201,6 +3203,15 @@ class MainWindow(Adw.ApplicationWindow):
             toast = Adw.Toast.new(f"Autosave failed: {e}")
             toast.set_timeout(5)
             self._toast_overlay.add_toast(toast)
+        return True
+
+    def _auto_backup_tick(self):
+        """Periodic background backup, so it doesn't depend on remembering
+        the toolbar button — every ~12 minutes, if there's a repository
+        configured, nothing else already in flight, and something to save.
+        Quiet by design (see `git_push`'s `quiet` parameter)."""
+        if config.github_repo and self.push_btn.get_sensitive() and self.modified:
+            self.git_push(quiet=True)
         return True
 
     def _check_autosave(self):
@@ -4461,11 +4472,35 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
 
     # ── Git / GitHub integration ──────────────────────────────────────────────
 
-    def git_push(self):
+    def git_push(self, quiet: bool = False, on_done=None):
+        """Save, commit, and push.
+
+        `quiet=True` is for the automatic background backup (periodic and
+        on-quit): failures — including a real merge conflict — show a toast
+        suggesting the toolbar button instead of the blocking error dialog
+        or the interactive conflict-resolution flow a manually-triggered
+        push uses, so an offline moment (or a conflict that genuinely needs
+        the user's help) doesn't interrupt whoever's mid-service-planning.
+
+        `on_done`, if given, is called (on the main thread, no arguments)
+        exactly once when the whole operation reaches a terminal state —
+        used by the on-quit backup to know when it's safe to actually close
+        the window instead of guessing at a fixed delay.
+        """
         repo = config.github_repo
         if not repo:
-            self._show_toast("Set up a GitHub repository in Preferences → GitHub first.", timeout=6)
+            if not quiet:
+                self._show_toast("Set up a folder and connect to GitHub in Preferences first.", timeout=6)
+            if on_done:
+                on_done()
             return
+
+        _done_state = {"called": False}
+        def _signal_done():
+            if not _done_state["called"]:
+                _done_state["called"] = True
+                if on_done:
+                    on_done()
 
         if self.current_file:
             self.save_file()
@@ -4476,10 +4511,16 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                    _date.today().strftime("%-d %B %Y")
         msg = f"Service: {title} – {date_str}"
 
-        push_toast = Adw.Toast.new("Pushing to GitHub…")
+        push_toast = Adw.Toast.new("Backing up…")
         push_toast.set_timeout(0)
         self._toast_overlay.add_toast(push_toast)
         self.push_btn.set_sensitive(False)
+
+        def report_failure(heading, body):
+            if quiet:
+                self._show_toast(f"{heading} — try Backup from the toolbar.", timeout=8)
+            else:
+                self._error(heading, body)
 
         _AUTH_HELP = (
             "The easiest fix: open Preferences → GitHub and click Sign in with GitHub.\n\n"
@@ -4498,10 +4539,13 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         def abort(heading, body=""):
             push_toast.dismiss()
             self.push_btn.set_sensitive(True)
-            if body:
+            if quiet:
+                self._show_toast(f"{heading} — try Backup from the toolbar.", timeout=8)
+            elif body:
                 self._error(heading, body)
             else:
                 self._show_toast(heading, timeout=6)
+            _signal_done()
 
         def do_push():
             """Push local commits (assumes local is already up to date with remote)."""
@@ -4524,16 +4568,17 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     if push_r.returncode != 0:
                         err = (push_r.stderr or push_r.stdout or "Unknown error").strip()
                         if "Repository not found" in err:
-                            self._error("Push failed",
+                            report_failure("Push failed",
                                 "Repository not found on GitHub.\n\n"
                                 "Check the URL in Preferences → GitHub.")
                         elif "Permission denied" in err or "Authentication failed" in err \
                                 or "authentication" in err.lower():
-                            self._error("Authentication failed", _AUTH_HELP)
+                            report_failure("Authentication failed", _AUTH_HELP)
                         else:
-                            self._error("Push failed", err[:400])
+                            report_failure("Push failed", err[:400])
                     else:
-                        self._show_toast("✓ Synced to GitHub", timeout=4)
+                        self._show_toast("✓ Backed up", timeout=4)
+                    _signal_done()
 
                 GLib.idle_add(finish)
 
@@ -4545,16 +4590,24 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         def on_conflicts_resolved(success: bool):
             nonlocal push_toast
             if success:
-                push_toast = Adw.Toast.new("Pushing to GitHub…")
+                push_toast = Adw.Toast.new("Backing up…")
                 push_toast.set_timeout(0)
                 self._toast_overlay.add_toast(push_toast)
                 threading.Thread(target=do_push, daemon=True).start()
             else:
                 self.push_btn.set_sensitive(True)
                 self._show_toast("Sync cancelled — nothing was pushed.", timeout=5)
+                _signal_done()
 
         def start_conflict_resolution():
             push_toast.dismiss()
+            if quiet:
+                self.push_btn.set_sensitive(True)
+                self._show_toast(
+                    "Backup needs your help resolving a conflict — try Backup from the toolbar.",
+                    timeout=8)
+                _signal_done()
+                return
             resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
 
         def run():
@@ -4570,8 +4623,9 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 status_r = subprocess.run(_GIT + ["-C", repo, "status", "--porcelain"],
                                           capture_output=True, text=True, timeout=5)
                 if status_r.stdout.strip():
-                    commit_r = subprocess.run(_GIT + ["-C", repo, "commit", "-m", msg],
-                                              capture_output=True, text=True, timeout=15)
+                    commit_r = subprocess.run(
+                        _GIT + ["-C", repo] + git_no_sign_args() + ["commit", "-m", msg],
+                        capture_output=True, text=True, timeout=15)
                     if commit_r.returncode != 0:
                         out = (commit_r.stderr or commit_r.stdout or "").strip()
                         GLib.idle_add(abort, "Sync failed (commit)", out)
@@ -4586,7 +4640,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 if has_remote:
                     with git_credential_args(secret_store.load_github_token()) as cred:
                         pull_r = subprocess.run(
-                            _GIT + ["-C", repo] + cred + ["pull"],
+                            _GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
                             capture_output=True, text=True, timeout=60
                         )
                     if pull_r.returncode != 0:
@@ -4622,23 +4676,23 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
     def git_pull(self):
         repo = config.github_repo
         if not repo:
-            self._show_toast("Set up a GitHub repository in Preferences → GitHub first.", timeout=6)
+            self._show_toast("Set up a folder and connect to GitHub in Preferences first.", timeout=6)
             return
 
-        pull_toast = Adw.Toast.new("Pulling from GitHub…")
+        pull_toast = Adw.Toast.new("Getting the latest version…")
         pull_toast.set_timeout(0)
         self._toast_overlay.add_toast(pull_toast)
 
         def on_conflicts_resolved(success: bool):
             if success:
-                self._show_toast("✓ Synced — conflicts resolved", timeout=4)
+                self._show_toast("✓ Done — conflicts resolved", timeout=4)
             else:
-                self._show_toast("Pull cancelled — nothing was changed.", timeout=5)
+                self._show_toast("Cancelled — nothing was changed.", timeout=5)
 
         def run():
             try:
                 with git_credential_args(secret_store.load_github_token()) as cred:
-                    r = subprocess.run(_GIT + ["-C", repo] + cred + ["pull"],
+                    r = subprocess.run(_GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
                                        capture_output=True, text=True, timeout=60)
                 if r.returncode != 0 and list_conflicted_files(repo):
                     def start_resolution():
@@ -4652,7 +4706,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     if r.returncode != 0:
                         abort_merge(repo)  # clean up any partial merge state
                         err = (r.stderr or r.stdout or "Unknown error").strip()
-                        self._error("Pull failed", err[:400])
+                        self._error("Couldn't get the latest version", err[:400])
                     else:
                         out = r.stdout.strip() or "Already up to date."
                         self._show_toast(f"✓ {out[:80]}", timeout=5)
@@ -4660,7 +4714,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             except subprocess.TimeoutExpired:
                 def _on_timeout():
                     pull_toast.dismiss()
-                    self._show_toast("Pull timed out.", timeout=6)
+                    self._show_toast("Timed out — check your network connection.", timeout=6)
                 GLib.idle_add(_on_timeout)
             except FileNotFoundError:
                 def _on_no_git():
@@ -4670,7 +4724,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             except Exception as e:
                 def _on_pull_err(msg=str(e)):
                     pull_toast.dismiss()
-                    self._error("Pull error", msg)
+                    self._error("Couldn't get the latest version", msg)
                 GLib.idle_add(_on_pull_err)
 
         threading.Thread(target=run, daemon=True).start()
@@ -4911,8 +4965,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         win.present()
 
     def _error(self, heading, body):
-        dlg = Adw.MessageDialog(transient_for=self, heading=heading, body=body)
-        dlg.add_response("ok","OK"); dlg.present()
+        notice(self, heading, body)
 
     def _on_main_destroy(self, _widget):
         """Save pane positions so they're restored on next launch."""
@@ -4934,7 +4987,14 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         config.save()
 
     def do_close_request(self):
-        if not self.modified: return False
+        if getattr(self, "_backup_attempted_on_close", False):
+            return False
+        self._backup_attempted_on_close = True
+
+        if not self.modified:
+            self._backup_then_destroy()
+            return True
+
         dlg = Adw.MessageDialog(transient_for=self, heading="Save before closing?", body="Your service has unsaved changes.")
         dlg.add_response("discard","Discard"); dlg.add_response("cancel","Cancel"); dlg.add_response("save","Save")
         dlg.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
@@ -4943,7 +5003,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
             if r=="save":
                 if self.current_file:
                     if self.save_file():
-                        self.destroy()
+                        self._backup_then_destroy()
                     # else: save failed and _write already showed an error;
                     # keep the window open so the user doesn't lose work
                 else:
@@ -4952,8 +5012,26 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     self.save_file_as()
             elif r=="discard":
                 self._clear_autosave()
-                self.destroy()
+                self._backup_then_destroy()
         dlg.connect("response", on_resp); dlg.present(); return True
+
+    def _backup_then_destroy(self):
+        """Best-effort backup before quitting — capped at a few seconds so a
+        slow or offline connection can't hang the app on close. See
+        `git_push`'s `quiet` mode: failures here never show a popup, since
+        the window is already on its way out."""
+        if not config.github_repo or not self.push_btn.get_sensitive():
+            self.destroy()
+            return
+
+        closed = {"done": False}
+        def finish():
+            if not closed["done"]:
+                closed["done"] = True
+                self.destroy()
+
+        GLib.timeout_add_seconds(6, finish)
+        self.git_push(quiet=True, on_done=finish)
 
     def open_services(self, start_tab: str = "planner"):
         win = getattr(self, "_services_win", None)

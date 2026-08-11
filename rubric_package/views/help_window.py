@@ -68,8 +68,14 @@ class HelpWindow(Adw.Window):
         buf.create_tag("h2", weight=700, scale=1.15, pixels_above_lines=10, pixels_below_lines=2)
         buf.create_tag("h3", weight=700, scale=1.0,  pixels_above_lines=8,  pixels_below_lines=2)
         buf.create_tag("bold",   weight=700)
-        buf.create_tag("code",   family="monospace", background="#f0f0f0")
-        buf.create_tag("hr",     strikethrough=True, foreground="#888888")
+        # No background/foreground colors here — a hardcoded grey box around
+        # code and a hardcoded grey rule read as clunky/technical rather than
+        # polished (the same thing Zerkalo found and reverted in its own
+        # help panel), and hardcoded colors don't adapt to the system theme
+        # the way the rest of the app does. Monospace family and scale carry
+        # the distinction instead.
+        buf.create_tag("code",   family="monospace", scale=0.95)
+        buf.create_tag("hr",     strikethrough=True)
         buf.create_tag("bullet", left_margin=24)
         if path is None or not path.exists():
             buf.set_text("Documentation not found.", -1)

@@ -23,7 +23,8 @@ from typing import Callable
 
 from gi.repository import Adw
 
-from rubric_package.utils.helpers import flatpak_git_prefix
+from rubric_package.utils.helpers import flatpak_git_prefix, git_no_sign_args
+from rubric_package.utils.dialogs import notice
 
 _GIT = flatpak_git_prefix()
 
@@ -114,11 +115,8 @@ def _resolve_next(parent, repo: str, files: list[str], idx: int, on_done: Callab
             _apply_resolution(repo, rel_path, response)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             abort_merge(repo)
-            err = Adw.MessageDialog(
-                transient_for=parent, heading="Couldn't resolve that conflict",
-                body=f"“{rel_path}”: {e}\n\n"
-                     "Syncing was cancelled; nothing was changed.")
-            err.add_response("ok", "OK"); err.present()
+            notice(parent, "Couldn't resolve that conflict",
+                   f"“{rel_path}”: {e}\n\nSyncing was cancelled; nothing was changed.")
             on_done(False)
             return
         _resolve_next(parent, repo, files, idx + 1, on_done)
@@ -129,22 +127,18 @@ def _resolve_next(parent, repo: str, files: list[str], idx: int, on_done: Callab
 
 def _finish_merge(parent, repo: str, on_done: Callable[[bool], None]) -> None:
     try:
-        r = subprocess.run(_GIT + ["-C", repo, "commit", "--no-edit"],
+        r = subprocess.run(_GIT + ["-C", repo] + git_no_sign_args() + ["commit", "--no-edit"],
                             capture_output=True, text=True, timeout=15)
     except subprocess.TimeoutExpired:
         abort_merge(repo)
-        err = Adw.MessageDialog(
-            transient_for=parent, heading="Couldn't complete sync",
-            body="Git took too long to respond. Syncing was cancelled; nothing was changed.")
-        err.add_response("ok", "OK"); err.present()
+        notice(parent, "Couldn't complete sync",
+               "Git took too long to respond. Syncing was cancelled; nothing was changed.")
         on_done(False)
         return
     if r.returncode != 0:
         abort_merge(repo)
-        err = Adw.MessageDialog(
-            transient_for=parent, heading="Couldn't complete sync",
-            body=(r.stderr or r.stdout or "Unknown error").strip()[:400])
-        err.add_response("ok", "OK"); err.present()
+        notice(parent, "Couldn't complete sync",
+               (r.stderr or r.stdout or "Unknown error").strip()[:400])
         on_done(False)
         return
     on_done(True)

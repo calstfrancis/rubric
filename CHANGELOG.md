@@ -4,9 +4,22 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [0.21.0-dev3] — Hymns work entirely offline; leader notes stay out of the bulletin; a preferences audit
+## [0.21.0] "Sure Keep" — Backups that happen on their own; hymns work entirely offline; a bulletin that prints what you wrote
 
 ### Added
+
+- **Backups now happen on their own.** Once a folder is connected to GitHub, Rubric saves and
+  backs it up automatically every so often while you work, and once more on the way out if
+  anything's still unsent — so backing up no longer depends on remembering the Backup button.
+  It's quiet by design: a failure (including a real sync conflict) shows a toast suggesting the
+  toolbar button rather than a popup, so an offline moment doesn't interrupt whoever's mid-service-
+  planning, and it never blocks quitting for more than a few seconds.
+- **Error and notice dialogs now have a Copy button** next to OK, so a raw error message — a git
+  failure, a setup error, anything shown in one of these boxes — can be pasted into a bug report
+  instead of retyped from a screenshot. `Adw.MessageDialog`'s body text isn't selectable, so
+  without this there was no way to get the text out at all. Applies everywhere a single-response
+  notice dialog is used, including the 16 call sites that already went through the shared
+  `self._error()` helper.
 
 - **New elements can be created from the sidebar.** Adding an element to the palette used to
   mean opening Preferences and finding the Palette page; the sidebar you were already looking
@@ -21,6 +34,17 @@ All notable changes are documented here, newest first.
 
 ### Changed
 
+- **Plain language throughout the setup wizard, Preferences → GitHub, and sync messages.**
+  "Repository," "remote," "clone," and "URL" — terms that meant nothing to a non-technical
+  user — are now described in terms of what they do ("online copy," "address," "back up").
+  Covers both GitHub steps of the first-run setup wizard, the Preferences GitHub page
+  (including its manual "already have one" fallback), the toolbar/status-bar backup button
+  and its tooltip, the hamburger menu's sync items, and the sync/pull success, failure, and
+  progress messages.
+- **Help's grey code-block background and grey rule color are gone.** Both were hardcoded hex
+  colors bypassing the system theme, and read as clunky/technical rather than polished — the
+  same thing found and reverted in Zerkalo's own help panel. Monospace and scale now carry the
+  distinction instead of color.
 - **The interface layer is now shared with the rest of the suite.** Rubric's stylesheet had
   its own copy of every rule the redesign introduced — surfaces, section headers, cards,
   rows, cues, the status bar, the header-bar pill. Those rules now live in `style/fond.css`,
@@ -129,6 +153,12 @@ All notable changes are documented here, newest first.
 
 ### Fixed
 
+- **Sync could fail outright if the system's git was configured to sign commits.** Rubric's
+  commit/pull/push run from a background thread with no terminal attached — if `commit.gpgsign`
+  is on, git tries to launch an interactive prompt to unlock the signing key, which can't work
+  headless, and the whole sync failed with a raw gpg/pinentry error. Rubric's own git
+  invocations now explicitly skip signing (the same fix already made in Zerkalo); this doesn't
+  touch the signing setting for anything else on the system, including commits made by hand.
 - **Hymns work entirely offline.** Rubric no longer talks to Hymnary.org at all. That site now
   answers automated requests with a JavaScript bot-protection challenge no desktop app can get
   past, so every lookup failed and a "download all titles" worked through an entire hymnal —

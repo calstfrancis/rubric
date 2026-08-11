@@ -1,4 +1,4 @@
-# Rubric v0.20.0 "Plain Chant"
+# Rubric v0.21.0 "Sure Keep"
 
 Install via Flatpak:
 
@@ -18,21 +18,17 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Your writing is a document now, not markup.** The editor used to be a Typst editor wearing a rich-text costume, and anything it couldn't translate was shown to you verbatim — which is why services filled up with `#linebreak()` nobody typed. Content is stored as the document itself: paragraphs, headings, lists, leader notes, bold and italic. Typst is generated only when something is printed, so markup has nowhere to leak in from, and templates can decide how a service looks without any of that reaching the place you write.
+**Backups now happen on their own.** Once a folder is connected to GitHub, Rubric saves and backs it up automatically every so often while you work, and once more on the way out if anything's still unsent — so backing up no longer depends on remembering the Backup button. It's quiet by design: a failure, including a real sync conflict, shows a toast suggesting the toolbar button rather than a popup, and it never blocks quitting for more than a few seconds.
 
-**Saving can no longer lose a service.** Services and autosaves are written to a temporary file and renamed into place, so a crash, a power cut, or a full disk part-way through leaves the previous version completely intact. A successful save is also no longer reported as a failure when something unrelated — the library index, the preview — has a problem.
+**Error messages can be copied now.** Every notice and error dialog — a sync failure, a setup error — has a Copy button next to OK, so the message can be pasted into a bug report instead of retyped from a screenshot.
 
-**The service order reads as a shape.** Each section carries a colour dot, its element count and its running time, with its elements grouped into a single card. Elements are one line each: a coloured cue, the title, a reference where there is one, and who leads it. The element palette and the preview panel are built to the same design.
+**Hymns work entirely offline.** Rubric no longer talks to Hymnary.org at all — that site now blocks automated requests outright, so every lookup was failing. Rubric ships with 877 Voices United titles bundled in; lookup and search work instantly, on any machine, with no network.
 
-**The window was rebuilt.** Four distinct surfaces instead of near-identical greys; the liturgical colour stated once rather than four times over; a menu reorganised along GNOME's guidelines with app-level items last; Services and save-to-GitHub as plain words in the status bar; and a System / Light / Dark theme choice plus an interface font setting under Preferences.
+**The bulletin prints what you wrote.** Leader notes — private instructions like "pause here" meant only for whoever is presiding — had been leaking into the congregation's printed bulletin since 0.20.0. Bold, italic, headings and bullet lists, which had been silently flattened in the bulletin, keep their formatting again, and text containing `@`, `*`, `~`, or `<...>` no longer gets misread as markup or dropped by the preview.
 
-**Sync conflicts are resolved in the app.** If Push or Pull finds changes made on another computer, Rubric walks you through each conflicting file with a plain-language choice — Keep Mine, Keep Theirs, or Keep Both — instead of telling you to open a terminal.
+**New elements can be created from the sidebar**, with a **+** button beside the palette search, instead of a trip through Preferences.
 
----
-
-### Upgrading
-
-Services written by earlier versions migrate the first time you open and save them; no wording is lost. Once a service has been saved by this version, **older builds of Rubric will show its elements as empty** — the content is in the file, under a key they don't know to read. Keep a copy of anything you still need to open elsewhere.
+**Plain language throughout setup and sync.** "Repository," "remote," "clone" — terms that meant nothing to a non-technical user — are now described in terms of what they do: "online copy," "address," "back up." Covers the setup wizard, Preferences → GitHub, and every sync message.
 
 ---
 
