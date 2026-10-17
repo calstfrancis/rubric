@@ -1,4 +1,4 @@
-# Rubric v0.21.0 "Sure Keep"
+# Rubric v0.22.0 "Quiet Confluence"
 
 Install via Flatpak:
 
@@ -18,19 +18,11 @@ flatpak update io.github.calstfrancis.rubric
 
 ### What's new
 
-**Backups now happen on their own.** Once a folder is connected to GitHub, Rubric saves and backs it up automatically every so often while you work, and once more on the way out if anything's still unsent — so backing up no longer depends on remembering the Backup button. It's quiet by design: a failure, including a real sync conflict, shows a toast suggesting the toolbar button rather than a popup, and it never blocks quitting for more than a few seconds.
+**Rubric picks up your other computer's work on its own.** A few seconds after launch, Rubric quietly checks GitHub for anything backed up from another machine. The open service and the Services planner refresh themselves when something arrives, and a toast tells you.
 
-**Error messages can be copied now.** Every notice and error dialog — a sync failure, a setup error — has a Copy button next to OK, so the message can be pasted into a bug report instead of retyped from a screenshot.
+**Backup and Get Latest stop tripping over git.** Backing up from two computers used to fail with git's "divergent branches" complaint once both had changed things; connecting to a GitHub repository that already had a README failed with "unrelated histories"; Get Latest refused when you had unsaved edits; and a backup that raced the other computer's reported a failure. All of those now just work. A merge left half-finished by an earlier session is finished instead of blocking every later sync, and a network outage is told apart from a sign-in problem.
 
-**Hymns work entirely offline.** Rubric no longer talks to Hymnary.org at all — that site now blocks automated requests outright, so every lookup was failing. Rubric ships with 877 Voices United titles bundled in; lookup and search work instantly, on any machine, with no network.
-
-**The bulletin prints what you wrote.** Leader notes — private instructions like "pause here" meant only for whoever is presiding — had been leaking into the congregation's printed bulletin since 0.20.0. Bold, italic, headings and bullet lists, which had been silently flattened in the bulletin, keep their formatting again, and text containing `@`, `*`, `~`, or `<...>` no longer gets misread as markup or dropped by the preview.
-
-**New elements can be created from the sidebar**, with a **+** button beside the palette search, instead of a trip through Preferences.
-
-**Plain language throughout setup and sync.** "Repository," "remote," "clone" — terms that meant nothing to a non-technical user — are now described in terms of what they do: "online copy," "address," "back up." Covers the setup wizard, Preferences → GitHub, and every sync message.
-
----
+A real conflict — the same service edited on two computers — still asks you, in plain words: keep mine, keep theirs, or keep both.
 
 ### Full changelog
 

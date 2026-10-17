@@ -961,46 +961,9 @@ class PreferencesWindow(Adw.PreferencesWindow):
                 "Use the ⟳ button in the main toolbar to back up your files.")
 
     def _on_prefs_pull(self, _btn):
-        repo = config.github_repo
-        if not repo:
-            notice(self, "No folder set up yet", "Set up a folder and connect to GitHub first.")
+        main = self.get_transient_for()
+        if main is None or not hasattr(main, "git_pull"):
+            notice(self, "Couldn't get the latest version", "Open Rubric's main window and try again.")
             return
+        main.git_pull()
 
-        progress = Adw.MessageDialog(transient_for=self,
-            heading="Getting the latest version…", body="Please wait.")
-        progress.present()
-
-        def on_conflicts_resolved(success: bool):
-            notice(self, "Done" if success else "Cancelled",
-                   "Conflicts resolved." if success else "No changes were made.")
-
-        def run():
-            try:
-                with git_credential_args(secret_store.load_github_token()) as cred:
-                    r = subprocess.run(
-                        _GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
-                        capture_output=True, text=True, timeout=60)
-                if r.returncode != 0 and list_conflicted_files(repo):
-                    def start_resolution():
-                        progress.destroy()
-                        resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
-                    GLib.idle_add(start_resolution)
-                    return
-
-                def on_done():
-                    progress.destroy()
-                    if r.returncode != 0:
-                        abort_merge(repo)
-                        err = (r.stderr or r.stdout or "Unknown error").strip()
-                        notice(self, "Couldn't get the latest version", err[:400])
-                    else:
-                        out = r.stdout.strip() or "Already up to date."
-                        notice(self, "Done", out[:400])
-                GLib.idle_add(on_done)
-            except Exception as e:
-                def on_err():
-                    progress.destroy()
-                    notice(self, "Couldn't get the latest version", str(e))
-                GLib.idle_add(on_err)
-
-        threading.Thread(target=run, daemon=True).start()

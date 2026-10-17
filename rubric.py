@@ -36,6 +36,7 @@ try:
         is_hymn_element, HYMN_KEYWORDS as _HYMN_KW, flatpak_git_prefix, git_credential_args,
         git_no_sign_args, atomic_write_text,
     )
+    from rubric_package.utils import git_sync
     from rubric_package.utils.git_conflicts import (
         list_conflicted_files, abort_merge, resolve_conflicts_interactive,
     )
@@ -153,7 +154,7 @@ except Exception:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-APP_VERSION = "0.21.0"
+APP_VERSION = "0.22.0"
 
 
 # Default UCC Sunday service template — injected on first use if no templates exist
@@ -245,6 +246,9 @@ class MainWindow(Adw.ApplicationWindow):
             self._refresh_order_list()
         GLib.timeout_add_seconds(AUTOSAVE_SECS, self._do_autosave)
         GLib.timeout_add_seconds(12 * 60, self._auto_backup_tick)
+        # Pick up anything the other computer backed up, a moment after the window is up.
+        if config.github_repo:
+            GLib.timeout_add_seconds(3, self._startup_pull)
         GLib.idle_add(self._check_welcome)
         threading.Thread(target=self._background_index_scan, daemon=True).start()
 
@@ -3205,6 +3209,13 @@ class MainWindow(Adw.ApplicationWindow):
             self._toast_overlay.add_toast(toast)
         return True
 
+    def _startup_pull(self):
+        """One quiet pull shortly after launch, so opening Rubric on a second
+        computer shows the first computer's latest work without any button."""
+        if config.github_repo and self.push_btn.get_sensitive():
+            self.git_pull(quiet=True)
+        return False
+
     def _auto_backup_tick(self):
         """Periodic background backup, so it doesn't depend on remembering
         the toolbar button — every ~12 minutes, if there's a repository
@@ -4473,7 +4484,7 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
     # ── Git / GitHub integration ──────────────────────────────────────────────
 
     def git_push(self, quiet: bool = False, on_done=None):
-        """Save, commit, and push.
+        """Save, commit, pull what the other computer did, and push.
 
         `quiet=True` is for the automatic background backup (periodic and
         on-quit): failures — including a real merge conflict — show a toast
@@ -4486,6 +4497,9 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
         exactly once when the whole operation reaches a terminal state —
         used by the on-quit backup to know when it's safe to actually close
         the window instead of guessing at a fixed delay.
+
+        The git work itself lives in `utils/git_sync.py`; this only decides
+        how each outcome is presented.
         """
         repo = config.github_repo
         if not repo:
@@ -4511,35 +4525,18 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                    _date.today().strftime("%-d %B %Y")
         msg = f"Service: {title} – {date_str}"
 
-        push_toast = Adw.Toast.new("Backing up…")
-        push_toast.set_timeout(0)
-        self._toast_overlay.add_toast(push_toast)
+        toast = {"t": Adw.Toast.new("Backing up…")}
+        toast["t"].set_timeout(0)
+        self._toast_overlay.add_toast(toast["t"])
         self.push_btn.set_sensitive(False)
 
-        def report_failure(heading, body):
-            if quiet:
-                self._show_toast(f"{heading} — try Backup from the toolbar.", timeout=8)
-            else:
-                self._error(heading, body)
-
-        _AUTH_HELP = (
-            "The easiest fix: open Preferences → GitHub and click Sign in with GitHub.\n\n"
-            "Prefer a Personal Access Token (PAT) instead? Passwords no longer work:\n"
-            "1. Go to github.com → Settings → Developer settings\n"
-            "   → Personal access tokens → Fine-grained tokens\n"
-            "2. Generate a new token with Contents: Read and Write\n"
-            "   permission for your repository\n"
-            "3. Copy the token\n\n"
-            "To save it so you're not asked again, run in a terminal:\n"
-            "   git config --global credential.helper store\n"
-            "Then push once — enter your GitHub username and the token\n"
-            "as the password when prompted."
-        )
-
-        def abort(heading, body=""):
-            push_toast.dismiss()
+        def finish(heading="", body="", ok_msg=""):
+            """Main-thread terminal state: always re-enable, dismiss, signal."""
+            toast["t"].dismiss()
             self.push_btn.set_sensitive(True)
-            if quiet:
+            if ok_msg:
+                self._show_toast(ok_msg, timeout=4)
+            elif quiet:
                 self._show_toast(f"{heading} — try Backup from the toolbar.", timeout=8)
             elif body:
                 self._error(heading, body)
@@ -4547,60 +4544,42 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                 self._show_toast(heading, timeout=6)
             _signal_done()
 
-        def do_push():
-            """Push local commits (assumes local is already up to date with remote)."""
+        def fail_for(res):
+            """Present a non-OK, non-CONFLICT git_sync result."""
+            if res.status == git_sync.AUTH:
+                finish("Authentication failed", self._GIT_AUTH_HELP)
+            elif res.status == git_sync.NETWORK:
+                finish("Couldn't reach GitHub", "Check your network connection — your work is saved "
+                                                 "here and will back up next time.")
+            else:
+                finish("Sync failed", (res.message or "Unknown error")[:400])
+
+        def after_remote_changes(res):
+            """Main thread: something arrived from the other computer."""
+            if res.changed:
+                self._reload_after_pull()
+
+        def push_in_thread():
             try:
                 with git_credential_args(secret_store.load_github_token()) as cred:
-                    push_r = subprocess.run(_GIT + ["-C", repo] + cred + ["push"],
-                                            capture_output=True, text=True, timeout=30)
-                    if push_r.returncode != 0:
-                        err_low = (push_r.stderr or "").lower()
-                        if "no upstream" in err_low or "set-upstream" in err_low or \
-                           "set the upstream" in err_low:
-                            push_r = subprocess.run(
-                                _GIT + ["-C", repo] + cred + ["push", "--set-upstream", "origin", "HEAD"],
-                                capture_output=True, text=True, timeout=30
-                            )
-
-                def finish():
-                    push_toast.dismiss()
-                    self.push_btn.set_sensitive(True)
-                    if push_r.returncode != 0:
-                        err = (push_r.stderr or push_r.stdout or "Unknown error").strip()
-                        if "Repository not found" in err:
-                            report_failure("Push failed",
-                                "Repository not found on GitHub.\n\n"
-                                "Check the URL in Preferences → GitHub.")
-                        elif "Permission denied" in err or "Authentication failed" in err \
-                                or "authentication" in err.lower():
-                            report_failure("Authentication failed", _AUTH_HELP)
-                        else:
-                            report_failure("Push failed", err[:400])
-                    else:
-                        self._show_toast("✓ Backed up", timeout=4)
-                    _signal_done()
-
-                GLib.idle_add(finish)
-
+                    res = git_sync.push(repo, cred)
             except subprocess.TimeoutExpired:
-                GLib.idle_add(abort, "Sync timed out — check your network connection.")
+                GLib.idle_add(finish, "Sync timed out — check your network connection.")
+                return
             except Exception as e:
-                GLib.idle_add(abort, "Sync error", str(e))
+                GLib.idle_add(finish, "Sync error", str(e))
+                return
+            def done():
+                if res.status == git_sync.OK:
+                    finish(ok_msg="✓ Backed up")
+                elif res.status == git_sync.CONFLICT:
+                    on_conflict()
+                else:
+                    fail_for(res)
+            GLib.idle_add(done)
 
-        def on_conflicts_resolved(success: bool):
-            nonlocal push_toast
-            if success:
-                push_toast = Adw.Toast.new("Backing up…")
-                push_toast.set_timeout(0)
-                self._toast_overlay.add_toast(push_toast)
-                threading.Thread(target=do_push, daemon=True).start()
-            else:
-                self.push_btn.set_sensitive(True)
-                self._show_toast("Sync cancelled — nothing was pushed.", timeout=5)
-                _signal_done()
-
-        def start_conflict_resolution():
-            push_toast.dismiss()
+        def on_conflict():
+            toast["t"].dismiss()
             if quiet:
                 self.push_btn.set_sensitive(True)
                 self._show_toast(
@@ -4608,124 +4587,147 @@ tr.section-row td { background: #e8e8e8; font-weight: bold; font-variant: small-
                     timeout=8)
                 _signal_done()
                 return
-            resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
+            def resolved(success: bool):
+                if success:
+                    self._reload_after_pull()
+                    toast["t"] = Adw.Toast.new("Backing up…")
+                    toast["t"].set_timeout(0)
+                    self._toast_overlay.add_toast(toast["t"])
+                    threading.Thread(target=push_in_thread, daemon=True).start()
+                else:
+                    finish("Sync cancelled — nothing was pushed.")
+            resolve_conflicts_interactive(self, repo, resolved)
 
         def run():
             try:
-                # ── Stage and commit local changes ──────────────────────────
-                add_r = subprocess.run(_GIT + ["-C", repo, "add", "-A"],
-                                       capture_output=True, text=True, timeout=10)
-                if add_r.returncode != 0:
-                    GLib.idle_add(abort, "Sync failed",
-                                  add_r.stderr.strip() or "git add failed")
+                ok, err = git_sync.commit_local(repo, msg)
+                if not ok:
+                    GLib.idle_add(finish, "Sync failed (commit)", err)
                     return
-
-                status_r = subprocess.run(_GIT + ["-C", repo, "status", "--porcelain"],
-                                          capture_output=True, text=True, timeout=5)
-                if status_r.stdout.strip():
-                    commit_r = subprocess.run(
-                        _GIT + ["-C", repo] + git_no_sign_args() + ["commit", "-m", msg],
-                        capture_output=True, text=True, timeout=15)
-                    if commit_r.returncode != 0:
-                        out = (commit_r.stderr or commit_r.stdout or "").strip()
-                        GLib.idle_add(abort, "Sync failed (commit)", out)
-                        return
-
-                # ── Pull remote changes before pushing ──────────────────────
-                has_remote = subprocess.run(
-                    _GIT + ["-C", repo, "remote"],
-                    capture_output=True, text=True, timeout=5
-                ).stdout.strip()
-
-                if has_remote:
+                if git_sync.has_remote(repo):
                     with git_credential_args(secret_store.load_github_token()) as cred:
-                        pull_r = subprocess.run(
-                            _GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
-                            capture_output=True, text=True, timeout=60
-                        )
-                    if pull_r.returncode != 0:
-                        pull_out = (pull_r.stdout + pull_r.stderr).strip()
-                        pull_low = pull_out.lower()
-                        if list_conflicted_files(repo):
-                            # Real conflicts — walk the user through resolving them,
-                            # then push once the merge is committed.
-                            GLib.idle_add(start_conflict_resolution)
-                            return
-                        abort_merge(repo)  # clean up any partial merge state
-                        if "permission denied" in pull_low or "authentication" in pull_low:
-                            GLib.idle_add(abort, "Authentication failed", _AUTH_HELP)
-                            return
-                        elif "no tracking" in pull_low or "no such ref" in pull_low \
-                                or pull_out == "":
-                            pass  # no upstream yet — first push will set it
-                        else:
-                            GLib.idle_add(abort, "Pull failed before push", pull_out[:400])
-                            return
-
-                do_push()
-
+                        res = git_sync.pull(repo, cred)
+                    if res.status == git_sync.CONFLICT:
+                        GLib.idle_add(on_conflict)
+                        return
+                    if res.status in (git_sync.AUTH, git_sync.NETWORK, git_sync.ERROR):
+                        GLib.idle_add(fail_for, res)
+                        return
+                    if res.changed:
+                        GLib.idle_add(after_remote_changes, res)
+                    # NO_REMOTE (no upstream branch yet) falls through: first push sets it.
+                push_in_thread()
             except subprocess.TimeoutExpired:
-                GLib.idle_add(abort, "Sync timed out — check your network connection.")
+                GLib.idle_add(finish, "Sync timed out — check your network connection.")
             except FileNotFoundError:
-                GLib.idle_add(abort, "git not found", "Install git: sudo zypper install git")
+                GLib.idle_add(finish, "git not found", "Install git: sudo zypper install git")
             except Exception as e:
-                GLib.idle_add(abort, "Sync error", str(e))
+                GLib.idle_add(finish, "Sync error", str(e))
 
         threading.Thread(target=run, daemon=True).start()
 
-    def git_pull(self):
+    _GIT_AUTH_HELP = (
+        "The easiest fix: open Preferences → GitHub and click Sign in with GitHub."
+    )
+
+    def _reload_after_pull(self):
+        """Files on disk just changed under us — make the window show them.
+
+        The open service is re-read (it was saved before any pull, so nothing
+        unsaved is lost), and the Services planner/library is refreshed."""
+        try:
+            cf = self.current_file
+            if cf and Path(cf).exists():
+                self._load_file(cf)
+        except Exception:
+            pass
+        win = getattr(self, "_services_win", None)
+        if win and win.get_visible():
+            try:
+                win._load_planner()
+            except Exception:
+                pass
+
+    def git_pull(self, quiet: bool = False):
+        """Get the other computer's changes. Safe to call any time: local work
+        is saved and committed first, so there is never a "local changes would
+        be overwritten" refusal. `quiet=True` is the pull-on-startup variant —
+        it only speaks up when something actually arrived or needs attention."""
         repo = config.github_repo
         if not repo:
-            self._show_toast("Set up a folder and connect to GitHub in Preferences first.", timeout=6)
+            if not quiet:
+                self._show_toast("Set up a folder and connect to GitHub in Preferences first.", timeout=6)
             return
+        if self.current_file and self.modified:
+            self.save_file()
 
-        pull_toast = Adw.Toast.new("Getting the latest version…")
-        pull_toast.set_timeout(0)
-        self._toast_overlay.add_toast(pull_toast)
+        pull_toast = None
+        if not quiet:
+            pull_toast = Adw.Toast.new("Getting the latest version…")
+            pull_toast.set_timeout(0)
+            self._toast_overlay.add_toast(pull_toast)
+
+        def end(msg="", err_heading="", err_body=""):
+            if pull_toast:
+                pull_toast.dismiss()
+            if err_heading:
+                if quiet:
+                    self._show_toast(f"{err_heading} — try Get Latest in Preferences.", timeout=6)
+                else:
+                    self._error(err_heading, err_body)
+            elif msg:
+                self._show_toast(msg, timeout=5)
 
         def on_conflicts_resolved(success: bool):
             if success:
-                self._show_toast("✓ Done — conflicts resolved", timeout=4)
+                self._reload_after_pull()
+                end("✓ Done — conflicts resolved")
             else:
-                self._show_toast("Cancelled — nothing was changed.", timeout=5)
+                end("Cancelled — nothing was changed.")
+
+        def present(res):
+            if res.status == git_sync.OK:
+                if res.changed:
+                    self._reload_after_pull()
+                    end("✓ Brought in changes from your other computer")
+                else:
+                    end("" if quiet else "✓ Already up to date.")
+            elif res.status == git_sync.CONFLICT:
+                if pull_toast:
+                    pull_toast.dismiss()
+                if quiet:
+                    self._show_toast("Changes from another computer conflict with yours — "
+                                     "click Backup to sort them out.", timeout=8)
+                else:
+                    resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
+            elif res.status == git_sync.NO_REMOTE:
+                end("" if quiet else "Nothing to get yet — back up once first.")
+            elif res.status == git_sync.AUTH:
+                end(err_heading="Authentication failed", err_body=self._GIT_AUTH_HELP)
+            elif res.status == git_sync.NETWORK:
+                if quiet:
+                    end()
+                else:
+                    end(err_heading="Couldn't reach GitHub",
+                        err_body="Check your network connection.")
+            else:
+                end(err_heading="Couldn't get the latest version", err_body=(res.message or "")[:400])
 
         def run():
             try:
-                with git_credential_args(secret_store.load_github_token()) as cred:
-                    r = subprocess.run(_GIT + ["-C", repo] + cred + git_no_sign_args() + ["pull"],
-                                       capture_output=True, text=True, timeout=60)
-                if r.returncode != 0 and list_conflicted_files(repo):
-                    def start_resolution():
-                        pull_toast.dismiss()
-                        resolve_conflicts_interactive(self, repo, on_conflicts_resolved)
-                    GLib.idle_add(start_resolution)
+                ok, err = git_sync.commit_local(repo, "Save before getting latest")
+                if not ok:
+                    GLib.idle_add(end, "", "Couldn't get the latest version", err)
                     return
-
-                def on_done():
-                    pull_toast.dismiss()
-                    if r.returncode != 0:
-                        abort_merge(repo)  # clean up any partial merge state
-                        err = (r.stderr or r.stdout or "Unknown error").strip()
-                        self._error("Couldn't get the latest version", err[:400])
-                    else:
-                        out = r.stdout.strip() or "Already up to date."
-                        self._show_toast(f"✓ {out[:80]}", timeout=5)
-                GLib.idle_add(on_done)
+                with git_credential_args(secret_store.load_github_token()) as cred:
+                    res = git_sync.pull(repo, cred)
+                GLib.idle_add(present, res)
             except subprocess.TimeoutExpired:
-                def _on_timeout():
-                    pull_toast.dismiss()
-                    self._show_toast("Timed out — check your network connection.", timeout=6)
-                GLib.idle_add(_on_timeout)
+                GLib.idle_add(end, "" if quiet else "Timed out — check your network connection.")
             except FileNotFoundError:
-                def _on_no_git():
-                    pull_toast.dismiss()
-                    self._error("git not found", "Install git: sudo zypper install git")
-                GLib.idle_add(_on_no_git)
+                GLib.idle_add(end, "", "git not found", "Install git: sudo zypper install git")
             except Exception as e:
-                def _on_pull_err(msg=str(e)):
-                    pull_toast.dismiss()
-                    self._error("Couldn't get the latest version", msg)
-                GLib.idle_add(_on_pull_err)
+                GLib.idle_add(end, "", "Couldn't get the latest version", str(e))
 
         threading.Thread(target=run, daemon=True).start()
 

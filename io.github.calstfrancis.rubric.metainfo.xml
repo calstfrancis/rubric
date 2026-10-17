@@ -49,6 +49,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.22.0" date="2026-10-17">
+      <description>
+        <p>0.22.0 "Quiet Confluence" — Rubric now picks up your other computer's work on its own, and backup no longer trips over diverged histories, existing GitHub files, or half-finished merges.</p>
+      </description>
+    </release>
     <release version="0.21.0" date="2026-08-11">
       <description>
         <p>0.21.0 "Sure Keep" — backups that happen on their own, hymns that work entirely offline, and a bulletin that prints what you wrote.</p>

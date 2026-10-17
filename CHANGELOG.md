@@ -4,6 +4,39 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.22.0] "Quiet Confluence" — Syncing between computers just works
+
+### Added
+
+- **Rubric now picks up the other computer's work on its own.** A quiet "get latest" runs a few
+  seconds after launch, so opening Rubric on a second machine shows what the first one backed up —
+  no button needed. The open service and the Services planner refresh themselves when something
+  arrives, and a toast says so.
+
+### Fixed
+
+- **Backup/Get Latest no longer fail on diverged histories.** Modern git refuses a plain `pull` once
+  both computers have made changes ("Need to specify how to reconcile divergent branches"), and a
+  global `pull.rebase` setting would have silently swapped Keep Mine / Keep Theirs. Rubric now always
+  merges explicitly, never opens an editor, and signs nothing.
+- **Connecting a folder to a GitHub repo that already has files** (a README or licence from creating
+  it on github.com) no longer dies with "refusing to merge unrelated histories".
+- **Get Latest with unsaved or uncommitted edits** saves and commits them first instead of refusing
+  with "local changes would be overwritten".
+- **A push that loses a race** (the other computer backed up between your pull and your push) now
+  pulls again and retries once, instead of reporting a failure.
+- **A merge left half-finished by an earlier session** is picked up and finished (or sent to the
+  conflict dialog) rather than blocking every later sync.
+- Network-down and sign-in-expired failures are told apart and explained in plain words.
+
+### Changed
+
+- The sync logic is now one GTK-free module (`rubric_package/utils/git_sync.py`) shared by the
+  toolbar Backup button, Get Latest (toolbar and Preferences), the periodic backup, backup-on-quit
+  and pull-on-startup, with real-repository tests in `tests/test_git_sync.py`.
+
+---
+
 ## [0.21.0] "Sure Keep" — Backups that happen on their own; hymns work entirely offline; a bulletin that prints what you wrote
 
 ### Added
